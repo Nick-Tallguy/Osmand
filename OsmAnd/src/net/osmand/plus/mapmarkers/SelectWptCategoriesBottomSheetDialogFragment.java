@@ -1,24 +1,24 @@
 package net.osmand.plus.mapmarkers;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 
-import net.osmand.plus.GPXUtilities;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.GPXUtilities.WptPt;
+import androidx.annotation.Nullable;
+
+import net.osmand.GPXUtilities;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.GPXUtilities.WptPt;
+import net.osmand.IndexConstants;
 import net.osmand.plus.GpxSelectionHelper;
 import net.osmand.plus.GpxSelectionHelper.SelectedGpxFile;
-import net.osmand.plus.MapMarkersHelper;
-import net.osmand.plus.MapMarkersHelper.MapMarkersGroup;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithCompoundButton;
-import net.osmand.plus.base.bottomsheetmenu.simpleitems.DescriptionItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.DividerItem;
+import net.osmand.plus.base.bottomsheetmenu.simpleitems.ShortDescriptionItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
 
 import java.io.File;
@@ -32,11 +32,15 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 
 	public static final String TAG = "SelectWptCategoriesBottomSheetDialogFragment";
 	public static final String GPX_FILE_PATH_KEY = "gpx_file_path";
+	public static final String UPDATE_CATEGORIES_KEY = "update_categories";
+	public static final String ACTIVE_CATEGORIES_KEY = "active_categories";
 
 	private GPXFile gpxFile;
 
 	private Set<String> selectedCategories = new HashSet<>();
 	private List<BottomSheetItemWithCompoundButton> categoryItems = new ArrayList<>();
+
+	private boolean isUpdateMode =false;
 
 	@Override
 	public void createMenuItems(Bundle savedInstanceState) {
@@ -44,14 +48,18 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 		if (gpxFile == null) {
 			return;
 		}
+		int activeColorResId = nightMode ? R.color.active_color_primary_dark : R.color.active_color_primary_light;
+		isUpdateMode = getArguments().getBoolean(UPDATE_CATEGORIES_KEY);
+		List<String> categories = getArguments().getStringArrayList(ACTIVE_CATEGORIES_KEY);
 
 		items.add(new TitleItem(getGpxName(gpxFile)));
 
-		items.add(new DescriptionItem(getString(R.string.select_waypoints_category_description)));
+		items.add(new ShortDescriptionItem(getString(R.string.select_waypoints_category_description)));
 
 		final BottomSheetItemWithCompoundButton[] selectAllItem = new BottomSheetItemWithCompoundButton[1];
 		selectAllItem[0] = (BottomSheetItemWithCompoundButton) new BottomSheetItemWithCompoundButton.Builder()
-				.setChecked(true)
+				.setChecked(!isUpdateMode || categories!=null&&categories.size() == gpxFile.getPointsByCategories().size())
+				.setCompoundButtonColorId(activeColorResId)
 				.setDescription(getString(R.string.shared_string_total) + ": " + gpxFile.getPoints().size())
 				.setIcon(getContentIcon(R.drawable.ic_action_group_select_all))
 				.setTitle(getString(R.string.shared_string_select_all))
@@ -73,10 +81,11 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 
 		Map<String, List<WptPt>> pointsByCategories = gpxFile.getPointsByCategories();
 
-		for (String category : pointsByCategories.keySet()) {
+		for (Map.Entry<String, List<WptPt>> entry : pointsByCategories.entrySet()) {
+			String category = entry.getKey();
 			final BottomSheetItemWithCompoundButton[] categoryItem = new BottomSheetItemWithCompoundButton[1];
 			categoryItem[0] = (BottomSheetItemWithCompoundButton) new BottomSheetItemWithCompoundButton.Builder()
-					.setChecked(true)
+					.setChecked(!isUpdateMode || (categories != null && categories.contains(category)))
 					.setOnCheckedChangeListener(new OnCheckedChangeListener() {
 						@Override
 						public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -87,9 +96,10 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 							}
 						}
 					})
-					.setDescription(String.valueOf(pointsByCategories.get(category).size()))
+					.setCompoundButtonColorId(activeColorResId)
+					.setDescription(String.valueOf(entry.getValue().size()))
 					.setIcon(getContentIcon(R.drawable.ic_action_folder))
-					.setTitle(category.equals("") ? getString(R.string.waypoints) : category)
+					.setTitle(category.isEmpty() ? getString(R.string.shared_string_waypoints) : category)
 					.setLayoutId(R.layout.bottom_sheet_item_with_descr_and_checkbox_56dp)
 					.setTag(category)
 					.setOnClickListener(new View.OnClickListener() {
@@ -102,32 +112,42 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 					.create();
 			items.add(categoryItem[0]);
 			categoryItems.add(categoryItem[0]);
-			selectedCategories.add(category);
+			if (!isUpdateMode || categories != null && categories.contains(category)) {
+				selectedCategories.add(category);
+			}
 		}
 	}
 
 	@Override
 	protected int getRightBottomButtonTextId() {
-		return R.string.shared_string_import;
+		if (isUpdateMode) {
+			return R.string.shared_string_update;
+		} else {
+			return R.string.shared_string_add;
+		}
 	}
 
 	@Override
 	protected void onRightBottomButtonClick() {
+		updateAddOrEnableGroupWptCategories();
+		dismiss();
+	}
+
+	private void updateAddOrEnableGroupWptCategories() {
 		OsmandApplication app = getMyApplication();
 		GpxSelectionHelper gpxSelectionHelper = app.getSelectedGpxHelper();
 		MapMarkersHelper mapMarkersHelper = app.getMapMarkersHelper();
 
 		SelectedGpxFile selectedGpxFile = gpxSelectionHelper.getSelectedFileByPath(gpxFile.path);
 		if (selectedGpxFile == null) {
-			gpxSelectionHelper.selectGpxFile(gpxFile, true, false);
+			gpxSelectionHelper.selectGpxFile(gpxFile, true, false, false, false, false);
 		}
-
-		MapMarkersGroup markersGr = mapMarkersHelper.getOrCreateGroup(new File(gpxFile.path));
-		mapMarkersHelper.updateGroupWptCategories(markersGr, selectedCategories);
-
-		mapMarkersHelper.addOrEnableGroup(markersGr);
-
-		dismiss();
+		MapMarkersGroup group = mapMarkersHelper.getMarkersGroup(gpxFile);
+		if (group == null) {
+			group = mapMarkersHelper.addOrEnableGroup(gpxFile);
+		}
+		mapMarkersHelper.updateGroupWptCategories(group, selectedCategories);
+		mapMarkersHelper.runSynchronization(group);
 	}
 
 	private boolean isAllChecked() {
@@ -141,7 +161,7 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 
 	private String getGpxName(GPXFile gpxFile) {
 		return new File(gpxFile.path).getName()
-				.replace(".gpx", "")
+				.replace(IndexConstants.GPX_FILE_EXT, "")
 				.replace("/", " ")
 				.replace("_", " ");
 	}
@@ -155,7 +175,7 @@ public class SelectWptCategoriesBottomSheetDialogFragment extends MenuBottomShee
 			if (selectedGpx != null && selectedGpx.getGpxFile() != null) {
 				return selectedGpx.getGpxFile();
 			}
-			return GPXUtilities.loadGPXFile(app, new File(filePath));
+			return GPXUtilities.loadGPXFile(new File(filePath));
 		}
 		return null;
 	}

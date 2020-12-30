@@ -5,11 +5,8 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
 import android.os.AsyncTask;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.PopupMenu;
+import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.MenuItem;
 import android.view.View;
@@ -20,12 +17,20 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.core.view.ViewCompat;
+
 import net.osmand.map.WorldRegion;
-import net.osmand.plus.OsmandPlugin;
 import net.osmand.plus.R;
+import net.osmand.plus.Version;
 import net.osmand.plus.activities.LocalIndexHelper.LocalIndexType;
 import net.osmand.plus.activities.LocalIndexInfo;
+import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.activities.PluginsFragment;
+import net.osmand.plus.chooseplan.ChoosePlanDialogFragment;
 import net.osmand.plus.download.CityItem;
+import net.osmand.plus.download.CustomIndexItem;
 import net.osmand.plus.download.DownloadActivity;
 import net.osmand.plus.download.DownloadActivityType;
 import net.osmand.plus.download.DownloadResourceGroup;
@@ -33,7 +38,7 @@ import net.osmand.plus.download.DownloadResources;
 import net.osmand.plus.download.IndexItem;
 import net.osmand.plus.download.ui.LocalIndexesFragment.LocalIndexOperationTask;
 import net.osmand.plus.helpers.FileNameTranslationHelper;
-import net.osmand.plus.srtmplugin.SRTMPlugin;
+import net.osmand.plus.inapp.InAppPurchaseHelper;
 import net.osmand.util.Algorithms;
 
 import java.io.File;
@@ -51,7 +56,6 @@ public class ItemViewHolder {
 	private boolean srtmDisabled;
 	private boolean srtmNeedsInstallation;
 	private boolean nauticalPluginDisabled;
-	private boolean freeVersion;
 	private boolean depthContoursPurchased;
 
 	protected final DownloadActivity context;
@@ -129,9 +133,9 @@ public class ItemViewHolder {
 	private void initAppStatusVariables() {
 		srtmDisabled = context.isSrtmDisabled();
 		nauticalPluginDisabled = context.isNauticalPluginDisabled();
-		freeVersion = context.isFreeVersion();
 		srtmNeedsInstallation = context.isSrtmNeedsInstallation();
-		depthContoursPurchased = context.getMyApplication().getSettings().DEPTH_CONTOURS_PURCHASED.get();
+		depthContoursPurchased = InAppPurchaseHelper.isDepthContoursPurchased(context.getMyApplication())
+				|| InAppPurchaseHelper.isSubscribedToLiveUpdates(context.getMyApplication());
 	}
 
 	public void bindIndexItem(final IndexItem indexItem) {
@@ -179,21 +183,24 @@ public class ItemViewHolder {
 		if (!isDownloading) {
 			progressBar.setVisibility(View.GONE);
 			descrTextView.setVisibility(View.VISIBLE);
-			if (indexItem.getType() == DownloadActivityType.DEPTH_CONTOUR_FILE && !depthContoursPurchased) {
+			if (indexItem instanceof CustomIndexItem && (((CustomIndexItem) indexItem).getSubName(context) != null)) {
+				descrTextView.setText(((CustomIndexItem) indexItem).getSubName(context));
+			} else if (indexItem.getType() == DownloadActivityType.DEPTH_CONTOUR_FILE && !depthContoursPurchased) {
 				descrTextView.setText(context.getString(R.string.depth_contour_descr));
-			} else if ((indexItem.getType() == DownloadActivityType.SRTM_COUNTRY_FILE ||
-					indexItem.getType() == DownloadActivityType.HILLSHADE_FILE) && srtmDisabled) {
-				if(showTypeInName) {
+			} else if ((indexItem.getType() == DownloadActivityType.SRTM_COUNTRY_FILE
+					|| indexItem.getType() == DownloadActivityType.HILLSHADE_FILE
+					|| indexItem.getType() == DownloadActivityType.SLOPE_FILE) && srtmDisabled) {
+				if (showTypeInName) {
 					descrTextView.setText("");
 				} else {
 					descrTextView.setText(indexItem.getType().getString(context));
 				}
 			} else if (showTypeInDesc) {
-				descrTextView.setText(indexItem.getType().getString(context) + 
+				descrTextView.setText(indexItem.getType().getString(context) +
 						" • " + indexItem.getSizeDescription(context) +
 						" • " + (showRemoteDate ? indexItem.getRemoteDate(dateFormat) : indexItem.getLocalDate(dateFormat)));
 			} else {
-				descrTextView.setText(indexItem.getSizeDescription(context) + " • " + 
+				descrTextView.setText(indexItem.getSizeDescription(context) + " • " +
 						(showRemoteDate ? indexItem.getRemoteDate(dateFormat) : indexItem.getLocalDate(dateFormat)));
 			}
 
@@ -307,19 +314,19 @@ public class ItemViewHolder {
 		if (indexItem.getBasename().toLowerCase().equals(DownloadResources.WORLD_SEAMARKS_KEY)
 				&& nauticalPluginDisabled) {
 			clickAction = RightButtonAction.ASK_FOR_SEAMARKS_PLUGIN;
-		} else if ((indexItem.getType() == DownloadActivityType.SRTM_COUNTRY_FILE ||
-				indexItem.getType() == DownloadActivityType.HILLSHADE_FILE) && srtmDisabled) {
+		} else if ((indexItem.getType() == DownloadActivityType.SRTM_COUNTRY_FILE
+				|| indexItem.getType() == DownloadActivityType.HILLSHADE_FILE
+				|| indexItem.getType() == DownloadActivityType.SLOPE_FILE) && srtmDisabled) {
 			if (srtmNeedsInstallation) {
 				clickAction = RightButtonAction.ASK_FOR_SRTM_PLUGIN_PURCHASE;
 			} else {
 				clickAction = RightButtonAction.ASK_FOR_SRTM_PLUGIN_ENABLE;
 			}
 
-		} else if (indexItem.getType() == DownloadActivityType.WIKIPEDIA_FILE && freeVersion
-				&& !context.getMyApplication().getSettings().FULL_VERSION_PURCHASED.get()) {
+		} else if (indexItem.getType() == DownloadActivityType.WIKIPEDIA_FILE
+				&& !Version.isPaidVersion(context.getMyApplication())) {
 			clickAction = RightButtonAction.ASK_FOR_FULL_VERSION_PURCHASE;
-		} else if (indexItem.getType() == DownloadActivityType.DEPTH_CONTOUR_FILE
-				&& !context.getMyApplication().getSettings().DEPTH_CONTOURS_PURCHASED.get()) {
+		} else if (indexItem.getType() == DownloadActivityType.DEPTH_CONTOUR_FILE && !depthContoursPurchased) {
 			clickAction = RightButtonAction.ASK_FOR_DEPTH_CONTOURS_PURCHASE;
 		}
 		return clickAction;
@@ -332,36 +339,35 @@ public class ItemViewHolder {
 				public void onClick(View v) {
 					switch (clickAction) {
 						case ASK_FOR_FULL_VERSION_PURCHASE:
-							context.getMyApplication().logEvent(context, "in_app_purchase_show_from_wiki_context_menu");
-							context.purchaseFullVersion();
+							context.getMyApplication().logEvent("in_app_purchase_show_from_wiki_context_menu");
+							ChoosePlanDialogFragment.showWikipediaInstance(context.getSupportFragmentManager());
 							break;
 						case ASK_FOR_DEPTH_CONTOURS_PURCHASE:
-							context.purchaseDepthContours();
+							ChoosePlanDialogFragment.showSeaDepthMapsInstance(context.getSupportFragmentManager());
 							break;
 						case ASK_FOR_SEAMARKS_PLUGIN:
-							context.startActivity(new Intent(context, context.getMyApplication().getAppCustomization()
-									.getPluginsActivity()));
+							showPluginsScreen();
 							Toast.makeText(context.getApplicationContext(),
 									context.getString(R.string.activate_seamarks_plugin), Toast.LENGTH_SHORT).show();
 							break;
 						case ASK_FOR_SRTM_PLUGIN_PURCHASE:
-							OsmandPlugin plugin = OsmandPlugin.getPlugin(SRTMPlugin.class);
-							if(plugin == null || plugin.getInstallURL() == null) {
-								Toast.makeText(context.getApplicationContext(),
-										context.getString(R.string.activate_srtm_plugin), Toast.LENGTH_LONG).show();
-							} else {
-								context.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(plugin.getInstallURL())));
-							}
+							ChoosePlanDialogFragment.showHillshadeSrtmPluginInstance(context.getSupportFragmentManager());
 							break;
 						case ASK_FOR_SRTM_PLUGIN_ENABLE:
-							context.startActivity(new Intent(context, context.getMyApplication().getAppCustomization()
-									.getPluginsActivity()));
+							showPluginsScreen();
 							Toast.makeText(context, context.getString(R.string.activate_srtm_plugin),
 									Toast.LENGTH_SHORT).show();
 							break;
 						case DOWNLOAD:
 							break;
 					}
+				}
+
+				private void showPluginsScreen() {
+					Bundle params = new Bundle();
+					params.putBoolean(PluginsFragment.OPEN_PLUGINS, true);
+					Intent intent = context.getIntent();
+					MapActivity.launchMapActivityMoveToTop(context, intent != null ? intent.getExtras() : null, null, params);
 				}
 			};
 		} else {
@@ -392,12 +398,14 @@ public class ItemViewHolder {
 		final File fl = indexItem.getTargetFile(context.getMyApplication());
 		if (fl.exists()) {
 			item = optionsMenu.getMenu().add(R.string.shared_string_remove).setIcon(
-							context.getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_remove_dark));
+							context.getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_remove_dark));
 			item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 				@Override
 				public boolean onMenuItemClick(MenuItem item) {
 					LocalIndexType tp = LocalIndexType.MAP_DATA;
 					if (indexItem.getType() == DownloadActivityType.HILLSHADE_FILE) {
+						tp = LocalIndexType.TILES_DATA;
+					} else if (indexItem.getType() == DownloadActivityType.SLOPE_FILE) {
 						tp = LocalIndexType.TILES_DATA;
 					} else if (indexItem.getType() == DownloadActivityType.ROADS_FILE) {
 						tp = LocalIndexType.MAP_DATA;
@@ -406,6 +414,8 @@ public class ItemViewHolder {
 					} else if (indexItem.getType() == DownloadActivityType.WIKIPEDIA_FILE) {
 						tp = LocalIndexType.MAP_DATA;
 					} else if (indexItem.getType() == DownloadActivityType.WIKIVOYAGE_FILE) {
+						tp = LocalIndexType.MAP_DATA;
+					} else if (indexItem.getType() == DownloadActivityType.TRAVEL_FILE) {
 						tp = LocalIndexType.MAP_DATA;
 					} else if (indexItem.getType() == DownloadActivityType.FONT_FILE) {
 						tp = LocalIndexType.FONT_DATA;
@@ -432,7 +442,7 @@ public class ItemViewHolder {
 			});
 		}
 		item = optionsMenu.getMenu().add(R.string.shared_string_download)
-				.setIcon(context.getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_import));
+				.setIcon(context.getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_import));
 		item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 			@Override
 			public boolean onMenuItemClick(MenuItem item) {
@@ -445,10 +455,10 @@ public class ItemViewHolder {
 	}
 
 	private Drawable getContentIcon(DownloadActivity context, int resourceId) {
-		return context.getMyApplication().getIconsCache().getThemedIcon(resourceId);
+		return context.getMyApplication().getUIUtilities().getThemedIcon(resourceId);
 	}
 
 	private Drawable getContentIcon(DownloadActivity context, int resourceId, int color) {
-		return context.getMyApplication().getIconsCache().getPaintedIcon(resourceId, color);
+		return context.getMyApplication().getUIUtilities().getPaintedIcon(resourceId, color);
 	}
 }

@@ -1,13 +1,15 @@
 package net.osmand.plus;
 
 import android.content.Context;
-import android.support.annotation.ColorInt;
-import android.support.annotation.ColorRes;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.LayoutRes;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
-import android.support.v4.content.ContextCompat;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
+import net.osmand.plus.ContextMenuAdapter.OnItemDeleteAction;
 
 public class ContextMenuItem {
 	public static final int INVALID_ID = -1;
@@ -29,15 +31,19 @@ public class ContextMenuItem {
 	private final boolean category;
 	private final boolean clickable;
 	private final boolean skipPaintingWithoutColor;
-	private final int pos;
-	private final int order;
+	private boolean hidden;
+	private int order;
 	private String description;
+	private final OnUpdateCallback onUpdateCallback;
 	private final ContextMenuAdapter.ItemClickListener itemClickListener;
 	private final ContextMenuAdapter.OnIntegerValueChangedListener integerListener;
 	private final ContextMenuAdapter.ProgressListener progressListener;
+	private final OnItemDeleteAction itemDeleteAction;
 	private final boolean hideDivider;
+	private final boolean hideCompoundButton;
 	private final int minHeight;
 	private final int tag;
+	private final String id;
 
 	private ContextMenuItem(@StringRes int titleId,
 							String title,
@@ -51,15 +57,18 @@ public class ContextMenuItem {
 							boolean category,
 							boolean clickable,
 							boolean skipPaintingWithoutColor,
-							int pos,
 							int order,
 							String description,
+							OnUpdateCallback onUpdateCallback,
 							ContextMenuAdapter.ItemClickListener itemClickListener,
 							ContextMenuAdapter.OnIntegerValueChangedListener integerListener,
 							ContextMenuAdapter.ProgressListener progressListener,
+							OnItemDeleteAction itemDeleteAction,
 							boolean hideDivider,
+							boolean hideCompoundButton,
 							int minHeight,
-							int tag) {
+							int tag,
+							String id) {
 		this.titleId = titleId;
 		this.title = title;
 		this.mIcon = icon;
@@ -72,15 +81,18 @@ public class ContextMenuItem {
 		this.category = category;
 		this.clickable = clickable;
 		this.skipPaintingWithoutColor = skipPaintingWithoutColor;
-		this.pos = pos;
 		this.order = order;
 		this.description = description;
+		this.onUpdateCallback = onUpdateCallback;
 		this.itemClickListener = itemClickListener;
 		this.integerListener = integerListener;
 		this.progressListener = progressListener;
 		this.hideDivider = hideDivider;
+		this.itemDeleteAction = itemDeleteAction;
+		this.hideCompoundButton = hideCompoundButton;
 		this.minHeight = minHeight;
 		this.tag = tag;
+		this.id = id;
 	}
 
 	@StringRes
@@ -107,7 +119,7 @@ public class ContextMenuItem {
 		if (skipPaintingWithoutColor || getColorRes() != INVALID_ID) {
 			return getColorRes();
 		} else {
-			return IconsCache.getDefaultColorRes(context);
+			return UiUtilities.getDefaultColorRes(context);
 		}
 	}
 
@@ -146,8 +158,8 @@ public class ContextMenuItem {
 		return clickable;
 	}
 
-	public int getPos() {
-		return pos;
+	public boolean isHidden() {
+		return hidden;
 	}
 
 	public int getOrder() {
@@ -157,6 +169,8 @@ public class ContextMenuItem {
 	public String getDescription() {
 		return description;
 	}
+
+	public OnItemDeleteAction getItemDeleteAction() { return itemDeleteAction; }
 
 	public ContextMenuAdapter.ItemClickListener getItemClickListener() {
 		return itemClickListener;
@@ -176,6 +190,14 @@ public class ContextMenuItem {
 
 	public boolean shouldHideDivider() {
 		return hideDivider;
+	}
+
+	public void setHidden(boolean hidden) {
+		this.hidden = hidden;
+	}
+
+	public boolean shouldHideCompoundButton() {
+		return hideCompoundButton;
 	}
 
 	public void setTitle(String title) {
@@ -202,6 +224,10 @@ public class ContextMenuItem {
 		this.progress = progress;
 	}
 
+	public void setOrder(int order) {
+		this.order = order;
+	}
+
 	public void setLoading(boolean loading) {
 		this.loading = loading;
 	}
@@ -216,6 +242,20 @@ public class ContextMenuItem {
 
 	public int getTag() {
 		return tag;
+	}
+
+	public String getId() {
+		return id;
+	}
+
+	public void update() {
+		if (onUpdateCallback != null) {
+			onUpdateCallback.onUpdateMenuItem(this);
+		}
+	}
+
+	public interface OnUpdateCallback {
+		void onUpdateMenuItem(ContextMenuItem item);
 	}
 
 	public static ItemBuilder createBuilder(String title) {
@@ -239,16 +279,19 @@ public class ContextMenuItem {
 		private boolean mLoading = false;
 		private boolean mIsCategory = false;
 		private boolean mIsClickable = true;
-		private int mPosition = -1;
-		private int mOrder = -1;
+		private int mOrder = 0;
 		private String mDescription = null;
+		private OnUpdateCallback mOnUpdateCallback = null;
 		private ContextMenuAdapter.ItemClickListener mItemClickListener = null;
 		private ContextMenuAdapter.OnIntegerValueChangedListener mIntegerListener = null;
 		private ContextMenuAdapter.ProgressListener mProgressListener = null;
+		private OnItemDeleteAction mItemDeleteAction = null;
 		private boolean mSkipPaintingWithoutColor;
 		private boolean mHideDivider;
+		private boolean mHideCompoundButton;
 		private int mMinHeight;
 		private int mTag;
+		private String mId;
 
 		public ItemBuilder setTitleId(@StringRes int titleId, @Nullable Context context) {
 			this.mTitleId = titleId;
@@ -309,11 +352,6 @@ public class ContextMenuItem {
 			return this;
 		}
 
-		public ItemBuilder setPosition(int position) {
-			mPosition = position;
-			return this;
-		}
-
 		public ItemBuilder setOrder(int order) {
 			mOrder = order;
 			return this;
@@ -321,6 +359,11 @@ public class ContextMenuItem {
 
 		public ItemBuilder setDescription(String description) {
 			mDescription = description;
+			return this;
+		}
+
+		public ItemBuilder setOnUpdateCallback(OnUpdateCallback onUpdateCallback) {
+			mOnUpdateCallback = onUpdateCallback;
 			return this;
 		}
 
@@ -344,8 +387,18 @@ public class ContextMenuItem {
 			return this;
 		}
 
+		public ItemBuilder setItemDeleteAction(OnItemDeleteAction itemDeleteAction) {
+			this.mItemDeleteAction = itemDeleteAction;
+			return this;
+		}
+
 		public ItemBuilder hideDivider(boolean hideDivider) {
 			mHideDivider = hideDivider;
+			return this;
+		}
+
+		public ItemBuilder hideCompoundButton(boolean hideCompoundButton) {
+			mHideCompoundButton = hideCompoundButton;
 			return this;
 		}
 
@@ -363,11 +416,18 @@ public class ContextMenuItem {
 			return this;
 		}
 
+		public ItemBuilder setId(String id) {
+			this.mId = id;
+			return this;
+		}
+
 		public ContextMenuItem createItem() {
-			return new ContextMenuItem(mTitleId, mTitle, mIcon, mColorRes, mSecondaryIcon,
+			ContextMenuItem item = new ContextMenuItem(mTitleId, mTitle, mIcon, mColorRes, mSecondaryIcon,
 					mSelected, mProgress, mLayout, mLoading, mIsCategory, mIsClickable, mSkipPaintingWithoutColor,
-					mPosition, mOrder, mDescription, mItemClickListener, mIntegerListener, mProgressListener,
-					mHideDivider, mMinHeight, mTag);
+					mOrder, mDescription, mOnUpdateCallback, mItemClickListener, mIntegerListener, mProgressListener,
+					mItemDeleteAction, mHideDivider, mHideCompoundButton, mMinHeight, mTag, mId);
+			item.update();
+			return item;
 		}
 	}
 }

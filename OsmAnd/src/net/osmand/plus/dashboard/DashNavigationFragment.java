@@ -2,8 +2,6 @@ package net.osmand.plus.dashboard;
 
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -12,10 +10,13 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
+
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.activities.ShowRouteInfoDialogFragment;
 import net.osmand.plus.dashboard.tools.DashFragmentData;
+import net.osmand.plus.routepreparationmenu.ChooseRouteFragment;
 import net.osmand.plus.routing.RoutingHelper;
 
 /**
@@ -39,8 +40,11 @@ public class DashNavigationFragment extends DashBaseFragment {
 		(view.findViewById(R.id.show_all)).setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View view) {
-
-				ShowRouteInfoDialogFragment.showDialog(getActivity().getSupportFragmentManager());
+				FragmentActivity activity = getActivity();
+				if (activity != null) {
+					closeDashboard();
+					ChooseRouteFragment.showInstance(activity.getSupportFragmentManager());
+				}
 			}
 		});
 		return view;
@@ -72,22 +76,21 @@ public class DashNavigationFragment extends DashBaseFragment {
 		ImageView cancel = (ImageView) view.findViewById(R.id.cancel);
 		ImageView play = (ImageView) view.findViewById(R.id.play);
 		name.setText(routingHelper.getGeneralRouteInformation());
-		icon.setImageDrawable(getMyApplication().getIconsCache().getIcon(R.drawable.ic_action_start_navigation, 
+		icon.setImageDrawable(getMyApplication().getUIUtilities().getIcon(R.drawable.ic_action_start_navigation, 
 				R.color.color_myloc_distance));
-		cancel.setImageDrawable(getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_remove_dark)
+		cancel.setImageDrawable(getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_remove_dark)
 				);
 		cancel.setOnClickListener(new OnClickListener() {
 			
 			@Override
 			public void onClick(View v) {
-				AlertDialog dlg = map.getMapActions().stopNavigationActionConfirm();
-				dlg.setOnDismissListener(new DialogInterface.OnDismissListener() {
-					
+				map.getMapActions().stopNavigationActionConfirm(new DialogInterface.OnDismissListener() {
+
 					@Override
 					public void onDismiss(DialogInterface dialog) {
 						setupNavigation();
 						DashWaypointsFragment f = dashboard.getFragmentByClass(DashWaypointsFragment.class);
-						if(f != null) {
+						if (f != null) {
 							f.onOpenDash();
 						}
 					}
@@ -107,7 +110,7 @@ public class DashNavigationFragment extends DashBaseFragment {
 
 	private void updatePlayButton(final RoutingHelper routingHelper, final MapActivity map, final ImageView play) {
 		boolean toContinueNavigation = routingHelper.isRoutePlanningMode();
-		play.setImageDrawable(getMyApplication().getIconsCache().getThemedIcon(
+		play.setImageDrawable(getMyApplication().getUIUtilities().getThemedIcon(
 						toContinueNavigation ? R.drawable.ic_play_dark : R.drawable.ic_pause)
 				);
 		play.setContentDescription(getString(toContinueNavigation ? R.string.continue_navigation :

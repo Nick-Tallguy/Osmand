@@ -66,6 +66,44 @@
 					</wpt>
 				</xsl:if>
 			</xsl:for-each>
+
+			<xsl:for-each select="//ge:Placemark">
+				<xsl:variable name="lonlat" select="ge:Point/ge:coordinates"/>
+				<xsl:variable name="lon" select="substring-before($lonlat,',')"/>
+				<xsl:variable name="latele" select="substring-after($lonlat,',')"/>
+				<xsl:variable name="lat">
+					<xsl:choose>
+						<xsl:when test="contains($latele,' ')">
+							<xsl:value-of select="substring-before($latele,',')"/>
+						</xsl:when>
+						<xsl:otherwise>
+							<xsl:value-of select="$latele"/>
+						</xsl:otherwise>
+					</xsl:choose>
+				</xsl:variable>
+				<xsl:variable name="foldername" select="../ge:name"/>
+
+				<xsl:if test="$lon">
+					<wpt lon="{$lon}" lat="{$lat}">
+						<xsl:choose>
+							<xsl:when test="contains($latele,',')">
+								<ele><xsl:value-of select="substring-after($latele,',')"/></ele>
+							</xsl:when>
+						</xsl:choose>
+						<type>
+							<xsl:value-of select="$foldername"/>
+						</type>
+						<name>
+							<xsl:value-of select="ge:name"/>
+						</name>
+						<xsl:if test="ge:description">
+							<desc>
+								<xsl:value-of select="ge:description"/>
+							</desc>
+						</xsl:if>
+					</wpt>
+				</xsl:if>
+			</xsl:for-each>
 			<xsl:for-each select="//kml:Placemark">
 				<xsl:if test="kml:Point">
 					<xsl:variable name="lonlat" select="kml:Point/kml:coordinates"/>
@@ -103,6 +141,14 @@
 							</xsl:if>
 						</wpt>
 					</xsl:if>
+				</xsl:if>
+
+				<xsl:if test="kml:LineString/kml:coordinates">
+					<trk>
+						<trkseg>
+							<csvattributes><xsl:value-of select="kml:LineString/kml:coordinates"/></csvattributes>
+						</trkseg>
+					</trk>
 				</xsl:if>
 
 				<xsl:if test="kml:MultiGeometry/kml:LineString/kml:coordinates">

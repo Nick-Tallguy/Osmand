@@ -4,16 +4,24 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.TextView;
 
-import net.osmand.plus.IconsCache;
+import androidx.annotation.DrawableRes;
+
+import net.osmand.AndroidUtils;
+import net.osmand.plus.CustomRegion;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.download.DownloadActivity;
 import net.osmand.plus.download.DownloadActivityType;
 import net.osmand.plus.download.DownloadResourceGroup;
+import net.osmand.plus.download.DownloadResourceGroup.DownloadResourceGroupType;
 import net.osmand.plus.download.IndexItem;
 
 public class DownloadGroupViewHolder {
-	TextView textView;
+
 	private DownloadActivity ctx;
+
+	private TextView textView;
 
 	public DownloadGroupViewHolder(DownloadActivity ctx, View v) {
 		this.ctx = ctx;
@@ -22,52 +30,79 @@ public class DownloadGroupViewHolder {
 
 	private boolean isParentWorld(DownloadResourceGroup group) {
 		return group.getParentGroup() == null
-				|| group.getParentGroup().getType() == DownloadResourceGroup.DownloadResourceGroupType.WORLD;
+				|| group.getParentGroup().getType() == DownloadResourceGroupType.WORLD;
 	}
 
 	private Drawable getIconForGroup(DownloadResourceGroup group) {
-		Drawable iconLeft;
-		if (group.getType() == DownloadResourceGroup.DownloadResourceGroupType.VOICE_REC
-				|| group.getType() == DownloadResourceGroup.DownloadResourceGroupType.VOICE_TTS) {
-			iconLeft = ctx.getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_volume_up);
-		} else if (group.getType() == DownloadResourceGroup.DownloadResourceGroupType.FONTS) {
-			iconLeft = ctx.getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_map_language);
+		Drawable iconStart;
+		OsmandApplication app = ctx.getMyApplication();
+		UiUtilities cache = app.getUIUtilities();
+		if (group.getType() == DownloadResourceGroupType.VOICE_REC
+				|| group.getType() == DownloadResourceGroupType.VOICE_TTS) {
+			iconStart = cache.getThemedIcon(R.drawable.ic_action_volume_up);
+		} else if (group.getType() == DownloadResourceGroupType.FONTS) {
+			iconStart = cache.getThemedIcon(R.drawable.ic_action_map_language);
 		} else {
-			IconsCache cache = ctx.getMyApplication().getIconsCache();
+			if (group.getRegion() instanceof CustomRegion) {
+				String iconName = ((CustomRegion) group.getRegion()).getIconName(ctx);
+				int iconId = AndroidUtils.getDrawableId(app, iconName);
+				if (iconId != 0) {
+					iconStart = getIconForDownloadedItems(group, iconId);
+					return iconStart != null ? iconStart : cache.getThemedIcon(iconId);
+				}
+			}
 			if (isParentWorld(group) || isParentWorld(group.getParentGroup())) {
-				iconLeft = cache.getThemedIcon(R.drawable.ic_world_globe_dark);
+				iconStart = cache.getThemedIcon(R.drawable.ic_world_globe_dark);
 			} else {
-				DownloadResourceGroup ggr = group
-						.getSubGroupById(DownloadResourceGroup.DownloadResourceGroupType.REGION_MAPS.getDefaultId());
-				iconLeft = cache.getThemedIcon(R.drawable.ic_map);
-				if (ggr != null && ggr.getIndividualResources() != null) {
-					IndexItem item = null;
-					for (IndexItem ii : ggr.getIndividualResources()) {
-						if (ii.getType() == DownloadActivityType.NORMAL_FILE
-								|| ii.getType() == DownloadActivityType.ROADS_FILE) {
-							if (ii.isDownloaded() || ii.isOutdated()) {
-								item = ii;
-								break;
-							}
-						}
-					}
-					if (item != null) {
-						if (item.isOutdated()) {
-							iconLeft = cache.getIcon(R.drawable.ic_map, R.color.color_distance);
-						} else {
-							iconLeft = cache.getIcon(R.drawable.ic_map, R.color.color_ok);
-						}
+				iconStart = getIconForDownloadedItems(group, R.drawable.ic_map);
+				if (iconStart == null) {
+					iconStart = cache.getThemedIcon(R.drawable.ic_map);
+				}
+			}
+		}
+		return iconStart;
+	}
+
+	private Drawable getIconForDownloadedItems(DownloadResourceGroup group, @DrawableRes int iconId) {
+		int ic = getIconColorForOutdatedItems(group);
+		if (ic != 0) {
+			return ctx.getMyApplication().getUIUtilities().getIcon(iconId, ic);
+		}
+		return null;
+	}
+
+	private int getIconColorForOutdatedItems(DownloadResourceGroup group) {
+		int clr = 0;
+		if (group.getIndividualResources() != null) {
+			for (IndexItem ii : group.getIndividualResources()) {
+				if (ii.getType() == DownloadActivityType.NORMAL_FILE
+						|| ii.getType() == DownloadActivityType.ROADS_FILE) {
+					if (ii.isOutdated()) {
+						return R.color.color_distance;
+					} else if(ii.isDownloaded()) {
+						clr = R.color.color_ok;
 					}
 				}
 			}
 		}
-		return iconLeft;
+
+		if (group.getGroups() != null) {
+			for (DownloadResourceGroup g : group.getGroups()) {
+				int d = getIconColorForOutdatedItems(g);
+				if (d == R.color.color_distance) {
+					return d;
+				} else if(d != 0) {
+					clr = d;
+				}
+			}
+		}
+		return clr;
 	}
 
 	public void bindItem(DownloadResourceGroup group) {
-		Drawable iconLeft = getIconForGroup(group);
-		textView.setCompoundDrawablesWithIntrinsicBounds(iconLeft, null, null, null);
 		String name = group.getName(ctx);
 		textView.setText(name);
+		Drawable iconStart = getIconForGroup(group);
+		AndroidUtils.setCompoundDrawablesWithIntrinsicBounds(textView, iconStart, null, null, null);
 	}
 }

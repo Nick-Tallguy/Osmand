@@ -1,18 +1,18 @@
 package net.osmand.plus.voice;
 
 import android.content.Context;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
-
 import android.media.AudioManager;
+
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
 import net.osmand.StateChangedListener;
-import net.osmand.plus.ApplicationMode;
+import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.MetricsConstants;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.helpers.enums.MetricsConstants;
 import net.osmand.plus.R;
 import net.osmand.plus.api.AudioFocusHelper;
 
@@ -60,7 +60,7 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 	protected static final String DELAY_CONST = "delay_";
 	private static final String WEAR_ALERT = "WEAR_ALERT";
 	/** Must be sorted array! */
-	private final int[] sortedVoiceVersions;
+	private int[] sortedVoiceVersions;
 	private static AudioFocusHelper mAudioFocusHelper;
 	protected String language = "";
 	protected int streamType;
@@ -75,21 +75,28 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 		this.sortedVoiceVersions = sortedVoiceVersions;
 		this.applicationMode = applicationMode;
 		long time = System.currentTimeMillis();
-		try {
-			this.ctx = ctx;
-			prologSystem = new Prolog(getLibraries());
-		} catch (InvalidLibraryException e) {
-			log.error("Initializing error", e); //$NON-NLS-1$
-			throw new RuntimeException(e);
-		}
-		if (log.isInfoEnabled()) {
-			log.info("Initializing prolog system : " + (System.currentTimeMillis() - time)); //$NON-NLS-1$
-		}
-		this.streamType = ctx.getSettings().AUDIO_STREAM_GUIDANCE.getModeValue(applicationMode);
-		init(voiceProvider, ctx.getSettings(), configFile);
-		final Term langVal = solveSimplePredicate("language");
-		if (langVal instanceof Struct) {
-			language = ((Struct) langVal).getName();
+		this.ctx = ctx;
+
+		this.streamType = ctx.getSettings().AUDIO_MANAGER_STREAM.getModeValue(applicationMode);
+		initVoiceDir(voiceProvider);
+		if (voiceDir != null && (MediaCommandPlayerImpl.isMyData(voiceDir) || TTSCommandPlayerImpl.isMyData(voiceDir))) {
+			if (log.isInfoEnabled()) {
+				log.info("Initializing prolog system : " + (System.currentTimeMillis() - time)); //$NON-NLS-1$
+			}
+			try {
+				prologSystem = new Prolog(getLibraries());
+			} catch (InvalidLibraryException e) {
+				log.error("Initializing error", e); //$NON-NLS-1$
+				throw new RuntimeException(e);
+			}
+			init(voiceProvider, ctx.getSettings(), configFile);
+			final Term langVal = solveSimplePredicate("language");
+			if (langVal instanceof Struct) {
+				language = ((Struct) langVal).getName();
+			}
+		} else {
+			language = voiceProvider.replace(IndexConstants.VOICE_PROVIDER_SUFFIX, "")
+					.replace("-formal", "").replace("-casual", "");
 		}
 	}
 
@@ -126,7 +133,11 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 	@Override
 	public void stateChanged(ApplicationMode change) {
 		if(prologSystem != null) {
-			prologSystem.getTheoryManager().retract(new Struct("appMode", new Var()));
+			try {
+				prologSystem.getTheoryManager().retract(new Struct("appMode", new Var()));
+			} catch (Exception e) {
+				log.error("Retract error: ", e);
+			}
 			prologSystem.getTheoryManager()
 				.assertA(
 						new Struct("appMode", new Struct(ctx.getSettings().APPLICATION_MODE.get().getStringKey()
@@ -136,16 +147,6 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 	
 	private void init(String voiceProvider, OsmandSettings settings, String configFile) throws CommandPlayerException {
 		prologSystem.clearTheory();
-		voiceDir = null;
-		if (voiceProvider != null) {
-			File parent = ctx.getAppPath(IndexConstants.VOICE_INDEX_DIR);
-			voiceDir = new File(parent, voiceProvider);
-			if (!voiceDir.exists()) {
-				voiceDir = null;
-				throw new CommandPlayerException(
-						ctx.getString(R.string.voice_data_unavailable));
-			}
-		}
 
 		// see comments below why it is impossible to read from zip (don't know
 		// how to play file from zip)
@@ -162,10 +163,6 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 				config = new FileInputStream(new File(voiceDir, configFile)); //$NON-NLS-1$
 				// }
 				MetricsConstants mc = settings.METRIC_SYSTEM.get();
-				ApplicationMode m = settings.getApplicationMode();
-				if(m.getParent() != null) {
-					m = m.getParent();
-				}
 				settings.APPLICATION_MODE.addListener(this);
 				prologSystem.getTheoryManager()
 				.assertA(
@@ -197,6 +194,18 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 		}
 	}
 
+	private void initVoiceDir(String voiceProvider) throws CommandPlayerException {
+		if (voiceProvider != null) {
+			File parent = ctx.getAppPath(IndexConstants.VOICE_INDEX_DIR);
+			voiceDir = new File(parent, voiceProvider);
+			if (!voiceDir.exists()) {
+				voiceDir = null;
+				throw new CommandPlayerException(
+						ctx.getString(R.string.voice_data_unavailable));
+			}
+		}
+	}
+
 	protected Term solveSimplePredicate(String predicate) {
 		Term val = null;
 		Var v = new Var("MyVariable"); //$NON-NLS-1$
@@ -213,7 +222,7 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 
 	@Override
 	public List<String> execute(List<Struct> listCmd){
-		Struct list = new Struct(listCmd.toArray(new Term[listCmd.size()]));
+		Struct list = new Struct(listCmd.toArray(new Term[0]));
 		Var result = new Var("RESULT"); //$NON-NLS-1$
 		List<String> files = new ArrayList<String>();
 		if(prologSystem == null) {
@@ -286,7 +295,7 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 		if (mAudioFocusHelper != null && ctx != null) {
 			boolean audioFocusGranted = mAudioFocusHelper.requestFocus(ctx, applicationMode, streamType);
 			// If AudioManager.STREAM_VOICE_CALL try using BT SCO:
-			if (audioFocusGranted && ctx.getSettings().AUDIO_STREAM_GUIDANCE.getModeValue(applicationMode) == 0) {
+			if (audioFocusGranted && ctx.getSettings().AUDIO_MANAGER_STREAM.getModeValue(applicationMode) == 0) {
 				toggleBtSco(true);
 			}
 		}
@@ -303,7 +312,7 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 	
 	protected synchronized void abandonAudioFocus() {
 		log.debug("abandonAudioFocus");
-		if ((ctx != null && ctx.getSettings().AUDIO_STREAM_GUIDANCE.getModeValue(applicationMode) == 0) || (btScoStatus == true)) {
+		if ((ctx != null && ctx.getSettings().AUDIO_MANAGER_STREAM.getModeValue(applicationMode) == 0) || (btScoStatus == true)) {
 			toggleBtSco(false);
 		}
 		if (ctx != null && mAudioFocusHelper != null) {
@@ -314,11 +323,8 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 
 	public static boolean btScoStatus = false;
 
-	// BT_SCO_DELAY now in Settings. 1500 ms works for most configurations.
-	//public static final int BT_SCO_DELAY = 1500;
-
 	// This only needed for init debugging in TestVoiceActivity:
-					  public static String btScoInit = "";
+	public static String btScoInit = "-";
 
 	private synchronized boolean toggleBtSco(boolean on) {
 	// Hardy, 2016-07-03: Establish a low quality BT SCO (Synchronous Connection-Oriented) link to interrupt e.g. a car stereo FM radio
@@ -326,7 +332,7 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 			try {
 				AudioManager mAudioManager = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
 				if (mAudioManager == null || !mAudioManager.isBluetoothScoAvailableOffCall()) {
-					  btScoInit = "Reported not available.";
+					btScoInit = "Reported not available.";
 					return false;
 				}
 				mAudioManager.setMode(0);
@@ -337,10 +343,10 @@ public abstract class AbstractPrologCommandPlayer implements CommandPlayer, Stat
 			} catch (Exception e) {
 				System.out.println("Exception starting BT SCO " + e.getMessage() );
 				btScoStatus = false;
-					  btScoInit = "Available, but not initializad.\n(" + e.getMessage() + ")";
+				btScoInit = "Available, but not initializad.\n(" + e.getMessage() + ")";
 				return false;
 			}
-					  btScoInit = "Available, initialized OK.";
+			btScoInit = "Available, initialized OK.";
 			return true;
 		} else {
 			AudioManager mAudioManager = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);

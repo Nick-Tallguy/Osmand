@@ -1,11 +1,12 @@
 package net.osmand.plus.osmedit;
 
+import androidx.annotation.Nullable;
+
 import net.osmand.PlatformUtil;
 import net.osmand.osm.PoiCategory;
 import net.osmand.osm.PoiType;
-import net.osmand.osm.edit.Node;
+import net.osmand.osm.edit.Entity;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
 
@@ -16,27 +17,28 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static net.osmand.osm.edit.Entity.POI_TYPE_TAG;
+
 public class EditPoiData {
 	private static final Log LOG = PlatformUtil.getLog(EditPoiData.class);
 	private Set<TagsChangedListener> mListeners = new HashSet<>();
-	private LinkedHashMap<String, String > tagValues = new LinkedHashMap<String, String>();
+	private final LinkedHashMap<String, String> tagValues = new LinkedHashMap<String, String>();
 	private boolean isInEdit = false;
-	private Node entity;
-	
-	public static final String POI_TYPE_TAG = "poi_type_tag";
-	public static final String REMOVE_TAG_PREFIX = "----";
+	private Entity entity;
+
 	public static final String REMOVE_TAG_VALUE = "DELETE";
 	private boolean hasChangesBeenMade = false;
 	private Map<String, PoiType> allTranslatedSubTypes;
 	private PoiCategory category;
+	private PoiType currentPoiType;
 
 	private Set<String> changedTags = new HashSet<>();
 	
-	public EditPoiData(Node node, OsmandApplication app) {
+	public EditPoiData(Entity entity, OsmandApplication app) {
 		allTranslatedSubTypes = app.getPoiTypes().getAllTranslatedNames(true);
 		category = app.getPoiTypes().getOtherPoiCategory();
-		entity = node;
-		initTags(node);
+		this.entity = entity;
+		initTags(entity);
 		updateTypeTag(getPoiTypeString(), false);
 	}
 	
@@ -49,12 +51,19 @@ public class EditPoiData {
 			category = type;
 			tagValues.put(POI_TYPE_TAG, "");
 			changedTags.add(POI_TYPE_TAG);
+			removeCurrentTypeTag();
+			currentPoiType=null;
 		}
 	}
 	
-	
+	@Nullable
 	public PoiCategory getPoiCategory() {
 		return category;
+	}
+	
+	@Nullable
+	public PoiType getCurrentPoiType() {
+		return currentPoiType;
 	}
 	
 	public PoiType getPoiTypeDefined() {
@@ -66,7 +75,7 @@ public class EditPoiData {
 		return s == null ? "" : s;
 	}
 
-	public Node getEntity() {
+	public Entity getEntity() {
 		return entity;
 	}
 	
@@ -83,15 +92,15 @@ public class EditPoiData {
 	}
 	
 	private void tryAddTag(String key, String value) {
-		if (!Algorithms.isEmpty(value)) {
+		if (value != null) {
 			tagValues.put(key, value);
 		}
 	}
 	
-	private void initTags(Node node) {
+	private void initTags(Entity entity) {
 		checkNotInEdit();
-		for (String s : node.getTagKeySet()) {
-			tryAddTag(s, node.getTag(s));
+		for (String s : entity.getTagKeySet()) {
+			tryAddTag(s, entity.getTag(s));
 		}
 		retrieveType();
 	}
@@ -110,23 +119,22 @@ public class EditPoiData {
 		return Collections.unmodifiableMap(tagValues);
 	}
 
-
 	public void putTag(String tag, String value) {
 		checkNotInEdit();
 		try {
 			isInEdit = true;
-			tagValues.remove(REMOVE_TAG_PREFIX+tag);
+			tagValues.remove(Entity.REMOVE_TAG_PREFIX + tag);
 			String oldValue = tagValues.get(tag);
 			if (oldValue == null || !oldValue.equals(value)) {
 				changedTags.add(tag);
 			}
-			tagValues.put(tag, value);
+			String tagVal = value != null ? value : "";
+			tagValues.put(tag, tagVal);
 			notifyDatasetChanged(tag);
 		} finally {
 			isInEdit = false;
 		}
 	}
-
 
 	private void checkNotInEdit() {
 		if(isInEdit) {
@@ -146,9 +154,9 @@ public class EditPoiData {
 	
 	public void removeTag(String tag) {
 		checkNotInEdit();
-		try { 
+		try {
 			isInEdit = true;
-			tagValues.put(REMOVE_TAG_PREFIX+tag, REMOVE_TAG_VALUE);
+			tagValues.put(Entity.REMOVE_TAG_PREFIX + tag, REMOVE_TAG_VALUE);
 			tagValues.remove(tag);
 			changedTags.remove(tag);
 			notifyDatasetChanged(tag);
@@ -197,20 +205,62 @@ public class EditPoiData {
 	}
 
 	public void updateTypeTag(String string, boolean userChanges) {
-		tagValues.put(POI_TYPE_TAG, string);
-		if (userChanges) {
-			changedTags.add(POI_TYPE_TAG);
+		checkNotInEdit();
+		try {
+			String val = string != null ? string : "";
+			tagValues.put(POI_TYPE_TAG, val);
+			if (userChanges) {
+				changedTags.add(POI_TYPE_TAG);
+			}
+			retrieveType();
+			PoiType pt = getPoiTypeDefined();
+			String editOsmTag = pt != null ? pt.getEditOsmTag() : null;
+			if (editOsmTag != null) {
+				removeTypeTagWithPrefix(!tagValues.containsKey(Entity.REMOVE_TAG_PREFIX + editOsmTag));
+				currentPoiType = pt;
+				String tagVal = pt.getEditOsmValue() != null ? pt.getEditOsmValue() : "";
+				tagValues.put(editOsmTag, tagVal);
+				if (userChanges) {
+					changedTags.add(editOsmTag);
+				}
+				category = pt.getCategory();
+			} else if (currentPoiType != null) {
+				removeTypeTagWithPrefix(true);
+				category = currentPoiType.getCategory();
+			}
+			notifyDatasetChanged(POI_TYPE_TAG);
+		} finally {
+			isInEdit = false;
 		}
-		retrieveType();
-		PoiType pt = getPoiTypeDefined();
-		if(pt != null) {
-			tagValues.put(REMOVE_TAG_PREFIX+pt.getOsmTag(), REMOVE_TAG_VALUE);
-			tagValues.put(REMOVE_TAG_PREFIX+pt.getOsmTag2(), REMOVE_TAG_VALUE);
-			tagValues.remove(pt.getOsmTag());
-			tagValues.remove(pt.getOsmTag2());
-			changedTags.removeAll(Arrays.asList(pt.getOsmTag(), pt.getOsmTag2()));
-			category = pt.getCategory();
+	}
+
+	private void removeTypeTagWithPrefix(boolean needRemovePrefix) {
+		if (currentPoiType != null) {
+			if (needRemovePrefix) {
+				tagValues.put(Entity.REMOVE_TAG_PREFIX + currentPoiType.getEditOsmTag(), REMOVE_TAG_VALUE);
+				tagValues.put(Entity.REMOVE_TAG_PREFIX + currentPoiType.getOsmTag2(), REMOVE_TAG_VALUE);
+			} else {
+				tagValues.remove(Entity.REMOVE_TAG_PREFIX + currentPoiType.getEditOsmTag());
+				tagValues.remove(Entity.REMOVE_TAG_PREFIX + currentPoiType.getOsmTag2());
+			}
+			removeCurrentTypeTag();
 		}
-		notifyDatasetChanged(POI_TYPE_TAG);
+	}
+
+	private void removeCurrentTypeTag() {
+		if (currentPoiType != null) {
+			tagValues.remove(currentPoiType.getEditOsmTag());
+			tagValues.remove(currentPoiType.getOsmTag2());
+			changedTags.removeAll(Arrays.asList(currentPoiType.getEditOsmTag(), currentPoiType.getOsmTag2()));
+		}
+	}
+
+	public boolean hasEmptyValue() {
+		for (Map.Entry<String, String> tag : tagValues.entrySet()) {
+			if (tag.getValue().isEmpty() && !POI_TYPE_TAG.equals(tag.getKey())) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

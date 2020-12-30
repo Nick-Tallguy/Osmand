@@ -12,7 +12,9 @@
         android:paddingBottom="@dimen/dialog_content_bottom_margin"
         android:paddingLeft="@dimen/dialog_content_margin"
         android:paddingRight="@dimen/dialog_content_margin"
-        android:paddingTop="@dimen/dialog_content_bottom_margin">
+        android:paddingTop="@dimen/dialog_content_bottom_margin"
+	    android:paddingStart="@dimen/dialog_content_margin"
+	    android:paddingEnd="@dimen/dialog_content_margin">
 
         <TextView
             android:id="@+id/parkTime"
@@ -50,7 +52,7 @@
         </LinearLayout>
 
 
-        <CheckBox
+        <androidx.appcompat.widget.AppCompatCheckBox
             android:id="@+id/check_event_in_calendar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

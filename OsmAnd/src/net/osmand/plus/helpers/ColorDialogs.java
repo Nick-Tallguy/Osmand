@@ -1,12 +1,9 @@
 package net.osmand.plus.helpers;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
-import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -14,6 +11,10 @@ import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
+
+import androidx.annotation.ColorInt;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -24,7 +25,7 @@ import java.util.Random;
 
 import gnu.trove.list.array.TIntArrayList;
 
-import static android.util.TypedValue.COMPLEX_UNIT_DIP;
+import static net.osmand.AndroidUtils.dpToPx;
 
 public class ColorDialogs {
 	public static int[] paletteColors = new int[] {
@@ -38,21 +39,23 @@ public class ColorDialogs {
 			R.string.rendering_value_blue_name,
 			R.string.rendering_value_purple_name,
 			R.string.rendering_value_pink_name,
-			R.string.rendering_value_brown_name
+			R.string.rendering_value_brown_name,
+			R.string.rendering_value_black_name
 	};
 
 	public static int[] pallette = new int[] {
-			0xb4eecc22,
-			0xb4d00d0d,
-			0xb4ff5020,
-			0xb4eeee10,
-			0xb488e030,
-			0xb400842b,
-			0xb410c0f0,
-			0xb41010a0,
-			0xb4a71de1,
-			0xb4e044bb,
-			0xb48e2512
+			0xffeecc22,
+			0xffd00d0d,
+			0xffff5020,
+			0xffeeee10,
+			0xff88e030,
+			0xff00842b,
+			0xff10c0f0,
+			0xff1010a0,
+			0xffa71de1,
+			0xffe044bb,
+			0xff8e2512,
+			0xff000001
 	};
 
 	public static String[] paletteColorTags = new String[] {
@@ -66,7 +69,8 @@ public class ColorDialogs {
 			"blue",
 			"purple",
 			"pink",
-			"brown"
+			"brown",
+			"black"
 	};
 
 	private static double getDistanceBetweenColors(int color1, int color2) {
@@ -166,8 +170,8 @@ public class ColorDialogs {
 		colorSpinner.setSelection(selection);
 	}
 
-	public static void setupColorSpinnerEx(final Activity ctx, int selectedColor, final Spinner colorSpinner,
-										   final TIntArrayList colors, OnItemSelectedListener listener) {
+	public static void setupColorSpinnerEx(final Context ctx, int selectedColor, final Spinner colorSpinner,
+	                                       final TIntArrayList colors, OnItemSelectedListener listener) {
 		colors.add(pallette);
 		List<String> colorNames = new ArrayList<String>();
 		int selection = -1;
@@ -232,20 +236,35 @@ public class ColorDialogs {
 		return "#" + c; //$NON-NLS-1$
 	}
 
-	private static Drawable getIcon(final Activity activity, int resId, int color) {
-		OsmandApplication app = (OsmandApplication)activity.getApplication();
-		Drawable d = app.getResources().getDrawable(resId).mutate();
-		d.clearColorFilter();
-		d.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+	private static Drawable getIcon(final Context ctx, int resId, int color) {
+		Drawable d = AppCompatResources.getDrawable(ctx, resId);
+		if (d != null) {
+			d = DrawableCompat.wrap(d).mutate();
+			d.clearColorFilter();
+			d.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+		}
 		return d;
 	}
 
-	private static int dpToPx(final Activity activity, float dp) {
-		Resources r = activity.getResources();
-		return (int) TypedValue.applyDimension(
-				COMPLEX_UNIT_DIP,
-				dp,
-				r.getDisplayMetrics()
-		);
+	public static int getColorName(@ColorInt int color) {
+		int colorName = R.string.custom_color;
+		for (int i = 0; i < ColorDialogs.pallette.length; i++) {
+			if (ColorDialogs.pallette[i] == color) {
+				colorName = ColorDialogs.paletteColors[i];
+				break;
+			}
+		}
+		return colorName;
+	}
+
+	public static boolean isPaletteColor(@ColorInt int color) {
+		boolean isPaletteColor = false;
+		for (int i = 0; i < ColorDialogs.pallette.length; i++) {
+			if (ColorDialogs.pallette[i] == color) {
+				isPaletteColor = true;
+				break;
+			}
+		}
+		return isPaletteColor;
 	}
 }

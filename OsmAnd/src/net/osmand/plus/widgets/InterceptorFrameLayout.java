@@ -3,7 +3,6 @@ package net.osmand.plus.widgets;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.Build;
-import android.support.v4.view.MotionEventCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
@@ -46,7 +45,7 @@ public class InterceptorFrameLayout extends FrameLayout {
 
 	@Override
 	public boolean onInterceptTouchEvent(MotionEvent ev) {
-		final int action = MotionEventCompat.getActionMasked(ev);
+		final int action = ev.getActionMasked();
 
 		if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
 			mIsScrolling = false;

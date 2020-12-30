@@ -9,9 +9,13 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.quickaction.QuickAction;
+import net.osmand.plus.quickaction.QuickActionType;
 
 public class NavVoiceAction extends QuickAction {
-	public static final int TYPE = 11;
+	public static final QuickActionType TYPE = new QuickActionType(11,
+			"nav.voice", NavVoiceAction.class).
+			nameRes(R.string.quick_action_navigation_voice).iconRes(R.drawable.ic_action_volume_up).nonEditable().
+			category(QuickActionType.NAVIGATION);
 
 	public NavVoiceAction() {
 		super(TYPE);
@@ -23,16 +27,12 @@ public class NavVoiceAction extends QuickAction {
 
 	@Override
 	public void execute(MapActivity activity) {
-
-		boolean voice = activity.getMyApplication().getSettings().VOICE_MUTE.get();
-
-		activity.getMyApplication().getSettings().VOICE_MUTE.set(!voice);
-		activity.getRoutingHelper().getVoiceRouter().setMute(!voice);
+		boolean mute = activity.getMyApplication().getSettings().VOICE_MUTE.get();
+		activity.getMyApplication().getSettings().VOICE_MUTE.set(!mute);
 	}
 
 	@Override
 	public void drawUI(ViewGroup parent, MapActivity activity) {
-
 		View view = LayoutInflater.from(parent.getContext())
 				.inflate(R.layout.quick_action_with_text, parent, false);
 
@@ -44,7 +44,6 @@ public class NavVoiceAction extends QuickAction {
 
 	@Override
 	public String getActionText(OsmandApplication application) {
-
 		return application.getSettings().VOICE_MUTE.get()
 				? application.getString(R.string.quick_action_navigation_voice_off)
 				: application.getString(R.string.quick_action_navigation_voice_on);
@@ -52,7 +51,6 @@ public class NavVoiceAction extends QuickAction {
 
 	@Override
 	public boolean isActionWithSlash(OsmandApplication application) {
-
-		return application.getSettings().VOICE_MUTE.get();
+		return !application.getSettings().VOICE_MUTE.get();
 	}
 }

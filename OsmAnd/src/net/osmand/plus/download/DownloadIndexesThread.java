@@ -2,36 +2,34 @@ package net.osmand.plus.download;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.Notification;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.net.TrafficStats;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.AsyncTask.Status;
-import android.os.Build;
 import android.os.StatFs;
-import android.support.annotation.UiThread;
-import android.support.v7.app.AlertDialog;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationCompat.Builder;
 import android.view.View;
 import android.widget.Toast;
+
+import androidx.annotation.UiThread;
+import androidx.appcompat.app.AlertDialog;
+
+import net.osmand.AndroidNetworkUtils;
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
 import net.osmand.map.WorldRegion;
 import net.osmand.map.WorldRegion.RegionParams;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.OsmandPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.Version;
 import net.osmand.plus.base.BasicProgressAsyncTask;
 import net.osmand.plus.download.DownloadFileHelper.DownloadFileShowWarning;
 import net.osmand.plus.helpers.DatabaseHelper;
+import net.osmand.plus.notifications.OsmandNotification;
 import net.osmand.plus.resources.ResourceManager;
 import net.osmand.util.Algorithms;
 
@@ -41,15 +39,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @SuppressLint({ "NewApi", "DefaultLocale" })
 public class DownloadIndexesThread {
 	private final static Log LOG = PlatformUtil.getLog(DownloadIndexesThread.class);
-	private static final int NOTIFICATION_ID = 45;
+
 	private OsmandApplication app;
 
 	private DownloadEvents uiActivity = null;
@@ -59,10 +59,9 @@ public class DownloadIndexesThread {
 	private ConcurrentLinkedQueue<IndexItem> indexItemDownloading = new ConcurrentLinkedQueue<IndexItem>();
 	private IndexItem currentDownloadingItem = null;
 	private int currentDownloadingItemProgress = 0;
-
 	private DownloadResources indexes;
-	private Notification notification;
-	
+	private static final int THREAD_ID = 10103;
+
 	public interface DownloadEvents {
 		
 		void newDownloadIndexes();
@@ -95,7 +94,15 @@ public class DownloadIndexesThread {
 			this.uiActivity = null;
 		}
 	}
-	
+
+	@UiThread
+	protected void downloadHasStarted() {
+		if (app.getDownloadService() == null) {
+			app.startDownloadService();
+		}
+		updateNotification();
+	}
+
 	@UiThread
 	protected void downloadInProgress() {
 		if (uiActivity != null) {
@@ -103,51 +110,6 @@ public class DownloadIndexesThread {
 		}
 		updateNotification();
 	}
-	
-	private void updateNotification() {
-		if(getCurrentDownloadingItem() != null) {
-			BasicProgressAsyncTask<?, ?, ?, ?> task = getCurrentRunningTask();
-			final boolean isFinished = task == null
-					|| task.getStatus() == AsyncTask.Status.FINISHED;
-			Intent contentIntent = new Intent(app, DownloadActivity.class);
-			PendingIntent contentPendingIntent = PendingIntent.getActivity(app, 0, contentIntent,
-					PendingIntent.FLAG_UPDATE_CURRENT);
-			Builder bld = new NotificationCompat.Builder(app);
-			String msg = Version.getAppName(app);
-			if(!isFinished) {
-				msg = task.getDescription();
-			}
-			StringBuilder contentText = new StringBuilder();
-			List<IndexItem> ii = getCurrentDownloadingItems();
-			for (IndexItem i : ii) {
-				if (!isFinished && task.getTag() == i) {
-					continue;
-				}
-				if (contentText.length() > 0) {
-					contentText.append(", ");
-				}
-				contentText.append(i.getVisibleName(app, app.getRegions()));
-				contentText.append(" ").append(i.getType().getString(app));
-			}
-			bld.setContentTitle(msg).setSmallIcon(android.R.drawable.stat_sys_download)
-					.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-					.setContentText(contentText.toString())
-					.setContentIntent(contentPendingIntent).setOngoing(true);
-			int progress = getCurrentDownloadingItemProgress();
-			bld.setProgress(100, Math.max(progress, 0), progress < 0);
-			notification = bld.build();
-			NotificationManager mNotificationManager = (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
-			mNotificationManager.notify(NOTIFICATION_ID, notification);
-		} else {
-			if(notification != null) {
-				NotificationManager mNotificationManager = (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
-				mNotificationManager.cancel(NOTIFICATION_ID);
-				notification = null;
-			}
-		}
-		
-	}
-	
 
 	@UiThread
 	protected void downloadHasFinished() {
@@ -155,6 +117,10 @@ public class DownloadIndexesThread {
 			uiActivity.downloadHasFinished();
 		}
 		updateNotification();
+		if (app.getDownloadService() != null) {
+			app.getDownloadService().stopService(app);
+		}
+		app.getAvoidSpecificRoads().initRouteObjects(true);
 	}
 
 	public void initSettingsFirstMap(WorldRegion reg) {
@@ -172,10 +138,10 @@ public class DownloadIndexesThread {
 			String setTts = null;
 			for (String s : OsmandSettings.TTS_AVAILABLE_VOICES) {
 				if (lng.startsWith(s)) {
-					setTts = s + "-tts";
+					setTts = s + IndexConstants.VOICE_PROVIDER_SUFFIX;
 					break;
 				} else if (lng.contains("," + s)) {
-					setTts = s + "-tts";
+					setTts = s + IndexConstants.VOICE_PROVIDER_SUFFIX;
 				}
 			}
 			if (setTts != null) {
@@ -207,6 +173,10 @@ public class DownloadIndexesThread {
 		}
 		res.addAll(indexItemDownloading);
 		return res;
+	}
+
+	public boolean isDownloading() {
+		return !indexItemDownloading.isEmpty() || currentDownloadingItem != null;
 	}
 
 	public boolean isDownloading(IndexItem item) {
@@ -254,8 +224,8 @@ public class DownloadIndexesThread {
 				return;
 			}	
 		}
-		if(uiActivity instanceof Activity) {
-			app.logEvent((Activity) uiActivity, "download_files");
+		if (uiActivity instanceof Activity) {
+			app.logEvent("download_files");
 		}
 		for(IndexItem item : items) {
 			if (!item.equals(currentDownloadingItem) && !indexItemDownloading.contains(item)) {
@@ -270,7 +240,8 @@ public class DownloadIndexesThread {
 	}
 
 	public void cancelDownload(IndexItem item) {
-		if(currentDownloadingItem == item) {
+		app.logMapDownloadEvent("cancel", item);
+		if (currentDownloadingItem == item) {
 			downloadFileHelper.setInterruptDownloading(true);
 		} else {
 			indexItemDownloading.remove(item);
@@ -278,6 +249,23 @@ public class DownloadIndexesThread {
 		}
 	}
 
+	public void cancelDownload(List<IndexItem> items) {
+		if (items != null) {
+			boolean updateProgress = false;
+			for (IndexItem item : items) {
+				app.logMapDownloadEvent("cancel", item);
+				if (currentDownloadingItem == item) {
+					downloadFileHelper.setInterruptDownloading(true);
+				} else {
+					indexItemDownloading.remove(item);
+					updateProgress = true;
+				}
+			}
+			if (updateProgress) {
+				downloadInProgress();
+			}
+		}
+	}
 
 	public IndexItem getCurrentDownloadingItem() {
 		return currentDownloadingItem;
@@ -329,7 +317,9 @@ public class DownloadIndexesThread {
 		task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, indexItems);
 	}
 
-
+	private void updateNotification() {
+		app.getNotificationHelper().refreshNotification(OsmandNotification.NotificationType.DOWNLOAD);
+	}
 
 	private class ReloadIndexesTask extends BasicProgressAsyncTask<Void, Void, Void, DownloadResources> {
 
@@ -347,6 +337,7 @@ public class DownloadIndexesThread {
 
 		@Override
 		protected DownloadResources doInBackground(Void... params) {
+			TrafficStats.setThreadStatsTag(THREAD_ID);
 			DownloadResources result = null;
 			DownloadOsmandIndexesHelper.IndexFileList indexFileList = DownloadOsmandIndexesHelper.getIndexesList(ctx);
 			if (indexFileList != null) {
@@ -360,6 +351,7 @@ public class DownloadIndexesThread {
 					app.getSettings().LAST_CHECKED_UPDATES.set(System.currentTimeMillis());
 					result.prepareData(indexFileList.getIndexFiles());
 				} catch (Exception e) {
+					LOG.error(e);
 				}
 			}
 			return result == null ? new DownloadResources(app) : result;
@@ -460,7 +452,8 @@ public class DownloadIndexesThread {
 					mainView.setKeepScreenOn(true);
 				}
 			}
-			startTask(ctx.getString(R.string.shared_string_downloading) + ctx.getString(R.string.shared_string_ellipsis), -1);
+			startTask(ctx.getString(R.string.shared_string_downloading), -1);
+			downloadHasStarted();
 		}
 
 		@Override
@@ -478,9 +471,6 @@ public class DownloadIndexesThread {
 			indexes.updateFilesToUpdate();
 			downloadHasFinished();
 		}
-
-		
-
 
 		@Override
 		protected String doInBackground(IndexItem... filesToDownload) {
@@ -554,7 +544,7 @@ public class DownloadIndexesThread {
 			// validate enough space
 			if (asz != -1 && cs > asz) {
 				String breakDownloadMessage = app.getString(R.string.download_files_not_enough_space,
-						cs, asz);
+						String.valueOf(cs), String.valueOf(asz));
 				publishProgress(breakDownloadMessage);
 				return false;
 			}
@@ -562,9 +552,7 @@ public class DownloadIndexesThread {
 		}
 		
 		private boolean validateNotExceedsFreeLimit(IndexItem item) {
-			boolean exceed = Version.isFreeVersion(app)
-					&& !app.getSettings().LIVE_UPDATES_PURCHASED.get()
-					&& !app.getSettings().FULL_VERSION_PURCHASED.get()
+			boolean exceed = !Version.isPaidVersion(app)
 					&& DownloadActivityType.isCountedInDownloads(item)
 					&& downloads.get() >= DownloadValidationManager.MAXIMUM_AVAILABLE_FREE_DOWNLOADS;
 			if(exceed) {
@@ -574,7 +562,6 @@ public class DownloadIndexesThread {
 			}
 			return !exceed;
 		}
-
 
 		private String reindexFiles(List<File> filesToReindex) {
 			boolean vectorMapsToReindex = false;
@@ -640,7 +627,16 @@ public class DownloadIndexesThread {
 					LOG.error("Copy exception", e);
 				}
 			} else {
+				long start = System.currentTimeMillis();
+				app.logMapDownloadEvent("start", item);
 				res = downloadFileHelper.downloadFile(de, this, filesToReindex, this, forceWifi);
+				long time = System.currentTimeMillis() - start;
+				if (res) {
+					app.logMapDownloadEvent("done", item, time);
+					checkDownload(item);
+				} else {
+					app.logMapDownloadEvent("failed", item, time);
+				}
 			}
 			return res;
 		}
@@ -650,5 +646,12 @@ public class DownloadIndexesThread {
 			currentDownloadingItemProgress = getProgressPercentage();
 			downloadInProgress();
 		}
+	}
+
+	private void checkDownload(IndexItem item) {
+		Map<String, String> params = new HashMap<>();
+		params.put("file_name", item.fileName);
+		params.put("file_size", item.size);
+		AndroidNetworkUtils.sendRequestAsync(app, "https://osmand.net/api/check_download", params, "Check download", false, false, null);
 	}
 }

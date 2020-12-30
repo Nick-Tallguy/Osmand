@@ -3,49 +3,54 @@ package net.osmand.plus.mapillary;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.FragmentActivity;
-import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.SwitchCompat;
+import androidx.fragment.app.FragmentActivity;
+
 import net.osmand.AndroidUtils;
 import net.osmand.map.ITileSource;
 import net.osmand.map.TileSourceManager;
-import net.osmand.plus.ApplicationMode;
+import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.ContextMenuAdapter;
 import net.osmand.plus.ContextMenuItem;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.Version;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.MapActivityLayers;
 import net.osmand.plus.base.BottomSheetDialogFragment;
 import net.osmand.plus.dashboard.DashboardOnMap;
-import net.osmand.plus.views.MapInfoLayer;
+import net.osmand.plus.views.layers.MapInfoLayer;
 import net.osmand.plus.views.MapTileLayer;
 import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.plus.views.mapwidgets.MapWidgetRegistry.MapWidgetRegInfo;
-import net.osmand.plus.views.mapwidgets.TextInfoWidget;
+import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
 import net.osmand.util.Algorithms;
 
 import java.text.MessageFormat;
 import java.util.List;
 
 import static android.content.Intent.ACTION_VIEW;
+import static net.osmand.aidlapi.OsmAndCustomizationConstants.MAPILLARY;
+import static net.osmand.plus.ContextMenuAdapter.makeDeleteAction;
 
 public class MapillaryPlugin extends OsmandPlugin {
+
 	public static final String ID = "osmand.mapillary";
 	private static final String MAPILLARY_PACKAGE_ID = "app.mapillary";
+
 	private OsmandSettings settings;
-	private OsmandApplication app;
 
 	private MapillaryRasterLayer rasterLayer;
 	private MapillaryVectorLayer vectorLayer;
@@ -53,7 +58,7 @@ public class MapillaryPlugin extends OsmandPlugin {
 	private MapWidgetRegInfo mapillaryWidgetRegInfo;
 
 	public MapillaryPlugin(OsmandApplication app) {
-		this.app = app;
+		super(app);
 		settings = app.getSettings();
 	}
 
@@ -68,8 +73,8 @@ public class MapillaryPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public int getAssetResourceName() {
-		return R.drawable.mapillary;
+	public Drawable getAssetResourceImage() {
+		return app.getUIUtilities().getIcon(R.drawable.mapillary);
 	}
 
 	@Override
@@ -78,7 +83,7 @@ public class MapillaryPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public String getDescription() {
+	public CharSequence getDescription() {
 		return app.getString(R.string.plugin_mapillary_descr);
 	}
 
@@ -140,17 +145,12 @@ public class MapillaryPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public Class<? extends Activity> getSettingsActivity() {
-		return null;
-	}
-
-	@Override
 	public void registerLayerContextMenuActions(final OsmandMapTileView mapView, ContextMenuAdapter adapter, final MapActivity mapActivity) {
 		ContextMenuAdapter.ItemClickListener listener = new ContextMenuAdapter.OnRowItemClick() {
 
 			@Override
 			public boolean onRowItemClick(ArrayAdapter<ContextMenuItem> adapter, View view, int itemId, int position) {
-				if (itemId == R.string.mapillary) {
+				if (itemId == R.string.street_level_imagery) {
 					mapActivity.getDashboard().setDashboardVisibility(true, DashboardOnMap.DashboardType.MAPILLARY, AndroidUtils.getCenterViewCoordinates(view));
 					return false;
 				}
@@ -160,7 +160,7 @@ public class MapillaryPlugin extends OsmandPlugin {
 			@Override
 			public boolean onContextMenuClick(final ArrayAdapter<ContextMenuItem> adapter, int itemId, final int pos, boolean isChecked, int[] viewCoordinates) {
 				final OsmandSettings settings = mapActivity.getMyApplication().getSettings();
-				if (itemId == R.string.mapillary) {
+				if (itemId == R.string.street_level_imagery) {
 					OsmandMapTileView mapView = mapActivity.getMapView();
 					MapActivityLayers mapLayers = mapActivity.getMapLayers();
 					settings.SHOW_MAPILLARY.set(!settings.SHOW_MAPILLARY.get());
@@ -180,13 +180,15 @@ public class MapillaryPlugin extends OsmandPlugin {
 			settings.SHOW_MAPILLARY.set(false);
 		}
 		adapter.addItem(new ContextMenuItem.ItemBuilder()
-				.setTitleId(R.string.mapillary, mapActivity)
+				.setId(MAPILLARY)
+				.setTitleId(R.string.street_level_imagery, mapActivity)
+				.setDescription("Mapillary")
 				.setSelected(settings.SHOW_MAPILLARY.get())
 				.setColor(settings.SHOW_MAPILLARY.get() ? R.color.osmand_orange : ContextMenuItem.INVALID_ID)
 				.setIcon(R.drawable.ic_action_mapillary)
 				.setSecondaryIcon(R.drawable.ic_action_additional_option)
+				.setItemDeleteAction(makeDeleteAction(settings.SHOW_MAPILLARY))
 				.setListener(listener)
-				.setPosition(11)
 				.createItem());
 	}
 
@@ -230,14 +232,18 @@ public class MapillaryPlugin extends OsmandPlugin {
 		boolean success = false;
 		OsmandApplication app = (OsmandApplication) activity.getApplication();
 		if (isPackageInstalled(MAPILLARY_PACKAGE_ID, app)) {
-			if (imageKey != null) {
-				Intent intent = new Intent(ACTION_VIEW, Uri.parse(MessageFormat.format("mapillary://mapillary/photo/{0}?image_key={0}", imageKey)));
-				intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-				app.startActivity(intent);
-			} else {
-				Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("mapillary://mapillary/capture"));
-				intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-				app.startActivity(intent);
+			try {
+				if (imageKey != null) {
+					Intent intent = new Intent(ACTION_VIEW, Uri.parse(MessageFormat.format("mapillary://mapillary/photo/{0}?image_key={0}", imageKey)));
+					intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+					app.startActivity(intent);
+				} else {
+					Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("mapillary://mapillary/capture"));
+					intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+					app.startActivity(intent);
+				}
+			} catch (ActivityNotFoundException e) {
+				new MapillaryInstallDialogFragment().show(activity.getSupportFragmentManager(), MapillaryInstallDialogFragment.TAG);
 			}
 			success = true;
 		} else {
@@ -247,7 +253,7 @@ public class MapillaryPlugin extends OsmandPlugin {
 	}
 
 	public static boolean installMapillary(Activity activity, OsmandApplication app) {
-		app.logEvent(activity, "install_mapillary");
+		app.logEvent("install_mapillary");
 		boolean success = execInstall(app, Version.getUrlWithUtmRef(app, MAPILLARY_PACKAGE_ID));
 		if (!success) {
 			success = execInstall(app, "https://play.google.com/store/apps/details?id=" + MAPILLARY_PACKAGE_ID);
@@ -274,7 +280,7 @@ public class MapillaryPlugin extends OsmandPlugin {
 		private boolean showWidget = true;
 
 		@Override
-		public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
 			if (savedInstanceState != null) {
 				showWidget = savedInstanceState.getBoolean(KEY_SHOW_WIDGET, true);
 			}

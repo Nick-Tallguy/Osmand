@@ -3,20 +3,23 @@ package net.osmand.plus;
 
 import android.app.Activity;
 import android.content.DialogInterface;
-import android.support.v7.app.AlertDialog;
 import android.view.View;
-import android.widget.CompoundButton;
-import android.widget.CompoundButton.OnCheckedChangeListener;
-import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.content.ContextCompat;
+
+import com.google.android.material.slider.Slider;
+
 import net.osmand.CallbackWithObject;
+import net.osmand.GPXUtilities;
 import net.osmand.Location;
+import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.GpxUiHelper;
 import net.osmand.plus.routing.RouteProvider.GPXRouteParamsBuilder;
+import net.osmand.plus.settings.backend.ApplicationMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,87 +53,89 @@ public class OsmAndLocationSimulation {
 //	}
 
 	
-	public void startStopRouteAnimation(final Activity ma, final Runnable runnable) {
+	public void startStopRouteAnimation(final Activity ma, boolean useGpx, final Runnable runnable) {
 		if (!isRouteAnimating()) {
-			AlertDialog.Builder builder = new AlertDialog.Builder(ma);
-			builder.setTitle(R.string.animate_route);
+			if (useGpx) {
+				boolean nightMode = app.getDaynightHelper().isNightModeForMapControls();
+				int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
+				ApplicationMode appMode = app.getSettings().getApplicationMode();
+				int selectedModeColor = ContextCompat.getColor(app, appMode.getIconColorInfo().getColor(nightMode));
+				AlertDialog.Builder builder = new AlertDialog.Builder(new ContextThemeWrapper(ma, themeRes));
+				builder.setTitle(R.string.animate_route);
 
-			final View view = ma.getLayoutInflater().inflate(R.layout.animate_route, null);
-			final View gpxView = ((LinearLayout) view.findViewById(R.id.layout_animate_gpx));
-			final RadioButton radioGPX = (RadioButton) view.findViewById(R.id.radio_gpx);
-			radioGPX.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+				final View view = ma.getLayoutInflater().inflate(R.layout.animate_route, null);
+				((TextView) view.findViewById(R.id.MinSpeedup)).setText("1"); //$NON-NLS-1$
+				((TextView) view.findViewById(R.id.MaxSpeedup)).setText("4"); //$NON-NLS-1$
+				final Slider speedup = (Slider) view.findViewById(R.id.Speedup);
+				speedup.setValueTo(3);
+				UiUtilities.setupSlider(speedup, nightMode, selectedModeColor, true);
+				builder.setView(view);
+				builder.setPositiveButton(R.string.shared_string_ok, new DialogInterface.OnClickListener() {
 
-				@Override
-				public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-					gpxView.setVisibility(isChecked ? View.VISIBLE : View.GONE);
-				}
-			});
-
-			((TextView) view.findViewById(R.id.MinSpeedup)).setText("1"); //$NON-NLS-1$
-			((TextView) view.findViewById(R.id.MaxSpeedup)).setText("4"); //$NON-NLS-1$
-			final SeekBar speedup = (SeekBar) view.findViewById(R.id.Speedup);
-			speedup.setMax(3);
-			builder.setView(view);
-			builder.setPositiveButton(R.string.shared_string_ok, new DialogInterface.OnClickListener() {
-
-				@Override
-				public void onClick(DialogInterface dialog, int which) {
-					boolean gpxNavigation = radioGPX.isChecked();
-					if (gpxNavigation) {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						boolean nightMode = ma instanceof MapActivity ? app.getDaynightHelper().isNightModeForMapControls() : !app.getSettings().isLightContent();
 						GpxUiHelper.selectGPXFile(ma, false, false, new CallbackWithObject<GPXUtilities.GPXFile[]>() {
 							@Override
 							public boolean processResult(GPXUtilities.GPXFile[] result) {
 								GPXRouteParamsBuilder builder = new GPXRouteParamsBuilder(result[0], app.getSettings());
-								startAnimationThread(app, builder.getPoints(), true, speedup.getProgress() + 1);
+								startAnimationThread(app, builder.getPoints(app), true, speedup.getValue() + 1);
 								if (runnable != null) {
 									runnable.run();
 								}
 								return true;
 							}
-						});
-					} else {
-						List<Location> currentRoute = app.getRoutingHelper().getCurrentCalculatedRoute();
-						if (currentRoute.isEmpty()) {
-							Toast.makeText(app, R.string.animate_routing_route_not_calculated,
-									Toast.LENGTH_LONG).show();
-						} else {
-							startAnimationThread(app, new ArrayList<Location>(currentRoute), false, 1);
-							if (runnable != null) {
-								runnable.run();
-							}
-						}
+						}, nightMode);
 					}
-
+				});
+				builder.setNegativeButton(R.string.shared_string_cancel, null);
+				builder.show();
+			} else {
+				List<Location> currentRoute = app.getRoutingHelper().getCurrentCalculatedRoute();
+				if (currentRoute.isEmpty()) {
+					Toast.makeText(app, R.string.animate_routing_route_not_calculated,
+							Toast.LENGTH_LONG).show();
+				} else {
+					startAnimationThread(app, new ArrayList<Location>(currentRoute), false, 1);
+					if (runnable != null) {
+						runnable.run();
+					}
 				}
-			});
-			builder.setNegativeButton(R.string.shared_string_cancel, null);
-			builder.show();
+			}
 		} else {
 			stop();
+			if (runnable != null) {
+				runnable.run();
+			}
 		}
 	}
 	
 	public void startStopRouteAnimation(final Activity ma)  {
-		startStopRouteAnimation(ma, null);
+		startStopRouteAnimation(ma, false, null);
 	}
 
-	private void startAnimationThread(final OsmandApplication app, final List<Location> directions, final boolean useLocationTime, final float coeff) {
+	public void startStopGpxAnimation(final Activity ma)  {
+		startStopRouteAnimation(ma, true, null);
+	}
+
+	private void startAnimationThread(final OsmandApplication app, final List<Location> directions, final boolean locTime, final float coeff) {
 		final float time = 1.5f;
 		routeAnimation = new Thread() {
 			@Override
 			public void run() {
 				Location current = directions.isEmpty() ? null : new Location(directions.remove(0));
-				
+				boolean useLocationTime = locTime && current.getTime() != 0;
 				Location prev = current;
 				long prevTime = current == null ? 0 : current.getTime();
 				float meters = metersToGoInFiveSteps(directions, current);
 				if(current != null) {
 					current.setProvider(OsmAndLocationProvider.SIMULATED_PROVIDER);
 				}
+
 				while (!directions.isEmpty() && routeAnimation != null) {
 					int timeout = (int) (time  * 1000);
 					float intervalTime = time;
-					if(useLocationTime) {
+					if (useLocationTime) {
 						current = directions.remove(0);
 						meters = current.distanceTo(prev);
 						if (!directions.isEmpty()) {

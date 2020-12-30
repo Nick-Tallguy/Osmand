@@ -1,13 +1,16 @@
 package net.osmand.plus.osmedit;
 
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.text.Editable;
+import android.text.InputFilter;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.TypedValue;
+import android.view.ContextThemeWrapper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +21,11 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+
+import net.osmand.AndroidUtils;
 import net.osmand.PlatformUtil;
 import net.osmand.osm.edit.OSMSettings;
 import net.osmand.plus.R;
@@ -30,7 +38,11 @@ import net.osmand.util.OpeningHoursParser.BasicOpeningHourRule;
 
 import org.apache.commons.logging.Log;
 
+import java.util.Map;
+
 import gnu.trove.list.array.TIntArrayList;
+
+import static net.osmand.plus.osmedit.EditPoiDialogFragment.AMENITY_TEXT_LENGTH;
 
 public class BasicEditPoiFragment extends BaseOsmAndFragment
 		implements EditPoiDialogFragment.OnFragmentActivatedListener {
@@ -43,13 +55,17 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 	private EditText descriptionEditText;
 	OpeningHoursAdapter mOpeningHoursAdapter;
 
+	private boolean basicTagsInitialized = false;
+
 	@Nullable
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-		View view = inflater.inflate(R.layout.fragment_edit_poi_normal, container, false);
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		int themeRes = requireMyApplication().getSettings().isLightActionBar() ? R.style.OsmandLightTheme : R.style.OsmandDarkTheme;
+		Context themedContext = new ContextThemeWrapper(getContext(), themeRes);
+		View view = inflater.cloneInContext(themedContext).inflate(R.layout.fragment_edit_poi_normal, container, false);
 
 		TypedValue typedValue = new TypedValue();
-		Resources.Theme theme = getActivity().getTheme();
+		Resources.Theme theme = themedContext.getTheme();
 		theme.resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
 		int iconColor = typedValue.data;
 
@@ -72,6 +88,9 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 		openingHoursImageView.setImageDrawable(
 				getPaintedContentIcon(R.drawable.ic_action_time, iconColor));
 
+		InputFilter[] lengthLimit = new InputFilter[] {
+			new InputFilter.LengthFilter(AMENITY_TEXT_LENGTH)
+		};
 		streetEditText = (EditText) view.findViewById(R.id.streetEditText);
 		houseNumberEditText = (EditText) view.findViewById(R.id.houseNumberEditText);
 		phoneEditText = (EditText) view.findViewById(R.id.phoneEditText);
@@ -82,6 +101,16 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 		addTextWatcher(OSMSettings.OSMTagKey.PHONE.getValue(), phoneEditText);
 		addTextWatcher(OSMSettings.OSMTagKey.ADDR_HOUSE_NUMBER.getValue(), houseNumberEditText);
 		addTextWatcher(OSMSettings.OSMTagKey.DESCRIPTION.getValue(), descriptionEditText);
+		streetEditText.setFilters(lengthLimit);
+		houseNumberEditText.setFilters(lengthLimit);
+		phoneEditText.setFilters(lengthLimit);
+		webSiteEditText.setFilters(lengthLimit);
+		descriptionEditText.setFilters(lengthLimit);
+		AndroidUtils.setTextHorizontalGravity(streetEditText, Gravity.START);
+		AndroidUtils.setTextHorizontalGravity(houseNumberEditText, Gravity.START);
+		AndroidUtils.setTextHorizontalGravity(phoneEditText, Gravity.START);
+		AndroidUtils.setTextHorizontalGravity(webSiteEditText, Gravity.START);
+		AndroidUtils.setTextHorizontalGravity(descriptionEditText, Gravity.START);
 		Button addOpeningHoursButton = (Button) view.findViewById(R.id.addOpeningHoursButton);
 		addOpeningHoursButton.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -89,6 +118,9 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 				BasicOpeningHourRule rule = new BasicOpeningHourRule();
 				rule.setStartTime(9 * 60);
 				rule.setEndTime(18 * 60);
+				if (mOpeningHoursAdapter.openingHours.getRules().isEmpty()){
+					rule.setDays(new boolean[]{true, true, true, true, true, false, false});
+				}
 				OpeningHoursDaysDialogFragment fragment = OpeningHoursDaysDialogFragment.createInstance(rule, -1);
 				fragment.show(getChildFragmentManager(), "OpenTimeDialogFragment");
 			}
@@ -122,11 +154,12 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 
 			@Override
 			public void afterTextChanged(Editable s) {
-				if (!getData().isInEdit()) {
+				EditPoiData data = getData();
+				if (data != null && !data.isInEdit()) {
 					if (!TextUtils.isEmpty(s)) {
-						getData().putTag(tag, s.toString());
-					} else {
-						getData().removeTag(tag);
+						data.putTag(tag, s.toString());
+					} else if (basicTagsInitialized && isResumed()) {
+						data.removeTag(tag);
 					}
 				}
 			}
@@ -141,39 +174,56 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 	}
 
 	public void setBasicOpeningHoursRule(BasicOpeningHourRule item, int position) {
+		if (item.getStartTime() == 0 && item.getEndTime() == 0 && item.isOpenedEveryDay()) {
+			item.setEndTime(24 * 60);
+		}
 		mOpeningHoursAdapter.setOpeningHoursRule(item, position);
 	}
 
-
-	private EditPoiDialogFragment getEditPoiFragment() {
-		return (EditPoiDialogFragment) getParentFragment();
+	public void removeUnsavedOpeningHours() {
+		EditPoiData data = getData();
+		if (data != null) {
+			OpeningHoursParser.OpeningHours openingHours = OpeningHoursParser.parseOpenedHoursHandleErrors(data.getTagValues()
+					.get(OSMSettings.OSMTagKey.OPENING_HOURS.getValue()));
+			if (openingHours == null) {
+				openingHours = new OpeningHoursParser.OpeningHours();
+			}
+			mOpeningHoursAdapter.replaceOpeningHours(openingHours);
+			mOpeningHoursAdapter.updateViews();
+		}
 	}
 
 	private EditPoiData getData() {
-		return getEditPoiFragment().getEditPoiData();
+		Fragment parent = getParentFragment();
+		if (parent != null && parent instanceof EditPoiDialogFragment) {
+			return ((EditPoiDialogFragment) parent).getEditPoiData();
+		}
+		return null;
 	}
 
 	@Override
 	public void onFragmentActivated() {
-		streetEditText.setText(getData().getTagValues()
-				.get(OSMSettings.OSMTagKey.ADDR_STREET.getValue()));
-		houseNumberEditText.setText(getData().getTagValues()
-				.get(OSMSettings.OSMTagKey.ADDR_HOUSE_NUMBER.getValue()));
-		phoneEditText.setText(getData().getTagValues()
-				.get(OSMSettings.OSMTagKey.PHONE.getValue()));
-		webSiteEditText.setText(getData().getTagValues()
-				.get(OSMSettings.OSMTagKey.WEBSITE.getValue()));
-		descriptionEditText.setText(getData().getTagValues()
-				.get(OSMSettings.OSMTagKey.DESCRIPTION.getValue()));
+		EditPoiData data = getData();
+		if (data == null) {
+			return;
+		}
+		basicTagsInitialized = false;
+		Map<String, String> tagValues = data.getTagValues();
+		streetEditText.setText(tagValues.get(OSMSettings.OSMTagKey.ADDR_STREET.getValue()));
+		houseNumberEditText.setText(tagValues.get(OSMSettings.OSMTagKey.ADDR_HOUSE_NUMBER.getValue()));
+		phoneEditText.setText(tagValues.get(OSMSettings.OSMTagKey.PHONE.getValue()));
+		webSiteEditText.setText(tagValues.get(OSMSettings.OSMTagKey.WEBSITE.getValue()));
+		descriptionEditText.setText(tagValues.get(OSMSettings.OSMTagKey.DESCRIPTION.getValue()));
 
 		OpeningHoursParser.OpeningHours openingHours =
-				OpeningHoursParser.parseOpenedHoursHandleErrors(getData().getTagValues()
+				OpeningHoursParser.parseOpenedHoursHandleErrors(tagValues
 						.get(OSMSettings.OSMTagKey.OPENING_HOURS.getValue()));
 		if (openingHours == null) {
 			openingHours = new OpeningHoursParser.OpeningHours();
 		}
 		mOpeningHoursAdapter.replaceOpeningHours(openingHours);
 		mOpeningHoursAdapter.updateViews();
+		basicTagsInitialized = true;
 	}
 
 	private class OpeningHoursAdapter {
@@ -219,7 +269,7 @@ public class BasicEditPoiFragment extends BaseOsmAndFragment
 						data.putTag(OSMSettings.OSMTagKey.OPENING_HOURS.getValue(),
 								openingHoursString);
 					}
-				} else {
+				} else if (basicTagsInitialized && isResumed()) {
 					data.removeTag(OSMSettings.OSMTagKey.OPENING_HOURS.getValue());
 				}
 			}

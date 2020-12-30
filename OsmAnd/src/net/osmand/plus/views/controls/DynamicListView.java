@@ -28,8 +28,6 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.GestureDetector;
@@ -40,6 +38,9 @@ import android.view.ViewTreeObserver;
 import android.widget.AbsListView;
 import android.widget.HeaderViewListAdapter;
 import android.widget.ListAdapter;
+
+import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 
 import com.github.ksoichiro.android.observablescrollview.ObservableListView;
 
@@ -457,7 +458,7 @@ public class DynamicListView extends ObservableListView {
 					int switchViewNewTop = switchView.getTop();
 					int delta = switchViewStartTop - switchViewNewTop;
 
-					ViewCompat.setTranslationY(switchView, delta);
+					switchView.setTranslationY(delta);
 
 					if (android.os.Build.VERSION.SDK_INT < 12) {
 						ViewCompat.animate(switchView)

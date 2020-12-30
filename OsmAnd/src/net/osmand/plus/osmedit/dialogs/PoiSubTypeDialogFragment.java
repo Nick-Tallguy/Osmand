@@ -3,9 +3,10 @@ package net.osmand.plus.osmedit.dialogs;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.app.AlertDialog;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.DialogFragment;
 
 import net.osmand.osm.MapPoiTypes;
 import net.osmand.osm.PoiCategory;
@@ -35,7 +36,7 @@ public class PoiSubTypeDialogFragment extends DialogFragment {
 		} else {
 			addCategory(a, strings);
 		}
-		final String[] subCats = strings.toArray(new String[strings.size()]);
+		final String[] subCats = strings.toArray(new String[0]);
 		builder.setItems(subCats, new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {

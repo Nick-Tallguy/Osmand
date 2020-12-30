@@ -1,11 +1,6 @@
 package net.osmand.plus.mapcontextmenu.builders.cards.dialogs;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.AppCompatImageView;
-import android.support.v7.widget.PopupMenu;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,13 +8,19 @@ import android.webkit.WebView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.widget.AppCompatImageView;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+
 import net.osmand.AndroidUtils;
-import net.osmand.plus.OsmandPlugin;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.BaseOsmAndFragment;
 import net.osmand.plus.dialogs.DirectionsDialogs;
-import net.osmand.plus.mapillary.MapillaryPlugin;
 import net.osmand.util.Algorithms;
 
 public class ContextMenuCardDialogFragment extends BaseOsmAndFragment {
@@ -39,12 +40,13 @@ public class ContextMenuCardDialogFragment extends BaseOsmAndFragment {
 
 	@Nullable
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
 		View view = inflater.inflate(R.layout.context_menu_card_dialog, container, false);
-		AndroidUtils.addStatusBarPadding21v(getActivity(), view);
+		FragmentActivity activity = requireActivity();
+		AndroidUtils.addStatusBarPadding21v(activity, view);
 		if (dialog.getType() == ContextMenuCardDialog.CardDialogType.MAPILLARY) {
 			view.findViewById(R.id.dialog_layout)
-					.setBackgroundColor(ContextCompat.getColor(getActivity(), R.color.mapillary_action_bar));
+					.setBackgroundColor(ContextCompat.getColor(activity, R.color.mapillary_action_bar));
 		}
 		contentLayout = (LinearLayout) view.findViewById(R.id.content);
 		contentView = dialog.getContentView();
@@ -69,7 +71,7 @@ public class ContextMenuCardDialogFragment extends BaseOsmAndFragment {
 			moreButton.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					final PopupMenu optionsMenu = new PopupMenu(getContext(), v);
+					final PopupMenu optionsMenu = new PopupMenu(v.getContext(), v);
 					DirectionsDialogs.setupPopUpMenuIcon(optionsMenu);
 					dialog.createMenuItems(optionsMenu.getMenu());
 					optionsMenu.show();
@@ -109,7 +111,7 @@ public class ContextMenuCardDialogFragment extends BaseOsmAndFragment {
 	}
 
 	@Override
-	public void onSaveInstanceState(Bundle outState) {
+	public void onSaveInstanceState(@NonNull Bundle outState) {
 		dialog.saveMenu(outState);
 	}
 
@@ -132,19 +134,9 @@ public class ContextMenuCardDialogFragment extends BaseOsmAndFragment {
 	public void dismiss() {
 		MapActivity activity = dialog.getMapActivity();
 		if (activity != null) {
-			if (dialog.getType() == ContextMenuCardDialog.CardDialogType.MAPILLARY) {
-				if (!activity.getMyApplication().getSettings().SHOW_MAPILLARY.get()) {
-					MapillaryPlugin mapillaryPlugin = OsmandPlugin.getPlugin(MapillaryPlugin.class);
-					if (mapillaryPlugin != null) {
-						mapillaryPlugin.updateLayers(activity.getMapView(), activity);
-					}
-				}
-			}
-			try {
-				activity.getSupportFragmentManager().popBackStack(TAG,
-						FragmentManager.POP_BACK_STACK_INCLUSIVE);
-			} catch (Exception e) {
-				e.printStackTrace();
+			FragmentManager fragmentManager = activity.getSupportFragmentManager();
+			if (!fragmentManager.isStateSaved()) {
+				fragmentManager.popBackStack(TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE);
 			}
 		}
 	}

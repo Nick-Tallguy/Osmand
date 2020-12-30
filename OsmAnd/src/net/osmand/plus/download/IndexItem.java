@@ -1,9 +1,8 @@
 package net.osmand.plus.download;
 
-import java.io.File;
-import java.io.IOException;
-import java.text.DateFormat;
-import java.util.Date;
+import android.content.Context;
+
+import androidx.annotation.NonNull;
 
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
@@ -14,8 +13,10 @@ import net.osmand.plus.helpers.FileNameTranslationHelper;
 
 import org.apache.commons.logging.Log;
 
-import android.content.Context;
-import android.support.annotation.NonNull;
+import java.io.File;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.util.Date;
 
 public class IndexItem implements Comparable<IndexItem> {
 	private static final Log log = PlatformUtil.getLog(IndexItem.class);
@@ -89,7 +90,7 @@ public class IndexItem implements Comparable<IndexItem> {
 	}
 
 	public String getSizeDescription(Context ctx) {
-		return size + " MB";
+		return ctx.getString(R.string.ltr_or_rtl_combine_via_space, size, "MB");
 	}
 	
 
@@ -134,15 +135,20 @@ public class IndexItem implements Comparable<IndexItem> {
 	public String getBasename() {
 		return type.getBasename(this);
 	}
-	
+
 	public File getTargetFile(OsmandApplication ctx) {
-		String basename;
-		if (type == DownloadActivityType.HILLSHADE_FILE) {
-			basename = (FileNameTranslationHelper.HILL_SHADE + getBasename()).replace("_", " ");
-		} else {
-			basename = getBasename();
-		}
+		String basename = getTranslatedBasename();
 		return new File(type.getDownloadFolder(ctx, this), basename + type.getUnzipExtension(ctx, this));
+	}
+
+	public String getTranslatedBasename() {
+		if (type == DownloadActivityType.HILLSHADE_FILE) {
+			return (FileNameTranslationHelper.HILL_SHADE + "_" + getBasename()).replace("_", " ");
+		} else if (type == DownloadActivityType.SLOPE_FILE) {
+			return (FileNameTranslationHelper.SLOPE + "_" + getBasename()).replace('_', ' ');
+		} else {
+			return getBasename();
+		}
 	}
 
 	public File getBackupFile(OsmandApplication ctx) {
@@ -180,7 +186,9 @@ public class IndexItem implements Comparable<IndexItem> {
 	}
 	
 	public boolean isOutdated() {
-		return outdated && getType() != DownloadActivityType.HILLSHADE_FILE ;
+		return outdated
+				&& getType() != DownloadActivityType.HILLSHADE_FILE
+				&& getType() != DownloadActivityType.SLOPE_FILE;
 	}
 	
 	public void setOutdated(boolean outdated) {
@@ -194,8 +202,11 @@ public class IndexItem implements Comparable<IndexItem> {
 	public void setLocalTimestamp(long localTimestamp) {
 		this.localTimestamp = localTimestamp;
 	}
-	
-	
+
+	public long getLocalTimestamp() {
+		return localTimestamp;
+	}
+
 	public boolean isDownloaded() {
 		return downloaded;
 	}

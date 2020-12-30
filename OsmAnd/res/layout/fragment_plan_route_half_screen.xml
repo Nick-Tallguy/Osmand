@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout
+    xmlns:osmand="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -14,11 +15,11 @@
         android:layout_gravity="bottom"
         android:orientation="vertical">
 
-        <ImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:scaleType="fitXY"
-            android:src="@drawable/bg_shadow_onmap"/>
+            osmand:srcCompat="@drawable/bg_shadow_onmap"/>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -31,10 +32,10 @@
             <FrameLayout
                 android:id="@+id/markers_list_container"
                 android:layout_width="match_parent"
-                android:layout_height="@dimen/measurement_tool_points_list_container_height"
-                tools:background="@color/ctx_menu_info_view_bg_dark">
+                android:layout_height="@dimen/measurement_tool_info_cards_container_height"
+                tools:background="@color/activity_background_color_dark">
 
-                <android.support.v7.widget.RecyclerView
+                <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/markers_recycler_view"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"/>

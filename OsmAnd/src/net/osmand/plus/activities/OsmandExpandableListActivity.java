@@ -1,17 +1,17 @@
 package net.osmand.plus.activities;
 
-import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.R;
 import android.app.ActionBar;
 import android.graphics.Shader.TileMode;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.v4.view.MenuItemCompat;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ExpandableListView;
+
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.R;
 
 
 public abstract class OsmandExpandableListActivity extends
@@ -28,8 +28,8 @@ public abstract class OsmandExpandableListActivity extends
 		super.onStart();
 		getExpandableListView().setBackgroundColor(
 				getResources().getColor(
-						getMyApplication().getSettings().isLightContent() ? R.color.bg_color_light
-								: R.color.bg_color_dark));
+						getMyApplication().getSettings().isLightContent() ? R.color.list_background_color_light
+								: R.color.list_background_color_dark));
 	};
 
 
@@ -62,7 +62,7 @@ public abstract class OsmandExpandableListActivity extends
 				return onOptionsItemSelected(item);
 			}
 		});
-		MenuItemCompat.setShowAsAction(menuItem, menuItemType);
+		menuItem.setShowAsAction(menuItemType);
 		return menuItem;
 	}
 

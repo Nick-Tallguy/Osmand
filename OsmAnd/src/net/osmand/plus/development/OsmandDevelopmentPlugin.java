@@ -2,6 +2,7 @@ package net.osmand.plus.development;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.widget.ArrayAdapter;
 
 import net.osmand.plus.ContextMenuAdapter;
@@ -13,20 +14,22 @@ import net.osmand.plus.Version;
 import net.osmand.plus.activities.ContributionVersionActivity;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.dashboard.tools.DashFragmentData;
-import net.osmand.plus.views.MapInfoLayer;
+import net.osmand.plus.settings.fragments.BaseSettingsFragment.SettingsScreenType;
+import net.osmand.plus.views.layers.MapInfoLayer;
 import net.osmand.plus.views.OsmandMapLayer.DrawSettings;
 import net.osmand.plus.views.OsmandMapTileView;
-import net.osmand.plus.views.mapwidgets.TextInfoWidget;
+import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
+
+import static net.osmand.aidlapi.OsmAndCustomizationConstants.DRAWER_BUILDS_ID;
 
 public class OsmandDevelopmentPlugin extends OsmandPlugin {
+
 	private static final String ID = "osmand.development";
-	private OsmandApplication app;
 
 	public OsmandDevelopmentPlugin(OsmandApplication app) {
-		this.app = app;
+		super(app);
 		//ApplicationMode.regWidgetVisibility("fps", new ApplicationMode[0]);
 	}
-
 
 	@Override
 	public String getId() {
@@ -34,7 +37,7 @@ public class OsmandDevelopmentPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public String getDescription() {
+	public CharSequence getDescription() {
 		return app.getString(R.string.osmand_development_plugin_description);
 	}
 
@@ -57,8 +60,9 @@ public class OsmandDevelopmentPlugin extends OsmandPlugin {
 	public void registerOptionsMenuItems(final MapActivity mapActivity, ContextMenuAdapter helper) {
 		if (Version.isDeveloperVersion(mapActivity.getMyApplication())) {
 			helper.addItem(new ContextMenuItem.ItemBuilder()
+					.setId(DRAWER_BUILDS_ID)
 					.setTitleId(R.string.version_settings, mapActivity)
-					.setIcon(R.drawable.ic_action_gabout_dark)
+					.setIcon(R.drawable.ic_action_apk)
 					.setListener(new ContextMenuAdapter.ItemClickListener() {
 						@Override
 						public boolean onContextMenuClick(ArrayAdapter<ContextMenuItem> adapter, int itemId, int pos, boolean isChecked, int[] viewCoordinates) {
@@ -118,22 +122,31 @@ public class OsmandDevelopmentPlugin extends OsmandPlugin {
 	}
 
 	@Override
-	public Class<? extends Activity> getSettingsActivity() {
-		return SettingsDevelopmentActivity.class;
+	public SettingsScreenType getSettingsScreenType() {
+		return SettingsScreenType.DEVELOPMENT_SETTINGS;
 	}
 
 	@Override
 	public int getLogoResourceId() {
-		return R.drawable.ic_plugin_developer;
+		return R.drawable.ic_action_laptop;
 	}
 
 	@Override
-	public int getAssetResourceName() {
-		return R.drawable.osmand_development;
+	public Drawable getAssetResourceImage() {
+		return app.getUIUtilities().getIcon(R.drawable.osmand_development);
 	}
 
 	@Override
 	public DashFragmentData getCardFragment() {
 		return DashSimulateFragment.FRAGMENT_DATA;
+	}
+
+	@Override
+	public void disable(OsmandApplication app) {
+		if (app.getSettings().USE_DEV_URL.get()) {
+			app.getSettings().USE_DEV_URL.set(false);
+			app.getOsmOAuthHelper().resetAuthorization();
+		}
+		super.disable(app);
 	}
 }

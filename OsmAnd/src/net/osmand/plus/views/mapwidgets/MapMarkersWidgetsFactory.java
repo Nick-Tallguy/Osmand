@@ -8,20 +8,19 @@ import android.widget.TextView;
 import net.osmand.Location;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.IconsCache;
-import net.osmand.plus.MapMarkersHelper;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
+import net.osmand.plus.UiUtilities;
+import net.osmand.plus.mapmarkers.MapMarkersHelper;
+import net.osmand.plus.mapmarkers.MapMarker;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.dashboard.DashLocationFragment;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.mapcontextmenu.other.MapRouteInfoMenu;
 import net.osmand.plus.mapmarkers.MapMarkersDialogFragment;
 import net.osmand.plus.views.AnimateDraggingMapThread;
 import net.osmand.plus.views.DirectionDrawable;
 import net.osmand.plus.views.OsmandMapLayer.DrawSettings;
 import net.osmand.plus.views.OsmandMapTileView;
+import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
 
@@ -60,7 +59,7 @@ public class MapMarkersWidgetsFactory {
 	public MapMarkersWidgetsFactory(final MapActivity map) {
 		this.map = map;
 		helper = map.getMyApplication().getMapMarkersHelper();
-		screenOrientation = DashLocationFragment.getScreenOrientation(map);
+		screenOrientation = map.getMyApplication().getUIUtilities().getScreenOrientation();
 		portraitMode = AndroidUiHelper.isOrientationPortrait(map);
 
 		addressTopBar = map.findViewById(R.id.map_top_bar);
@@ -92,7 +91,7 @@ public class MapMarkersWidgetsFactory {
 			}
 		});
 
-		IconsCache iconsCache = map.getMyApplication().getIconsCache();
+		UiUtilities iconsCache = map.getMyApplication().getUIUtilities();
 		if (isLandscapeLayout() && helper.getMapMarkers().size() > 1
 				&& !(map.getMyApplication().getSettings().DISPLAYED_MARKERS_WIDGETS_COUNT.get() == 1)) {
 			moreButton.setVisibility(View.GONE);
@@ -154,25 +153,12 @@ public class MapMarkersWidgetsFactory {
 	}
 
 	public boolean updateVisibility(boolean visible) {
-		boolean res = updateVisibility(topBar, visible);
+		boolean res = AndroidUiHelper.updateVisibility(topBar, visible);
 		if (visible != cachedTopBarVisibility) {
 			cachedTopBarVisibility = visible;
 			map.updateStatusBarColor();
 		}
 		return res;
-	}
-
-	public boolean updateVisibility(View v, boolean visible) {
-		if (visible != (v.getVisibility() == View.VISIBLE)) {
-			if (visible) {
-				v.setVisibility(View.VISIBLE);
-			} else {
-				v.setVisibility(View.GONE);
-			}
-			v.invalidate();
-			return true;
-		}
-		return false;
 	}
 
 	public int getTopBarHeight() {
@@ -202,10 +188,11 @@ public class MapMarkersWidgetsFactory {
 				|| !map.getMyApplication().getSettings().MAP_MARKERS_MODE.get().isToolbar()
 				|| map.getMyApplication().getRoutingHelper().isFollowingMode()
 				|| map.getMyApplication().getRoutingHelper().isRoutePlanningMode()
-				|| MapRouteInfoMenu.isVisible()
+				|| map.getMapRouteInfoMenu().isVisible()
 				|| addressTopBar.getVisibility() == View.VISIBLE
 				|| map.isTopToolbarActive()
 				|| !map.getContextMenu().shouldShowTopControls()
+				|| map.getMapLayers().getGpxLayer().isInTrackAppearanceMode()
 				|| map.getMapLayers().getMapMarkersLayer().isInPlanRouteMode()) {
 			updateVisibility(false);
 			return;
@@ -228,9 +215,9 @@ public class MapMarkersWidgetsFactory {
 				}
 			}
 			updateUI(loc, heading, marker, arrowImg2nd, distText2nd, okButton2nd, addressText2nd, false, customLocation != null);
-			updateVisibility(topBar2nd, true);
+			AndroidUiHelper.updateVisibility(topBar2nd, true);
 		} else {
-			updateVisibility(topBar2nd, false);
+			AndroidUiHelper.updateVisibility(topBar2nd, false);
 		}
 
 		updateVisibility(true);
@@ -252,7 +239,7 @@ public class MapMarkersWidgetsFactory {
 		DirectionDrawable dd;
 		if (!(arrowImg.getDrawable() instanceof DirectionDrawable)) {
 			newImage = true;
-			dd = new DirectionDrawable(map, arrowImg.getWidth(), arrowImg.getHeight());
+			dd = new DirectionDrawable(map.getMyApplication(), arrowImg.getWidth(), arrowImg.getHeight());
 		} else {
 			dd = (DirectionDrawable) arrowImg.getDrawable();
 		}
@@ -275,7 +262,7 @@ public class MapMarkersWidgetsFactory {
 		if (txt != null) {
 			distText.setText(txt);
 		}
-		updateVisibility(okButton, !customLocation && loc != null && dist < MIN_DIST_OK_VISIBLE);
+		AndroidUiHelper.updateVisibility(okButton, !customLocation && loc != null && dist < MIN_DIST_OK_VISIBLE);
 
 		String descr;
 		PointDescription pd = marker.getPointDescription(map);
@@ -352,7 +339,7 @@ public class MapMarkersWidgetsFactory {
 			}
 			boolean res = false;
 			int d = getDistance();
-			if (cachedMeters != d) {
+			if (isUpdateNeeded() || cachedMeters != d) {
 				cachedMeters = d;
 				String ds = OsmAndFormatter.getFormattedDistance(cachedMeters, view.getApplication());
 				int ls = ds.lastIndexOf(' ');
@@ -367,9 +354,9 @@ public class MapMarkersWidgetsFactory {
 			if (marker.colorIndex != -1) {
 				if (marker.colorIndex != cachedMarkerColorIndex
 						|| cachedNightMode == null || cachedNightMode != isNight()) {
-					setImageDrawable(map.getMyApplication().getIconsCache()
-							.getIcon(isNight() ? R.drawable.widget_marker_night : R.drawable.widget_marker_day,
-									R.drawable.widget_marker_triangle,
+					setImageDrawable(map.getMyApplication().getUIUtilities()
+							.getLayeredIcon(isNight() ? R.drawable.widget_marker_night : R.drawable.widget_marker_day,
+									R.drawable.widget_marker_triangle, 0,
 									MapMarker.getColorId(marker.colorIndex)));
 					cachedMarkerColorIndex = marker.colorIndex;
 					cachedNightMode = isNight();
@@ -377,6 +364,11 @@ public class MapMarkersWidgetsFactory {
 				}
 			}
 			return res;
+		}
+
+		@Override
+		public boolean isMetricSystemDepended() {
+			return true;
 		}
 
 		public LatLon getPointToNavigate() {

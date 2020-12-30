@@ -3,10 +3,6 @@ package net.osmand.plus.measurementtool;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.DrawableRes;
-import android.support.design.widget.BottomSheetBehavior;
-import android.support.design.widget.BottomSheetDialog;
-import android.support.v4.content.ContextCompat;
 import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.Window;
@@ -16,26 +12,32 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+
 import net.osmand.AndroidUtils;
-import net.osmand.plus.ApplicationMode;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.settings.backend.ApplicationMode;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class SnapToRoadBottomSheetDialogFragment extends android.support.design.widget.BottomSheetDialogFragment {
+public class SnapToRoadBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
 	public static final String TAG = "SnapToRoadBottomSheetDialogFragment";
+	public static final int STRAIGHT_LINE_TAG = -1;
 
 	private SnapToRoadFragmentListener listener;
 	private boolean nightMode;
 	private boolean portrait;
 	private boolean snapToRoadEnabled;
 	private boolean removeDefaultMode = true;
+	private boolean showStraightLine = false;
 
 	public void setListener(SnapToRoadFragmentListener listener) {
 		this.listener = listener;
@@ -45,16 +47,20 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 		this.removeDefaultMode = removeDefaultMode;
 	}
 
+	public void setShowStraightLine(boolean showStraightLine) {
+		this.showStraightLine = showStraightLine;
+	}
+
 	@Override
 	public void setupDialog(Dialog dialog, int style) {
 		super.setupDialog(dialog, style);
-		if (getMyApplication().getSettings().DO_NOT_USE_ANIMATIONS.get()) {
+		OsmandApplication app = getMyApplication();
+		if (app.getSettings().DO_NOT_USE_ANIMATIONS.get()) {
 			dialog.getWindow().setWindowAnimations(R.style.Animations_NoAnimation);
 		}
 
-		nightMode = getMyApplication().getDaynightHelper().isNightModeForMapControls();
+		nightMode = app.getDaynightHelper().isNightModeForMapControls();
 		portrait = AndroidUiHelper.isOrientationPortrait(getActivity());
-		final OsmandSettings settings = getMyApplication().getSettings();
 		final int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
 
 		final View mainView = View.inflate(new ContextThemeWrapper(getContext(), themeRes), R.layout.fragment_snap_to_road_bottom_sheet_dialog, null);
@@ -70,13 +76,8 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 			}
 		});
 
-		if (nightMode) {
-			((TextView) mainView.findViewById(R.id.choose_navigation_title))
-					.setTextColor(ContextCompat.getColor(getActivity(), R.color.ctx_menu_info_text_dark));
-		}
-
 		LinearLayout container = (LinearLayout) mainView.findViewById(R.id.navigation_types_container);
-		final List<ApplicationMode> modes = new ArrayList<>(ApplicationMode.values(settings));
+		final List<ApplicationMode> modes = new ArrayList<>(ApplicationMode.values(app));
 		if (removeDefaultMode) {
 			modes.remove(ApplicationMode.DEFAULT);
 		}
@@ -84,22 +85,29 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 		View.OnClickListener onClickListener = new View.OnClickListener() {
 			@Override
 			public void onClick(View view) {
-				snapToRoadEnabled = true;
+				snapToRoadEnabled = false;
 				if (listener != null) {
-					listener.onApplicationModeItemClick(modes.get((int) view.getTag()));
+					ApplicationMode mode = null;
+					if ((int) view.getTag() != STRAIGHT_LINE_TAG) {
+						mode = modes.get((int) view.getTag());
+						snapToRoadEnabled = true;
+					}
+					listener.onApplicationModeItemClick(mode);
 				}
 				dismiss();
 			}
 		};
 
+		if (showStraightLine) {
+			Drawable icon = app.getUIUtilities().getIcon(R.drawable.ic_action_split_interval, nightMode);
+			addProfileView(container, onClickListener, STRAIGHT_LINE_TAG, icon,
+					app.getText(R.string.routing_profile_straightline));
+		}
+
 		for (int i = 0; i < modes.size(); i++) {
 			ApplicationMode mode = modes.get(i);
-			View row = View.inflate(new ContextThemeWrapper(getContext(), themeRes), R.layout.list_item_icon_and_title, null);
-			((ImageView) row.findViewById(R.id.icon)).setImageDrawable(getContentIcon(mode.getSmallIconDark()));
-			((TextView) row.findViewById(R.id.title)).setText(mode.toHumanString(getContext()));
-			row.setOnClickListener(onClickListener);
-			row.setTag(i);
-			container.addView(row);
+			Drawable icon = app.getUIUtilities().getIcon(mode.getIconRes(), mode.getIconColorInfo().getColor(nightMode));
+			addProfileView(container, onClickListener, i, icon, mode.toHumanString());
 		}
 
 		if (!portrait) {
@@ -107,7 +115,7 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 				@Override
 				public void onShow(DialogInterface dialogInterface) {
 					BottomSheetDialog dialog = (BottomSheetDialog) dialogInterface;
-					FrameLayout bottomSheet = (FrameLayout) dialog.findViewById(android.support.design.R.id.design_bottom_sheet);
+					FrameLayout bottomSheet = (FrameLayout) dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
 					BottomSheetBehavior.from(bottomSheet).setState(BottomSheetBehavior.STATE_EXPANDED);
 				}
 			});
@@ -115,6 +123,15 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 
 		dialog.setContentView(mainView);
 		((View) mainView.getParent()).setBackgroundResource(0);
+	}
+
+	private void addProfileView(LinearLayout container, View.OnClickListener onClickListener, Object tag, Drawable icon, CharSequence title) {
+		View row = UiUtilities.getInflater(getContext(), nightMode).inflate(R.layout.list_item_icon_and_title, null);
+		((ImageView) row.findViewById(R.id.icon)).setImageDrawable(icon);
+		((TextView) row.findViewById(R.id.title)).setText(title);
+		row.setOnClickListener(onClickListener);
+		row.setTag(tag);
+		container.addView(row);
 	}
 
 	@Override
@@ -139,12 +156,7 @@ public class SnapToRoadBottomSheetDialogFragment extends android.support.design.
 	private OsmandApplication getMyApplication() {
 		return ((MapActivity) getActivity()).getMyApplication();
 	}
-
-	private Drawable getContentIcon(@DrawableRes int id) {
-		return getMyApplication().getIconsCache()
-				.getIcon(id, nightMode ? R.color.ctx_menu_info_text_dark : R.color.on_map_icon_color);
-	}
-
+	
 	public interface SnapToRoadFragmentListener {
 
 		void onDestroyView(boolean snapToRoadEnabled);

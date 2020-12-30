@@ -4,71 +4,80 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.design.widget.TabLayout;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.ActionBar;
 import android.view.MenuItem;
+import android.view.View;
+
+import androidx.appcompat.app.ActionBar;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentPagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+
+import com.google.android.material.tabs.TabLayout;
 
 import net.osmand.AndroidNetworkUtils;
 import net.osmand.PlatformUtil;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
-import net.osmand.plus.Version;
+import net.osmand.plus.chooseplan.ChoosePlanDialogFragment;
+import net.osmand.plus.chooseplan.ChoosePlanDialogFragment.ChoosePlanDialogListener;
 import net.osmand.plus.download.AbstractDownloadActivity;
-import net.osmand.plus.download.DownloadIndexesThread;
-import net.osmand.plus.inapp.InAppHelper;
+import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
+import net.osmand.plus.inapp.InAppPurchaseHelper;
 
 import org.apache.commons.logging.Log;
 
+import java.lang.ref.WeakReference;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
-public class OsmLiveActivity extends AbstractDownloadActivity implements DownloadIndexesThread.DownloadEvents {
+public class OsmLiveActivity extends AbstractDownloadActivity implements DownloadEvents, ChoosePlanDialogListener {
 	private final static Log LOG = PlatformUtil.getLog(OsmLiveActivity.class);
-	public final static String OPEN_SUBSCRIPTION_INTENT_PARAM = "open_subscription_intent_param";
+	public final static String SHOW_SETTINGS_ONLY_INTENT_PARAM = "show_settings_only_intent_param";
+
 	private LiveUpdatesFragmentPagerAdapter pagerAdapter;
-	private InAppHelper inAppHelper;
-	private boolean openSubscription;
+	private boolean showSettingOnly;
 	private GetLastUpdateDateTask getLastUpdateDateTask;
 	private static final String URL = "https://osmand.net/api/osmlive_status";
 
-	public InAppHelper getInAppHelper() {
-		return inAppHelper;
-	}
-
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
-		getMyApplication().applyTheme(this);
+		OsmandApplication app = getMyApplication();
+		app.applyTheme(this);
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_livie_updates);
 
-		if (Version.isGooglePlayEnabled(getMyApplication())) {
-			inAppHelper = new InAppHelper(getMyApplication(), false);
-		}
-		if (Version.isDeveloperVersion(getMyApplication())) {
-			inAppHelper = null;
-		}
-
 		Intent intent = getIntent();
 		if (intent != null && intent.getExtras() != null) {
-			openSubscription = intent.getExtras().getBoolean(OPEN_SUBSCRIPTION_INTENT_PARAM, false);
+			showSettingOnly = intent.getExtras().getBoolean(SHOW_SETTINGS_ONLY_INTENT_PARAM, false);
+		} else if (savedInstanceState != null) {
+			showSettingOnly = savedInstanceState.getBoolean(SHOW_SETTINGS_ONLY_INTENT_PARAM, false);
 		}
 
 		ViewPager viewPager = (ViewPager) findViewById(R.id.viewpager);
-		pagerAdapter = new LiveUpdatesFragmentPagerAdapter(getSupportFragmentManager(), getResources());
+		pagerAdapter = new LiveUpdatesFragmentPagerAdapter(getSupportFragmentManager(), getResources(), showSettingOnly);
 		viewPager.setAdapter(pagerAdapter);
 
 		final TabLayout tabLayout = (TabLayout) findViewById(R.id.tab_layout);
 		tabLayout.setTabMode(TabLayout.MODE_SCROLLABLE);
 		tabLayout.setupWithViewPager(viewPager);
+		if (showSettingOnly) {
+			tabLayout.setVisibility(View.GONE);
+		} else {
+			getLastUpdateDateTask = new GetLastUpdateDateTask(this);
+			getLastUpdateDateTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+		}
 
-		getLastUpdateDateTask = new GetLastUpdateDateTask();
-		getLastUpdateDateTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+		boolean nightMode = !app.getSettings().isLightContent();
+		int normalTabColor = ContextCompat.getColor(app,
+				nightMode ? R.color.searchbar_tab_inactive_dark : R.color.searchbar_tab_inactive_light);
+		int selectedTabColor = ContextCompat.getColor(app,
+				nightMode ? R.color.text_color_tab_active_dark : R.color.text_color_tab_active_light);
+		tabLayout.setTabTextColors(normalTabColor, selectedTabColor);
 	}
 
 	@Override
@@ -83,13 +92,10 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 	}
 
 	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		// Pass on the activity result to the helper for handling
-		if (inAppHelper == null || !inAppHelper.onActivityResultHandled(requestCode, resultCode, data)) {
-			// not handled, so handle it ourselves (here's where you'd
-			// perform any handling of activity results not related to in-app
-			// billing...
-			super.onActivityResult(requestCode, resultCode, data);
+	protected void onResume() {
+		super.onResume();
+		if (!InAppPurchaseHelper.isSubscribedToLiveUpdates(getMyApplication()) && showSettingOnly) {
+			ChoosePlanDialogFragment.showOsmLiveInstance(getSupportFragmentManager());
 		}
 	}
 
@@ -102,17 +108,32 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
-		if (inAppHelper != null) {
-			inAppHelper.stop();
-		}
 		if (getLastUpdateDateTask != null) {
 			getLastUpdateDateTask.cancel(true);
 		}
 	}
 
 	@Override
-	public void newDownloadIndexes() {
+	protected void onSaveInstanceState(Bundle outState) {
+		super.onSaveInstanceState(outState);
+		outState.putBoolean(SHOW_SETTINGS_ONLY_INTENT_PARAM, showSettingOnly);
+	}
 
+	@Override
+	public void onChoosePlanDialogDismiss() {
+		//finish();
+	}
+
+	public boolean isShowSettingOnly() {
+		return showSettingOnly;
+	}
+
+	public boolean isInAppPurchaseAllowed() {
+		return true;
+	}
+
+	@Override
+	public void newDownloadIndexes() {
 	}
 
 	@Override
@@ -125,16 +146,20 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 		((LiveUpdatesFragment) pagerAdapter.fragments[0]).notifyLiveUpdatesChanged();
 	}
 
-	public boolean shouldOpenSubscription() {
-		return openSubscription;
-	}
+	private static class GetLastUpdateDateTask extends AsyncTask<Void, Void, String> {
 
-	private class GetLastUpdateDateTask extends AsyncTask<Void, Void, String> {
+		private OsmandApplication app;
+		private WeakReference<OsmLiveActivity> activity;
+
+		GetLastUpdateDateTask(OsmLiveActivity activity) {
+			this.activity = new WeakReference<>(activity);
+			app = activity.getMyApplication();
+		}
 
 		@Override
 		protected String doInBackground(Void... params) {
 			try {
-				return AndroidNetworkUtils.sendRequest(getMyApplication(), URL, null, "Requesting map updates info...", false, false);
+				return AndroidNetworkUtils.sendRequest(app, URL, null, "Requesting map updates info...", false, false);
 			} catch (Exception e) {
 				LOG.error("Error: " + "Requesting map updates info error", e);
 				return null;
@@ -143,8 +168,9 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 
 		@Override
 		protected void onPostExecute(String response) {
-			if (response != null) {
-				ActionBar actionBar = getSupportActionBar();
+			OsmLiveActivity a = activity.get();
+			if (response != null && a != null) {
+				ActionBar actionBar = a.getSupportActionBar();
 				if (actionBar != null) {
 					SimpleDateFormat source = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
 					source.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -165,9 +191,11 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 		private final Fragment[] fragments = new Fragment[] { new LiveUpdatesFragment(), new ReportsFragment() };
 		private static final int[] titleIds = new int[] { LiveUpdatesFragment.TITLE, ReportsFragment.TITLE };
 		private final String[] titles;
+		private final boolean showSettingsOnly;
 
-		public LiveUpdatesFragmentPagerAdapter(FragmentManager fm, Resources res) {
-			super(fm);
+		LiveUpdatesFragmentPagerAdapter(FragmentManager fm, Resources res, boolean showSettingsOnly) {
+			super(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT);
+			this.showSettingsOnly = showSettingsOnly;
 			titles = new String[titleIds.length];
 			for (int i = 0; i < titleIds.length; i++) {
 				titles[i] = res.getString(titleIds[i]);
@@ -176,7 +204,7 @@ public class OsmLiveActivity extends AbstractDownloadActivity implements Downloa
 
 		@Override
 		public int getCount() {
-			return fragments.length;
+			return showSettingsOnly ? 1 : fragments.length;
 		}
 
 		@Override

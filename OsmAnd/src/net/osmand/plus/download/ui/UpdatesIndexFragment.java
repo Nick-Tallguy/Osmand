@@ -2,10 +2,9 @@ package net.osmand.plus.download.ui;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
+import android.content.DialogInterface;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.v4.view.MenuItemCompat;
-import android.support.v7.app.ActionBar;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -17,16 +16,23 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.view.MenuItemCompat;
+
+import net.osmand.Collator;
+import net.osmand.OsmAndCollator;
 import net.osmand.map.OsmandRegions;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.base.OsmAndListFragment;
+import net.osmand.plus.chooseplan.ChoosePlanDialogFragment;
 import net.osmand.plus.download.DownloadActivity;
 import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
 import net.osmand.plus.download.DownloadResources;
 import net.osmand.plus.download.IndexItem;
-import net.osmand.plus.liveupdates.OsmLiveActivity;
+import net.osmand.plus.inapp.InAppPurchaseHelper;
 import net.osmand.util.Algorithms;
 
 import java.util.Comparator;
@@ -93,12 +99,13 @@ public class UpdatesIndexFragment extends OsmAndListFragment implements Download
 				getMyApplication().getResourceManager().getOsmandRegions();
 		OsmandSettings settings = getMyApplication().getSettings();
 		listAdapter = new UpdateIndexAdapter(a, R.layout.download_index_list_item, indexItems,
-				!settings.LIVE_UPDATES_PURCHASED.get() || settings.SHOULD_SHOW_FREE_VERSION_BANNER.get());
+				!InAppPurchaseHelper.isSubscribedToLiveUpdates(getMyApplication()) || settings.SHOULD_SHOW_FREE_VERSION_BANNER.get());
+		final Collator collator = OsmAndCollator.primaryCollator();
 		listAdapter.sort(new Comparator<IndexItem>() {
 			@Override
 			public int compare(IndexItem indexItem, IndexItem indexItem2) {
-				return indexItem.getVisibleName(getMyApplication(), osmandRegions)
-						.compareTo(indexItem2.getVisibleName(getMyApplication(), osmandRegions));
+				return collator.compare(indexItem.getVisibleName(getMyApplication(), osmandRegions), 
+						indexItem2.getVisibleName(getMyApplication(), osmandRegions));
 			}
 		});
 		setListAdapter(listAdapter);
@@ -151,7 +158,21 @@ public class UpdatesIndexFragment extends OsmAndListFragment implements Download
 			updateAllButton.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					getMyActivity().startDownload(indexItems.toArray(new IndexItem[indexItems.size()]));
+					if (indexItems.size() > 3) {
+						AlertDialog.Builder dialog = new AlertDialog.Builder(getMyActivity());
+						dialog.setTitle(R.string.update_all_maps);
+						dialog.setMessage(getString(R.string.update_all_maps_q, indexItems.size()));
+						dialog.setNegativeButton(R.string.shared_string_cancel, null);
+						dialog.setPositiveButton(R.string.shared_string_update, new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								getMyActivity().startDownload(indexItems.toArray(new IndexItem[0]));
+							}
+						});
+						dialog.create().show();
+					} else {
+						getMyActivity().startDownload(indexItems.toArray(new IndexItem[0]));
+					}
 				}
 			});
 		}
@@ -166,10 +187,10 @@ public class UpdatesIndexFragment extends OsmAndListFragment implements Download
 	@Override
 	public void onListItemClick(ListView l, View v, int position, long id) {
 		if (listAdapter.isShowOsmLiveBanner() && position == 0) {
-			Intent intent = new Intent(getMyActivity(), OsmLiveActivity.class);
-			intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-			intent.putExtra(OsmLiveActivity.OPEN_SUBSCRIPTION_INTENT_PARAM, true);
-			getMyActivity().startActivity(intent);
+			DownloadActivity activity = getMyActivity();
+			if (activity != null) {
+				ChoosePlanDialogFragment.showOsmLiveInstance(activity.getSupportFragmentManager());
+			}
 		} else {
 			final IndexItem e = (IndexItem) getListAdapter().getItem(position);
 			ItemViewHolder vh = (ItemViewHolder) v.getTag();
@@ -187,10 +208,13 @@ public class UpdatesIndexFragment extends OsmAndListFragment implements Download
 	public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
 		ActionBar actionBar = getMyActivity().getSupportActionBar();
 		actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_STANDARD);
+		OsmandApplication app = getMyApplication();
 
-		if (getMyApplication().getAppCustomization().showDownloadExtraActions()) {
+		if (app.getAppCustomization().showDownloadExtraActions()) {
+			int colorResId = app.getSettings().isLightContent() ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark;
 			MenuItem item = menu.add(0, RELOAD_ID, 0, R.string.shared_string_refresh);
-			item.setIcon(R.drawable.ic_action_refresh_dark);
+			Drawable icRefresh = app.getUIUtilities().getIcon(R.drawable.ic_action_refresh_dark, colorResId);
+			item.setIcon(icRefresh);
 			MenuItemCompat.setShowAsAction(item, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
 		}
 	}

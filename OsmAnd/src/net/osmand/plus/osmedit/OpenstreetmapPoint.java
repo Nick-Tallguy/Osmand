@@ -1,12 +1,13 @@
 package net.osmand.plus.osmedit;
 
-import net.osmand.osm.edit.Node;
+import net.osmand.data.LatLon;
+import net.osmand.osm.edit.Entity;
 import net.osmand.osm.edit.OSMSettings.OSMTagKey;
 import net.osmand.util.Algorithms;
 
 public class OpenstreetmapPoint extends OsmPoint {
 	private static final long serialVersionUID = 729654300829771467L;
-	private Node entity;
+	private Entity entity;
 	private String comment;
 
 	public OpenstreetmapPoint(){
@@ -28,7 +29,7 @@ public class OpenstreetmapPoint extends OsmPoint {
 		String type = "amenity";
 		for (String k : entity.getTagKeySet()) {
 			if (!OSMTagKey.NAME.getValue().equals(k) && !OSMTagKey.OPENING_HOURS.getValue().equals(k) && 
-					!k.startsWith(EditPoiData.REMOVE_TAG_PREFIX)) {
+					!k.startsWith(Entity.REMOVE_TAG_PREFIX)) {
 				type = k;
 				break;
 			}
@@ -59,7 +60,7 @@ public class OpenstreetmapPoint extends OsmPoint {
 	}
 
 
-	public Node getEntity() {
+	public Entity getEntity() {
 		return entity;
 	}
 
@@ -67,13 +68,27 @@ public class OpenstreetmapPoint extends OsmPoint {
 		return comment;
 	}
 
-	public void setEntity(Node entity) {
+	public void setEntity(Entity entity) {
 		this.entity = entity;
 	}
 
 	public void setComment(String comment) {
 		this.comment = comment;
 	}
+
+	public String getTagsString() {
+		StringBuilder sb = new StringBuilder();
+		for (String tag : entity.getTagKeySet()) {
+			String val = entity.getTag(tag);
+			if (entity.isNotValid(tag)) {
+				continue;
+			}
+			sb.append(tag).append(" : ");
+			sb.append(val).append("; ");
+		}
+		return sb.toString();
+	}
+
 
 	@Override
 	public String toString() {
@@ -82,5 +97,44 @@ public class OpenstreetmapPoint extends OsmPoint {
 			.append(this.getType()).append("/").append(this.getSubtype())
 			.append(" (").append(this.getLatitude()).append(", ").append(this.getLongitude())
 			.append(")]").toString();
+	}
+
+	@Override
+	public boolean equals(Object other) {
+		if (other == this) {
+			return true;
+		}
+		if (!(other instanceof OpenstreetmapPoint)) {
+			return false;
+		}
+		OpenstreetmapPoint otherPoint = (OpenstreetmapPoint) other;
+		boolean res = this.getName() != null && this.getName().equals(otherPoint.getName());
+		LatLon thisLatLon = new LatLon(this.getLatitude(), this.getLongitude());
+		LatLon otherLatLon = new LatLon(otherPoint.getLatitude(), otherPoint.getLongitude());
+		res = res || thisLatLon.equals(otherLatLon);
+		if (getType() != null)
+			res = res || getType().equals(otherPoint.getType());
+		if (getSubtype() != null)
+			res = res || getSubtype().equals(otherPoint.getSubtype());
+		if (getTagsString() != null)
+			res = res || getTagsString().equals(otherPoint.getTagsString());
+		res = res || getId() == otherPoint.getId();
+		return res;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 0;
+		int temp;
+		temp = (int) Math.floor(getLatitude() * 10000);
+		result = prime * result + temp;
+		temp = (int) Math.floor(getLongitude() * 10000);
+		result = prime * result + temp;
+		result = prime * result + (getType() != null ? getType().hashCode() : 0);
+		result = prime * result + (getSubtype() != null ? getSubtype().hashCode() : 0);
+		result = prime * result + (getTagsString() != null ? getTagsString().hashCode() : 0);
+		result = prime * result + Long.valueOf(getId()).hashCode();
+		return result;
 	}
 }

@@ -10,11 +10,6 @@ import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.AsyncTask.Status;
 import android.os.Bundle;
-import android.support.v4.view.MenuItemCompat;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.PopupMenu;
-import android.support.v7.widget.Toolbar;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -36,6 +31,11 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.ViewCompat;
+
 import net.osmand.Location;
 import net.osmand.ResultMatcher;
 import net.osmand.access.AccessibilityAssistant;
@@ -44,18 +44,18 @@ import net.osmand.data.Amenity;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
 import net.osmand.osm.PoiType;
-import net.osmand.plus.IconsCache;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndCompassListener;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.R.color;
+import net.osmand.plus.UiUtilities;
+import net.osmand.plus.UiUtilities.UpdateLocationViewCache;
 import net.osmand.plus.activities.EditPOIFilterActivity;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.OsmandListActivity;
-import net.osmand.plus.dashboard.DashLocationFragment;
 import net.osmand.plus.poi.NominatimPoiFilter;
 import net.osmand.plus.poi.PoiUIFilter;
 import net.osmand.plus.poi.PoiUIFilter.AmenityNameFilter;
@@ -123,7 +123,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 	public boolean onCreateOptionsMenu(Menu omenu) {
 		Menu menu = getClearToolbar(true).getMenu();
 		searchPOILevel = menu.add(0, SEARCH_MORE, 0, R.string.search_POI_level_btn);
-		MenuItemCompat.setShowAsAction(searchPOILevel, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
+		searchPOILevel.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 		searchPOILevel.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			@Override
 			public boolean onMenuItemClick(MenuItem item) {
@@ -132,8 +132,8 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 
 		});
 		showFilterItem = menu.add(0, FILTER, 0, R.string.search_poi_filter);
-		MenuItemCompat.setShowAsAction(showFilterItem, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
-		showFilterItem = showFilterItem.setIcon(getMyApplication().getIconsCache().getIcon(
+		showFilterItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+		showFilterItem = showFilterItem.setIcon(getMyApplication().getUIUtilities().getIcon(
 				R.drawable.ic_action_filter_dark));
 		showFilterItem.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			@Override
@@ -155,8 +155,8 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 		});
 
 		showOnMapItem = menu.add(0, SHOW_ON_MAP, 0, R.string.shared_string_show_on_map);
-		MenuItemCompat.setShowAsAction(showOnMapItem, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
-		showOnMapItem = showOnMapItem.setIcon(getMyApplication().getIconsCache().getIcon(
+		showOnMapItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+		showOnMapItem = showOnMapItem.setIcon(getMyApplication().getUIUtilities().getIcon(
 				R.drawable.ic_show_on_map));
 		showOnMapItem.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			@Override
@@ -174,11 +174,11 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 		});
 		showOnMapItem.setEnabled(!isNameSearch() || amenityAdapter.getCount() > 0);
 		if (filter != null && !isNameSearch()) {
-			createMenuItem(omenu, SAVE_FILTER, R.string.edit_filter_save_as_menu_item, R.drawable.ic_action_fav_dark,
-					MenuItemCompat.SHOW_AS_ACTION_IF_ROOM);
+			createMenuItem(omenu, SAVE_FILTER, R.string.edit_filter_save_as_menu_item, R.drawable.ic_action_favorite,
+					MenuItem.SHOW_AS_ACTION_IF_ROOM);
 			if (!filter.isStandardFilter()) {
 				createMenuItem(omenu, DELETE_FILTER, R.string.shared_string_delete, R.drawable.ic_action_delete_dark,
-						MenuItemCompat.SHOW_AS_ACTION_IF_ROOM);
+						MenuItem.SHOW_AS_ACTION_IF_ROOM);
 			}
 		}
 		updateButtonState(false);
@@ -264,9 +264,9 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 		});
 		searchFilter.setHint(R.string.filter_poi_hint);
 		((ImageView) findViewById(R.id.search_icon)).setImageDrawable(
-				getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_filter_dark));
+				getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_filter_dark));
 		((ImageView) findViewById(R.id.options)).
-				setImageDrawable(getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_overflow_menu_white));
+				setImageDrawable(getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_overflow_menu_white));
 		findViewById(R.id.options).setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -346,7 +346,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 
 	private void showOptionsMenu(View v) {
 		// Show menu with search all, name finder, name finder poi
-		IconsCache iconsCache = getMyApplication().getIconsCache();
+		UiUtilities iconsCache = getMyApplication().getUIUtilities();
 		final PopupMenu optionsMenu = new PopupMenu(this, v);
 
 		final PoiUIFilter f = this.filter;
@@ -380,7 +380,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 	}
 
 	private void addFilter(PopupMenu optionsMenu, final String value) {
-		IconsCache iconsCache = getMyApplication().getIconsCache();
+		UiUtilities iconsCache = getMyApplication().getUIUtilities();
 		MenuItem item = optionsMenu.getMenu().add(getString(R.string.search_poi_filter) + ": " + value)
 				.setIcon(iconsCache.getThemedIcon(R.drawable.ic_action_filter_dark));
 		item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
@@ -557,7 +557,8 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 			try {
 				int position = getListView().getPositionForView(selected);
 				if ((position != AdapterView.INVALID_POSITION) && (position >= getListView().getHeaderViewsCount())) {
-					navigationInfo.updateTargetDirection(amenityAdapter.getItem(position - getListView().getHeaderViewsCount()).getLocation(), heading.floatValue());
+					navigationInfo.updateTargetDirection(amenityAdapter.getItem(position - getListView().getHeaderViewsCount()).
+							getLocation(), heading.floatValue());
 				}
 			} catch (Exception e) {
 				return;
@@ -717,10 +718,11 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 	class AmenityAdapter extends ArrayAdapter<Amenity> {
 		private AmenityFilter listFilter;
 		private List<Amenity> originalAmenityList;
-		private int screenOrientation;
+		private UpdateLocationViewCache updateLocationViewCache;
 
 		AmenityAdapter(List<Amenity> list) {
 			super(SearchPOIActivity.this, R.layout.searchpoi_list, list);
+			updateLocationViewCache = getMyApplication().getUIUtilities().getUpdateLocationViewCache();
 			originalAmenityList = new ArrayList<Amenity>(list);
 			this.setNotifyOnChange(false);
 		}
@@ -731,7 +733,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 
 		public void setNewModel(List<Amenity> amenityList) {
 			setNotifyOnChange(false);
-			screenOrientation = DashLocationFragment.getScreenOrientation(SearchPOIActivity.this);
+			updateLocationViewCache = getMyApplication().getUIUtilities().getUpdateLocationViewCache();
 			originalAmenityList = new ArrayList<Amenity>(amenityList);
 			clear();
 			for (Amenity obj : amenityList) {
@@ -768,7 +770,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 
 					timeIcon.setVisibility(View.VISIBLE);
 					timeText.setVisibility(View.VISIBLE);
-					timeIcon.setImageDrawable(app.getIconsCache().getIcon(R.drawable.ic_small_time, colorId));
+					timeIcon.setImageDrawable(app.getUIUtilities().getIcon(R.drawable.ic_action_time_16, colorId));
 					timeText.setTextColor(app.getResources().getColor(colorId));
 					String rt = rs.getCurrentRuleTime(inst);
 					timeText.setText(rt == null ? "" : rt);
@@ -785,24 +787,17 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 			if (dd instanceof DirectionDrawable) {
 				draw = (DirectionDrawable) dd;
 			} else {
-				draw = new DirectionDrawable(SearchPOIActivity.this, 24, 24,
+				draw = new DirectionDrawable(getMyApplication(), 24, 24,
 						R.drawable.ic_direction_arrow, R.color.color_distance);
 				direction.setImageDrawable(draw);
 			}
 			net.osmand.Location loc = location;
-			if (loc != null) {
-				mes = new float[2];
-				LatLon l = amenity.getLocation();
-				net.osmand.Location.distanceBetween(l.getLatitude(), l.getLongitude(), loc.getLatitude(),
-						loc.getLongitude(), mes);
+			if(searchNearBy) {
+				updateLocationViewCache.specialFrom = null; 
+			} else if(loc != null) {
+				updateLocationViewCache.specialFrom = new LatLon(loc.getLatitude(), loc.getLongitude());
 			}
-			if (loc != null) {
-				float a = heading != null ? heading : 0;
-				draw.setAngle(mes[1] - a + 180 + screenOrientation);
-			} else {
-				draw.setAngle(0);
-			}
-			draw.setColorId(searchNearBy ? color.color_myloc_distance : color.color_distance);
+			getMyApplication().getUIUtilities().updateLocationView(updateLocationViewCache, direction, distanceText, amenity.getLocation());
 			direction.setImageDrawable(draw);
 			PoiType st = amenity.getType().getPoiTypeByKeyName(amenity.getSubType());
 			if (st != null) {
@@ -817,15 +812,10 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 				icon.setImageDrawable(null);
 			}
 
-			String distance = "  ";
-			if (mes != null) {
-				distance = " " + OsmAndFormatter.getFormattedDistance((int) mes[0], getMyApplication()) + "  "; //$NON-NLS-1$
-			}
 			String poiType = OsmAndFormatter.getPoiStringWithoutType(amenity, 
 					app.getSettings().MAP_PREFERRED_LOCALE.get(),
 					app.getSettings().MAP_TRANSLITERATE_NAMES.get());
 			label.setText(poiType);
-			distanceText.setText(distance);
 			ViewCompat.setAccessibilityDelegate(row, accessibilityAssistant);
 			return (row);
 		}
@@ -879,7 +869,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 		switch (itemId) {
 			case android.R.id.home:
 				if (getIntent().hasExtra(MapActivity.INTENT_KEY_PARENT_MAP_ACTIVITY)) {
-					Intent newIntent = new Intent(this, app.getAppCustomization().getSearchActivity());
+					Intent newIntent = new Intent(this, SearchActivity.class);
 					if (location != null) {
 						newIntent.putExtra(SearchActivity.SEARCH_LAT, location.getLatitude());
 						newIntent.putExtra(SearchActivity.SEARCH_LON, location.getLongitude());
@@ -949,7 +939,7 @@ public class SearchPOIActivity extends OsmandListActivity implements OsmAndCompa
 				if (searchFilter.getText().toString().length() > 0) {
 					nFilter.setSavedFilterByName(searchFilter.getText().toString());
 				}
-				if (app.getPoiFilters().createPoiFilter(nFilter)) {
+				if (app.getPoiFilters().createPoiFilter(nFilter, false)) {
 					Toast.makeText(
 							SearchPOIActivity.this,
 							MessageFormat.format(SearchPOIActivity.this.getText(R.string.edit_filter_create_message).toString(),

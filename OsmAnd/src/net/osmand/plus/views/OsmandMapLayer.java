@@ -11,9 +11,13 @@ import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
 import android.view.MotionEvent;
+import android.widget.ImageView;
+
+import androidx.annotation.NonNull;
 
 import net.osmand.binary.BinaryMapIndexReader;
 import net.osmand.data.Amenity;
@@ -24,12 +28,12 @@ import net.osmand.data.RotatedTileBox;
 import net.osmand.osm.PoiCategory;
 import net.osmand.plus.ContextMenuAdapter;
 import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.render.OsmandRenderer;
 import net.osmand.plus.render.OsmandRenderer.RenderingContext;
 import net.osmand.render.RenderingRuleSearchRequest;
 import net.osmand.render.RenderingRulesStorage;
-import net.osmand.util.MapAlgorithms;
 import net.osmand.util.MapUtils;
 
 import java.util.ArrayList;
@@ -37,10 +41,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import gnu.trove.list.array.TIntArrayList;
-
 public abstract class OsmandMapLayer {
 
+	public static final float ICON_VISIBLE_PART_RATIO = 0.45f;
 	protected List<LatLon> fullObjectsLatLon;
 	protected List<LatLon> smallObjectsLatLon;
 
@@ -132,72 +135,14 @@ public abstract class OsmandMapLayer {
 		}
 	}
 
-
-	protected boolean isIn(int x, int y, int lx, int ty, int rx, int by) {
-		return x >= lx && x <= rx && y >= ty && y <= by;
-	}
-
-
-	public int calculatePath(RotatedTileBox tb, TIntArrayList xs, TIntArrayList ys, Path path) {
-		boolean segmentStarted = false;
-		int prevX = xs.get(0);
-		int prevY = ys.get(0);
-		int height = tb.getPixHeight();
-		int width = tb.getPixWidth();
-		int cnt = 0;
-		boolean prevIn = isIn(prevX, prevY, 0, 0, width, height);
-		for (int i = 1; i < xs.size(); i++) {
-			int currX = xs.get(i);
-			int currY = ys.get(i);
-			boolean currIn = isIn(currX, currY, 0, 0, width, height);
-			boolean draw = false;
-			if (prevIn && currIn) {
-				draw = true;
-			} else {
-				long intersection = MapAlgorithms.calculateIntersection(currX, currY, prevX, prevY, 0, width, height, 0);
-				if (intersection != -1) {
-					if (prevIn && (i == 1)) {
-						cnt++;
-						path.moveTo(prevX, prevY);
-						segmentStarted = true;
-					}
-					prevX = (int) (intersection >> 32);
-					prevY = (int) (intersection & 0xffffffff);
-					draw = true;
-				}
-				if (i == xs.size() - 1 && !currIn) {
-					long inter = MapAlgorithms.calculateIntersection(prevX, prevY, currX, currY, 0, width, height, 0);
-					if (inter != -1) {
-						currX = (int) (inter >> 32);
-						currY = (int) (inter & 0xffffffff);
-					}
-				}
-			}
-			if (draw) {
-				if (!segmentStarted) {
-					cnt++;
-					path.moveTo(prevX, prevY);
-					segmentStarted = true;
-				}
-				path.lineTo(currX, currY);
-			} else {
-				segmentStarted = false;
-			}
-			prevIn = currIn;
-			prevX = currX;
-			prevY = currY;
-		}
-		return cnt;
-	}
-
 	@NonNull
-	public QuadTree<QuadRect> initBoundIntersections(RotatedTileBox tileBox) {
+	public static QuadTree<QuadRect> initBoundIntersections(RotatedTileBox tileBox) {
 		QuadRect bounds = new QuadRect(0, 0, tileBox.getPixWidth(), tileBox.getPixHeight());
 		bounds.inset(-bounds.width() / 4, -bounds.height() / 4);
 		return new QuadTree<>(bounds, 4, 0.6f);
 	}
 
-	public boolean intersects(QuadTree<QuadRect> boundIntersections, float x, float y, float width, float height) {
+	public static boolean intersects(QuadTree<QuadRect> boundIntersections, float x, float y, float width, float height) {
 		List<QuadRect> result = new ArrayList<>();
 		QuadRect visibleRect = calculateRect(x, y, width, height);
 		boundIntersections.queryInBox(new QuadRect(visibleRect.left, visibleRect.top, visibleRect.right, visibleRect.bottom), result);
@@ -211,7 +156,21 @@ public abstract class OsmandMapLayer {
 		return false;
 	}
 
-	public QuadRect calculateRect(float x, float y, float width, float height) {
+	public QuadRect getCorrectedQuadRect(QuadRect latlonRect) {
+		double topLatitude = latlonRect.top;
+		double leftLongitude = latlonRect.left;
+		double bottomLatitude = latlonRect.bottom;
+		double rightLongitude = latlonRect.right;
+		// double lat = 0;
+		// double lon = 0;
+		// this is buggy lat/lon should be 0 but in that case
+		// it needs to be fixed in case there is no route points in the view bbox
+		double lat = topLatitude - bottomLatitude + 0.1;
+		double lon = rightLongitude - leftLongitude + 0.1;
+		return new QuadRect(leftLongitude - lon, topLatitude + lat, rightLongitude + lon, bottomLatitude - lat);
+	}
+
+	public static QuadRect calculateRect(float x, float y, float width, float height) {
 		QuadRect rf;
 		double left = x - width / 2.0d;
 		double top = y - height / 2.0d;
@@ -239,7 +198,7 @@ public abstract class OsmandMapLayer {
 		Amenity res = null;
 		for (Amenity amenity : amenities) {
 			Long amenityId = amenity.getId() >> 1;
-			if (amenityId == id) {
+			if (amenityId == id && !amenity.isClosed()) {
 				res = amenity;
 				break;
 			}
@@ -247,7 +206,7 @@ public abstract class OsmandMapLayer {
 		if (res == null && names != null && names.size() > 0) {
 			for (Amenity amenity : amenities) {
 				for (String name : names) {
-					if (name.equals(amenity.getName())) {
+					if (name.equals(amenity.getName()) && !amenity.isClosed()) {
 						res = amenity;
 						break;
 					}
@@ -274,6 +233,39 @@ public abstract class OsmandMapLayer {
 			r = 18;
 		}
 		return (int) (r * tb.getDensity());
+	}
+
+	protected float getIconSize(OsmandApplication app) {
+		return app.getResources().getDimensionPixelSize(R.dimen.favorites_icon_outline_size) * ICON_VISIBLE_PART_RATIO * app.getSettings().TEXT_SCALE.get();
+	}
+
+	public Rect getIconDestinationRect(float x, float y, int width, int height, float scale) {
+		int scaledWidth = width;
+		int scaledHeight = height;
+		if (scale != 1.0f) {
+			scaledWidth = (int) (width * scale);
+			scaledHeight = (int) (height * scale);
+		}
+		Rect rect = new Rect(0, 0, scaledWidth, scaledHeight);
+		rect.offset((int) x - scaledWidth / 2, (int) y - scaledHeight / 2);
+		return rect;
+	}
+
+	public int getScaledTouchRadius(OsmandApplication app, int radiusPoi) {
+		float textScale = app.getSettings().TEXT_SCALE.get();
+		if (textScale < 1.0f) {
+			textScale = 1.0f;
+		}
+		return (int) textScale * radiusPoi;
+	}
+
+	public void setMapButtonIcon(ImageView imageView, Drawable icon) {
+		int btnSizePx = imageView.getLayoutParams().height;
+		int iconSizePx = imageView.getContext().getResources().getDimensionPixelSize(R.dimen.map_widget_icon);
+		int iconPadding = (btnSizePx - iconSizePx) / 2;
+		imageView.setPadding(iconPadding, iconPadding, iconPadding, iconPadding);
+		imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		imageView.setImageDrawable(icon);
 	}
 
 	public abstract class MapLayerData<T> {
@@ -313,6 +305,9 @@ public abstract class OsmandMapLayer {
 			}
 		}
 
+		public void layerOnPreExecute() {
+		}
+
 		public void layerOnPostExecute() {
 		}
 
@@ -350,6 +345,7 @@ public abstract class OsmandMapLayer {
 			@Override
 			protected void onPreExecute() {
 				currentTask = this;
+				layerOnPreExecute();
 			}
 
 			@Override
@@ -376,9 +372,11 @@ public abstract class OsmandMapLayer {
 
 	}
 
-	protected static class RenderingLineAttributes {
+	public static class RenderingLineAttributes {
 		protected int cachedHash;
 		public Paint paint;
+		public Paint customColorPaint;
+		public int customColor = 0;
 		public int defaultWidth = 0;
 		public int defaultColor = 0;
 		public boolean isPaint2;
@@ -398,6 +396,7 @@ public abstract class OsmandMapLayer {
 		public RenderingLineAttributes(String renderingAttribute) {
 			this.renderingAttribute = renderingAttribute;
 			paint = initPaint();
+			customColorPaint = new Paint(paint);
 			paint2 = initPaint();
 			paint3 = initPaint();
 			paint_1 = initPaint();
@@ -415,8 +414,7 @@ public abstract class OsmandMapLayer {
 		}
 
 
-		public boolean updatePaints(OsmandMapTileView view, DrawSettings settings, RotatedTileBox tileBox) {
-			OsmandApplication app = view.getApplication();
+		public boolean updatePaints(OsmandApplication app, DrawSettings settings, RotatedTileBox tileBox) {
 			OsmandRenderer renderer = app.getResourceManager().getRenderer().getRenderer();
 			RenderingRulesStorage rrs = app.getRendererRegistry().getCurrentSelectedRenderer();
 			final boolean isNight = settings != null && settings.isNightMode();
@@ -458,6 +456,7 @@ public abstract class OsmandMapLayer {
 					if (paint.getStrokeWidth() == 0 && defaultWidth != 0) {
 						paint.setStrokeWidth(defaultWidth);
 					}
+					customColorPaint = new Paint(paint);
 				}
 				return true;
 			}
@@ -482,7 +481,12 @@ public abstract class OsmandMapLayer {
 			if (isShadowPaint) {
 				canvas.drawPath(path, shadowPaint);
 			}
-			canvas.drawPath(path, paint);
+			if (customColor != 0) {
+				customColorPaint.setColor(customColor);
+				canvas.drawPath(path, customColorPaint);
+			} else {
+				canvas.drawPath(path, paint);
+			}
 			if (isPaint2) {
 				canvas.drawPath(path, paint2);
 			}

@@ -34,6 +34,8 @@ import android.widget.TextView;
 import android.widget.TextView.BufferType;
 import android.widget.TextView.OnEditorActionListener;
 
+import androidx.annotation.Nullable;
+
 import net.osmand.Collator;
 import net.osmand.CollatorStringMatcher;
 import net.osmand.CollatorStringMatcher.StringMatcherMode;
@@ -44,7 +46,7 @@ import net.osmand.data.MapObject;
 import net.osmand.data.PointDescription;
 import net.osmand.plus.OsmAndConstants;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.OsmandListActivity;
@@ -198,7 +200,8 @@ public abstract class SearchByNameAbstractActivity<T> extends OsmandListActivity
 	protected int getZoomToDisplay(T item){
 		return 15;
 	}
-	
+
+	@Nullable
 	protected LatLon getLocation(T item) {
 		if (item instanceof MapObject) {
 			return ((MapObject) item).getLocation();

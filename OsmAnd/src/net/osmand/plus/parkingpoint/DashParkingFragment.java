@@ -4,13 +4,14 @@ import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
@@ -101,7 +102,7 @@ public class DashParkingFragment extends DashLocationFragment {
 
 		TextView timeLeft = (TextView) mainView.findViewById(R.id.time_left);
 		if (limited) {
-			descr = getString(R.string.parking_place_limited) + " " + plugin.getFormattedTime( plugin.getParkingTime(), getActivity());
+			descr = getString(R.string.parking_place_limited) + " " + plugin.getFormattedTime( plugin.getParkingTime());
 			long endtime = plugin.getParkingTime();
 			long currTime = Calendar.getInstance().getTimeInMillis();
 			long timeDiff = endtime - currTime;

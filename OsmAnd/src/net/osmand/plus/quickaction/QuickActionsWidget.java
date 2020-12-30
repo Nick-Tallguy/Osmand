@@ -6,13 +6,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.ShapeDrawable;
-import android.support.annotation.StyleRes;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.view.PagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.view.ContextThemeWrapper;
-import android.support.v7.widget.GridLayout;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -22,9 +15,18 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import net.osmand.plus.IconsCache;
+import androidx.annotation.StyleRes;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentManager;
+import androidx.gridlayout.widget.GridLayout;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.quickaction.actions.NewAction;
 
@@ -142,7 +144,7 @@ public class QuickActionsWidget extends LinearLayout {
 
         if (pageCount > 1) {
 
-            int color = light ?  R.color.icon_color_light : R.color.white_50_transparent;
+            int color = light ?  R.color.icon_color_default_dark : R.color.white_50_transparent;
 
             for (int i = 0; i < pageCount; i++) {
 
@@ -150,7 +152,7 @@ public class QuickActionsWidget extends LinearLayout {
                         .inflate(R.layout.quick_action_widget_dot, dots, false);
 
                 dot.setImageDrawable(i == 0
-                        ? getIconsCache().getIcon(R.drawable.ic_dot_position, R.color.dashboard_blue)
+                        ? getIconsCache().getIcon(R.drawable.ic_dot_position, R.color.active_color_primary_light)
                         : getIconsCache().getIcon(R.drawable.ic_dot_position, color));
 
                 dots.addView(dot);
@@ -161,7 +163,7 @@ public class QuickActionsWidget extends LinearLayout {
         controls.setVisibility(pageCount > 1 ? VISIBLE : GONE);
 
         Drawable background = controls.getBackground();
-        int backgroundColor = ContextCompat.getColor(context, light ? R.color.dashboard_divider_light : R.color.dashboard_divider_dark);
+        int backgroundColor = ContextCompat.getColor(context, light ? R.color.divider_color_light : R.color.divider_color_dark);
         if (background instanceof ShapeDrawable) {
             ((ShapeDrawable)background).getPaint().setColor(backgroundColor);
         } else if (background instanceof GradientDrawable) {
@@ -178,8 +180,8 @@ public class QuickActionsWidget extends LinearLayout {
         OsmandApplication application = ((OsmandApplication) getContext().getApplicationContext());
         boolean light = application.getSettings().isLightContent() && !application.getDaynightHelper().isNightMode();
 
-        int colorEnabled = light ?  R.color.icon_color : R.color.color_white;
-        int colorDisabled = light ?  R.color.icon_color_light : R.color.white_50_transparent;
+        int colorEnabled = light ?  R.color.icon_color_default_light : R.color.color_white;
+        int colorDisabled = light ?  R.color.icon_color_default_dark : R.color.white_50_transparent;
 
         next.setEnabled(viewPager.getAdapter().getCount() > position + 1);
         next.setImageDrawable(next.isEnabled()
@@ -194,7 +196,7 @@ public class QuickActionsWidget extends LinearLayout {
         for (int i = 0; i < dots.getChildCount(); i++){
 
             ((ImageView) dots.getChildAt(i)).setImageDrawable(i == position
-                    ? getIconsCache().getIcon(R.drawable.ic_dot_position, R.color.dashboard_blue)
+                    ? getIconsCache().getIcon(R.drawable.ic_dot_position, R.color.active_color_primary_light)
                     : getIconsCache().getIcon(R.drawable.ic_dot_position, colorDisabled));
         }
     }
@@ -220,7 +222,7 @@ public class QuickActionsWidget extends LinearLayout {
 
             if (i + (position * ELEMENT_PER_PAGE) < actions.size()) {
 
-                final QuickAction action = QuickActionFactory.produceAction(
+                final QuickAction action = QuickActionRegistry.produceAction(
                         actions.get(i + (position * ELEMENT_PER_PAGE)));
 
                 ((ImageView) view.findViewById(imageView))
@@ -244,16 +246,23 @@ public class QuickActionsWidget extends LinearLayout {
                         if (selectionListener != null) selectionListener.onActionSelected(action);
                     }
                 });
-				if (action.isActionEditable()) {
+//				if (action.isActionEditable()) {
 					view.setOnLongClickListener(new OnLongClickListener() {
 						@Override
 						public boolean onLongClick(View v) {
-							CreateEditActionDialog dialog = CreateEditActionDialog.newInstance(action.id);
-							dialog.show(((AppCompatActivity) getContext()).getSupportFragmentManager(), AddQuickActionDialog.TAG);
+							FragmentManager fm = ((AppCompatActivity) getContext()).getSupportFragmentManager();
+							if (action instanceof NewAction) {
+								fm.beginTransaction()
+									.add(R.id.fragmentContainer, new QuickActionListFragment(), QuickActionListFragment.TAG)
+									.addToBackStack(QuickActionListFragment.TAG).commitAllowingStateLoss();
+							} else {
+								CreateEditActionDialog dialog = CreateEditActionDialog.newInstance(action.id);
+								dialog.show(fm, CreateEditActionDialog.TAG);
+							}
 							return true;
 						}
 					});
-				}
+//				}
                 if (!action.isActionEnable(application)) {
                     view.setEnabled(false);
                     view.setAlpha(0.5f);
@@ -317,7 +326,7 @@ public class QuickActionsWidget extends LinearLayout {
         return (OsmandApplication)(getContext().getApplicationContext());
     }
 
-    private IconsCache getIconsCache(){
-        return getApplication().getIconsCache();
+    private UiUtilities getIconsCache(){
+        return getApplication().getUIUtilities();
     }
 }

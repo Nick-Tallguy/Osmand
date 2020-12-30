@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.v4.widget.DrawerLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/drawer_layout"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="?attr/mapBackground">
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/drawer_layout"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:background="?attr/mapBackground"
+	android:layout_gravity="start">
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -14,7 +14,6 @@
             android:id="@+id/MapViewWithLayers"
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"
-            android:keepScreenOn="true"
             android:orientation="vertical">
 
             <ViewStub
@@ -57,16 +56,6 @@
         </FrameLayout>
 
         <FrameLayout
-            android:id="@+id/progress_layout_external"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone">
-
-            <include layout="@layout/map_progress_top"/>
-
-        </FrameLayout>
-
-        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom">
@@ -103,13 +92,21 @@
 
     </FrameLayout>
 
-    <ListView
-        android:id="@+id/menuItems"
+    <RelativeLayout
+        android:id="@+id/drawer_relative_layout"
         android:layout_width="280dp"
         android:layout_height="match_parent"
-        android:layout_gravity="left"
-        android:background="?attr/bg_color"
-        android:clipToPadding="false"
-        android:drawSelectorOnTop="true"/>
+        android:layout_gravity="start">
 
-</android.support.v4.widget.DrawerLayout>
+        <ListView
+            android:id="@+id/menuItems"
+            android:layout_width="280dp"
+            android:layout_height="match_parent"
+            android:background="?attr/bg_color"
+            android:clipToPadding="false"
+            android:drawSelectorOnTop="false"
+            android:layout_gravity="start"/>
+
+    </RelativeLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

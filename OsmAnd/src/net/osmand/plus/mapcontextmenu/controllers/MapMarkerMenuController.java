@@ -3,17 +3,17 @@ package net.osmand.plus.mapcontextmenu.controllers;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ShapeDrawable;
-import android.graphics.drawable.StateListDrawable;
 import android.graphics.drawable.shapes.OvalShape;
 import android.os.Build;
-import android.support.v4.content.ContextCompat;
 
-import net.osmand.AndroidUtils;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.data.PointDescription;
-import net.osmand.plus.MapMarkersHelper;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
-import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.mapmarkers.MapMarkersHelper;
+import net.osmand.plus.mapmarkers.MapMarker;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.MapMarkerDialogHelper;
@@ -25,77 +25,78 @@ public class MapMarkerMenuController extends MenuController {
 
 	private MapMarker mapMarker;
 
-	public MapMarkerMenuController(MapActivity mapActivity, PointDescription pointDescription, MapMarker mapMarker) {
+	public MapMarkerMenuController(@NonNull MapActivity mapActivity, @NonNull PointDescription pointDescription, @NonNull MapMarker mapMarker) {
 		super(new MenuBuilder(mapActivity), pointDescription, mapActivity);
-		final OsmandApplication app = mapActivity.getMyApplication();
 		final boolean useStateList = Build.VERSION.SDK_INT >= 21;
 		this.mapMarker = mapMarker;
 		builder.setShowNearestWiki(true);
 
-		final MapMarkersHelper markersHelper = app.getMapMarkersHelper();
 		leftTitleButtonController = new TitleButtonController() {
 			@Override
 			public void buttonPressed() {
-				markersHelper.moveMapMarkerToHistory(getMapMarker());
-				getMapActivity().getContextMenu().close();
-			}
-		};
-		leftTitleButtonController.caption = getMapActivity().getString(R.string.mark_passed);
-		leftTitleButtonController.leftIcon = useStateList ? createStateListPassedIcon()
-				: createPassedIcon(getPassedIconBgNormalColorId(), 0);
-
-		rightTitleButtonController = new TitleButtonController() {
-			@Override
-			public void buttonPressed() {
-				OsmandSettings.OsmandPreference<Boolean> indication = app.getSettings().MARKERS_DISTANCE_INDICATION_ENABLED;
-				if (!indication.get()) {
-					indication.set(true);
-					getMapActivity().getMapLayers().getMapWidgetRegistry().updateMapMarkersMode(getMapActivity());
+				MapActivity activity = getMapActivity();
+				if (activity != null) {
+					MapMarkersHelper markersHelper = activity.getMyApplication().getMapMarkersHelper();
+					MapMarker marker = getMapMarker();
+					if (marker.history) {
+						markersHelper.restoreMarkerFromHistory(marker, 0);
+					} else {
+						markersHelper.moveMapMarkerToHistory(marker);
+					}
+					activity.getContextMenu().close();
 				}
-				markersHelper.moveMarkerToTop(getMapMarker());
-				getMapActivity().getContextMenu().close();
 			}
 		};
-		rightTitleButtonController.caption = getMapActivity().getString(R.string.make_active);
-		rightTitleButtonController.leftIcon = useStateList ? createStateListShowOnTopbarIcon()
-				: createShowOnTopbarIcon(getDeviceTopNormalColorId(), R.color.dashboard_blue);
+		leftTitleButtonController.caption = mapActivity.getString(mapMarker.history ? R.string.shared_string_restore : R.string.mark_passed);
+		leftTitleButtonController.startIcon = createPassedIcon(getPassedIconBgNormalColorId());
+
+		if (!mapMarker.history) {
+			rightTitleButtonController = new TitleButtonController() {
+				@Override
+				public void buttonPressed() {
+					MapActivity activity = getMapActivity();
+					if (activity != null) {
+						OsmandPreference<Boolean> indication
+								= activity.getMyApplication().getSettings().MARKERS_DISTANCE_INDICATION_ENABLED;
+						if (!indication.get()) {
+							indication.set(true);
+							activity.getMapLayers().getMapWidgetRegistry().updateMapMarkersMode(activity);
+						}
+						MapMarkersHelper markersHelper = activity.getMyApplication().getMapMarkersHelper();
+						markersHelper.moveMarkerToTop(getMapMarker());
+						activity.getContextMenu().close();
+					}
+				}
+			};
+			rightTitleButtonController.caption = mapActivity.getString(R.string.make_active);
+			rightTitleButtonController.startIcon = createShowOnTopbarIcon(getDeviceTopNormalColorId());
+		}
 	}
 
 	private int getPassedIconBgNormalColorId() {
-		return isLight() ? R.color.map_widget_blue : R.color.osmand_orange;
+		return isLight() ? R.color.active_color_primary_light : R.color.active_color_primary_dark;
 	}
 
-	private StateListDrawable createStateListPassedIcon() {
-		int bgPressed = isLight() ? R.color.ctx_menu_controller_button_text_color_light_p
-				: R.color.ctx_menu_controller_button_text_color_dark_p;
-		int icPressed = isLight() ? R.color.ctx_menu_controller_button_text_color_light_n
-				: R.color.ctx_menu_controller_button_bg_color_dark_p;
-		return AndroidUtils.createPressedStateListDrawable(createPassedIcon(getPassedIconBgNormalColorId(), 0),
-				createPassedIcon(bgPressed, icPressed));
-	}
-
-	private LayerDrawable createPassedIcon(int bgColorRes, int icColorRes) {
-		ShapeDrawable bg = new ShapeDrawable(new OvalShape());
-		bg.getPaint().setColor(ContextCompat.getColor(getMapActivity(), bgColorRes));
-		Drawable ic = getIcon(R.drawable.ic_action_marker_passed, icColorRes);
-		return new LayerDrawable(new Drawable[]{bg, ic});
+	@Nullable
+	private LayerDrawable createPassedIcon(int bgColorRes) {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			ShapeDrawable bg = new ShapeDrawable(new OvalShape());
+			bg.getPaint().setColor(ContextCompat.getColor(mapActivity, bgColorRes));
+			Drawable ic = getIcon(R.drawable.ic_action_marker_passed, 0);
+			return new LayerDrawable(new Drawable[]{bg, ic});
+		} else {
+			return null;
+		}
 	}
 
 	private int getDeviceTopNormalColorId() {
-		return isLight() ? R.color.on_map_icon_color : R.color.ctx_menu_info_text_dark;
+		return isLight() ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
 	}
 
-	private StateListDrawable createStateListShowOnTopbarIcon() {
-		int bgPressed = isLight() ? R.color.ctx_menu_controller_button_text_color_light_p
-				: R.color.ctx_menu_controller_button_text_color_dark_p;
-		int icPressed = isLight() ? R.color.osmand_orange : R.color.route_info_go_btn_bg_dark_p;
-		return AndroidUtils.createPressedStateListDrawable(createShowOnTopbarIcon(getDeviceTopNormalColorId(), R.color.dashboard_blue),
-				createShowOnTopbarIcon(bgPressed, icPressed));
-	}
-
-	private LayerDrawable createShowOnTopbarIcon(int bgColorRes, int icColorRes) {
+	private LayerDrawable createShowOnTopbarIcon(int bgColorRes) {
 		Drawable background = getIcon(R.drawable.ic_action_device_top, bgColorRes);
-		Drawable topbar = getIcon(R.drawable.ic_action_device_topbar, icColorRes);
+		Drawable topbar = getIcon(R.drawable.ic_action_device_topbar, R.color.active_color_primary_light);
 		return new LayerDrawable(new Drawable[]{background, topbar});
 	}
 
@@ -127,12 +128,23 @@ public class MapMarkerMenuController extends MenuController {
 
 	@Override
 	public Drawable getRightIcon() {
-		return MapMarkerDialogHelper.getMapMarkerIcon(getMapActivity().getMyApplication(), mapMarker.colorIndex);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return MapMarkerDialogHelper.getMapMarkerIcon(mapActivity.getMyApplication(), mapMarker.colorIndex);
+		} else {
+			return null;
+		}
 	}
 
+	@NonNull
 	@Override
 	public String getTypeStr() {
-		return mapMarker.getPointDescription(getMapActivity()).getTypeName();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return mapMarker.getPointDescription(mapActivity).getTypeName();
+		} else {
+			return "";
+		}
 	}
 
 	@Override
@@ -142,11 +154,11 @@ public class MapMarkerMenuController extends MenuController {
 
 	@Override
 	public int getWaypointActionIconId() {
-		return R.drawable.map_action_edit_dark;
+		return R.drawable.ic_action_edit_dark;
 	}
 
 	@Override
 	public int getWaypointActionStringId() {
-		return R.string.rename_marker;
+		return R.string.shared_string_edit;
 	}
 }

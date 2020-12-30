@@ -1,40 +1,52 @@
 package net.osmand.plus.measurementtool.command;
 
-import net.osmand.plus.GPXUtilities.WptPt;
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.plus.measurementtool.MeasurementToolLayer;
 
 public class RemovePointCommand extends MeasurementModeCommand {
 
 	private final int position;
 	private WptPt point;
+	private String prevPointProfile;
 
 	public RemovePointCommand(MeasurementToolLayer measurementLayer, int position) {
-		this.measurementLayer = measurementLayer;
+		super(measurementLayer);
 		this.position = position;
 	}
 
 	@Override
 	public boolean execute() {
-		point = measurementLayer.getEditingCtx().removePoint(position, true);
-		measurementLayer.refreshMap();
+		if (position > 0) {
+			prevPointProfile = getEditingCtx().getPoints().get(position - 1).getProfileType();
+		}
+		point = getEditingCtx().removePoint(position, true);
+		refreshMap();
 		return true;
 	}
 
 	@Override
 	public void undo() {
-		measurementLayer.getEditingCtx().addPoint(position, point);
-		measurementLayer.refreshMap();
+		if (position > 0) {
+			WptPt prevPt = getEditingCtx().getPoints().get(position - 1);
+			if (prevPointProfile != null) {
+				prevPt.setProfileType(prevPointProfile);
+			} else {
+				prevPt.removeProfileType();
+			}
+		}
+		getEditingCtx().addPoint(position, point);
+		refreshMap();
 		measurementLayer.moveMapToPoint(position);
 	}
 
 	@Override
 	public void redo() {
-		measurementLayer.getEditingCtx().removePoint(position, true);
-		measurementLayer.refreshMap();
+		getEditingCtx().removePoint(position, true);
+		refreshMap();
 	}
 
 	@Override
-	MeasurementCommandType getType() {
+	public MeasurementCommandType getType() {
 		return MeasurementCommandType.REMOVE_POINT;
 	}
 }

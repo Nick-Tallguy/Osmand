@@ -12,12 +12,11 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import net.osmand.plus.R;
 import net.osmand.router.TurnType;
-
-import java.util.Map;
 
 public class TurnPathHelper {
 
@@ -568,9 +567,8 @@ public class TurnPathHelper {
 		}
 	}
 
-	public static Path getPathFromTurnType(Resources res, Map<TurnResource, Path> cache, int firstTurn,
+	public static Path getPathFromTurnType(Resources res, int firstTurn,
 			int secondTurn, int thirdTurn, int turnIndex, float coef, boolean leftSide, boolean smallArrow) {
-
 		int firstTurnType = TurnType.valueOf(firstTurn, leftSide).getValue();
 		int secondTurnType = TurnType.valueOf(secondTurn, leftSide).getValue();
 		int thirdTurnType = TurnType.valueOf(thirdTurn, leftSide).getValue();
@@ -580,7 +578,9 @@ public class TurnPathHelper {
 		if (turnIndex == FIRST_TURN) {
 			if (secondTurnType == 0) {
 				turnResource = new TurnResource(firstTurnType, false, false, leftSide);
-			} else if (secondTurnType == TurnType.C || thirdTurnType == TurnType.C) {
+			} else if (secondTurnType == TurnType.C || thirdTurnType == TurnType.C
+					|| ((firstTurnType == TurnType.TL || firstTurnType == TurnType.TR)
+					&& (secondTurnType == TurnType.TSLL || secondTurnType == TurnType.TSLR))) {
 				turnResource = new TurnResource(firstTurnType, true, false, leftSide);
 			} else {
 				if (firstTurnType == TurnType.TU || firstTurnType == TurnType.TRU) {
@@ -591,9 +591,30 @@ public class TurnPathHelper {
 			}
 		} else if (turnIndex == SECOND_TURN) {
 			if (TurnType.isLeftTurn(firstTurnType) && TurnType.isLeftTurn(secondTurnType)) {
-				turnResource = null;
+				if (TurnType.isSlightTurn(firstTurnType)) {
+					turnResource = new TurnResource(secondTurnType, true, false, leftSide);
+				} else if (TurnType.isSlightTurn(secondTurnType)) {
+					turnResource = new TurnResource(secondTurnType, false, false, leftSide);
+				} else {
+					turnResource = null;
+				}
 			} else if (TurnType.isRightTurn(firstTurnType) && TurnType.isRightTurn(secondTurnType)) {
-				turnResource = null;
+				if (TurnType.isSlightTurn(firstTurnType)) {
+					turnResource = new TurnResource(secondTurnType, true, false, leftSide);
+				} else if (TurnType.isSlightTurn(secondTurnType)) {
+					turnResource = new TurnResource(secondTurnType, false, false, leftSide);
+				} else {
+					turnResource = null;
+				}
+			} else if (firstTurnType != TurnType.C && TurnType.isSlightTurn(firstTurnType)
+					&& !TurnType.isSlightTurn(secondTurnType) && !TurnType.isSlightTurn(thirdTurnType)) {
+				if (TurnType.isLeftTurn(firstTurnType) && TurnType.isRightTurn(secondTurnType)
+						&& (thirdTurnType == 0 || TurnType.isLeftTurn(thirdTurnType))) {
+					turnResource = new TurnResource(secondTurnType, true, false, leftSide);
+				} else if (TurnType.isRightTurn(firstTurnType) && TurnType.isLeftTurn(secondTurnType)
+						&& (thirdTurnType == 0 || TurnType.isRightTurn(thirdTurnType))) {
+					turnResource = new TurnResource(secondTurnType, true, false, leftSide);
+				}
 			} else if (firstTurnType == TurnType.C || thirdTurnType == TurnType.C) {
 				// get the small one
 				turnResource = new TurnResource(secondTurnType, true, false, leftSide);
@@ -601,9 +622,11 @@ public class TurnPathHelper {
 				turnResource = new TurnResource(secondTurnType, false, false, leftSide);
 			}
 		} else if (turnIndex == THIRD_TURN) {
-			if ((TurnType.isLeftTurn(firstTurnType) || TurnType.isLeftTurn(secondTurnType)) && TurnType.isLeftTurn(thirdTurnType)) {
+			if (((TurnType.isLeftTurn(firstTurnType) && !TurnType.isSlightTurn(firstTurnType))
+					|| TurnType.isLeftTurn(secondTurnType)) && TurnType.isLeftTurn(thirdTurnType)) {
 				turnResource = null;
-			} else if ((TurnType.isRightTurn(firstTurnType) || TurnType.isRightTurn(secondTurnType)) && TurnType.isRightTurn(thirdTurnType)) {
+			} else if (((TurnType.isRightTurn(firstTurnType) && !TurnType.isSlightTurn(firstTurnType))
+					|| TurnType.isRightTurn(secondTurnType)) && TurnType.isRightTurn(thirdTurnType)) {
 				turnResource = null;
 			} else {
 				turnResource = new TurnResource(thirdTurnType, true, false, leftSide);
@@ -613,20 +636,8 @@ public class TurnPathHelper {
 			return null;
 		}
 
-		Path p = cache.get(turnResource);
-		if (p == null) {
-			int size = res.getDimensionPixelSize(R.dimen.widget_turn_lane_size);
-			p = getPathFromTurnResource(turnResource, size, smallArrow);
-			cache.put(turnResource, p);
-		}
-
-		// Maybe redundant scaling
-		/*
-		 * float bRatio = (float)b.getWidth() / (float)b.getHeight(); float s = 72f * coef; int wq = Math.round(s /
-		 * bRatio); int hq = Math.round(s); b = Bitmap.createScaledBitmap(b, wq, hq, false);
-		 */
-
-		return p;
+		int size = res.getDimensionPixelSize(R.dimen.widget_turn_lane_size);
+		return getPathFromTurnResource(turnResource, size, smallArrow);
 	}
 
 	private static Path getPathFromTurnResource(TurnResource turnResource, int size, boolean smallArrow) {

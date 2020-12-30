@@ -34,7 +34,9 @@
                     android:paddingRight="@dimen/content_padding"
                     android:text="@string/shared_string_options"
                     android:textAppearance="@style/TextAppearance.ListItemTitle"
-                    osmand:typeface="@string/font_roboto_medium"/>
+                    osmand:typeface="@string/font_roboto_medium"
+	                android:paddingStart="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding" />
 
                 <LinearLayout
                     android:id="@+id/sort_by_row"
@@ -43,9 +45,11 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/sort_by_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"
@@ -79,9 +83,11 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/show_direction_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"
@@ -108,9 +114,11 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/coordinate_input_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"
@@ -135,16 +143,18 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/build_route_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"
                         android:layout_gravity="center_vertical"
                         android:layout_marginEnd="@dimen/bottom_sheet_icon_margin"
                         android:layout_marginRight="@dimen/bottom_sheet_icon_margin"
-                        tools:src="@drawable/map_directions"/>
+                        tools:src="@drawable/ic_action_gdirections_dark"/>
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -171,9 +181,11 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/save_as_new_track_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"
@@ -198,9 +210,11 @@
                     android:background="?attr/selectableItemBackground"
                     android:minHeight="@dimen/bottom_sheet_list_item_height"
                     android:paddingLeft="@dimen/content_padding"
-                    android:paddingRight="@dimen/content_padding">
+                    android:paddingRight="@dimen/content_padding"
+	                android:paddingStart="@dimen/content_padding"
+	                android:paddingEnd="@dimen/content_padding">
 
-                    <ImageView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/move_all_to_history_icon"
                         android:layout_width="@dimen/standard_icon_size"
                         android:layout_height="@dimen/standard_icon_size"

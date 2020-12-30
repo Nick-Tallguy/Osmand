@@ -1,17 +1,19 @@
 package net.osmand.plus.routing;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import net.osmand.GPXUtilities.GPXFile;
 import net.osmand.Location;
+import net.osmand.LocationsHolder;
 import net.osmand.PlatformUtil;
+import net.osmand.ResultMatcher;
 import net.osmand.ValueHolder;
 import net.osmand.data.LatLon;
-import net.osmand.plus.ApplicationMode;
-import net.osmand.plus.GPXUtilities.GPXFile;
 import net.osmand.plus.NavigationService;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.TargetPointsHelper;
 import net.osmand.plus.TargetPointsHelper.TargetPoint;
@@ -19,38 +21,45 @@ import net.osmand.plus.notifications.OsmandNotification.NotificationType;
 import net.osmand.plus.routing.RouteCalculationResult.NextDirectionInfo;
 import net.osmand.plus.routing.RouteProvider.GPXRouteParamsBuilder;
 import net.osmand.plus.routing.RouteProvider.RouteService;
-import net.osmand.router.RouteCalculationProgress;
+import net.osmand.plus.routing.RouteProvider.RoutingEnvironment;
+import net.osmand.plus.settings.backend.ApplicationMode;
+import net.osmand.plus.settings.backend.OsmAndAppCustomization.OsmAndAppCustomizationListener;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.router.RouteExporter;
+import net.osmand.router.RoutePlannerFrontEnd.GpxPoint;
+import net.osmand.router.RoutePlannerFrontEnd.GpxRouteApproximation;
 import net.osmand.router.RouteSegmentResult;
-import net.osmand.router.TurnType;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
 
+import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-
-import static net.osmand.plus.notifications.OsmandNotification.NotificationType.NAVIGATION;
 
 public class RoutingHelper {
 
 	private static final org.apache.commons.logging.Log log = PlatformUtil.getLog(RoutingHelper.class);
 
-	public interface IRouteInformationListener {
+	public static final float ALLOWED_DEVIATION = 2;
 
-		void newRouteIsCalculated(boolean newRoute, ValueHolder<Boolean> showToast);
+	// This should be correlated with RoutingHelper.updateCurrentRouteStatus ( when processed turn now is not announced)
+	private static final int DEFAULT_GPS_TOLERANCE = 12;
+	public static int GPS_TOLERANCE = DEFAULT_GPS_TOLERANCE;
+	public static float ARRIVAL_DISTANCE_FACTOR = 1;
 
-		void routeWasCancelled();
+	private List<WeakReference<IRouteInformationListener>> listeners = new LinkedList<>();
+	private List<WeakReference<IRoutingDataUpdateListener>> updateListeners = new LinkedList<>();
+	private List<WeakReference<IRouteSettingsListener>> settingsListeners = new LinkedList<>();
 
-		void routeWasFinished();
-	}
-
-	private static final float POSITION_TOLERANCE = 60;
-
-
-	private List<WeakReference<IRouteInformationListener>> listeners = new LinkedList<WeakReference<IRouteInformationListener>>();
-
-	private OsmandApplication app;
+	private final OsmandApplication app;
+	private OsmandSettings settings;
+	private final RouteProvider provider;
+	private final VoiceRouter voiceRouter;
+	private final RouteRecalculationHelper routeRecalculationHelper;
+	private final TransportRoutingHelper transportRoutingHelper;
 
 	private boolean isFollowingMode = false;
 	private boolean isRoutePlanningMode = false;
@@ -65,43 +74,67 @@ public class RoutingHelper {
 	private Location lastProjection;
 	private Location lastFixedLocation;
 
-	private static final int RECALCULATE_THRESHOLD_COUNT_CAUSING_FULL_RECALCULATE = 3;
-	private static final int RECALCULATE_THRESHOLD_CAUSING_FULL_RECALCULATE_INTERVAL = 2*60*1000;
-	private Thread currentRunningJob;
-	private long lastTimeEvaluatedRoute = 0;
-	private String lastRouteCalcError;
-	private String lastRouteCalcErrorShort;
-	private long recalculateCountInInterval = 0;
-	private int evalWaitInterval = 0;
+	private RouteCalculationResult originalRoute = null;
+
+	private boolean routeWasFinished;
 
 	private ApplicationMode mode;
-	private OsmandSettings settings;
-
-	private RouteProvider provider;
-	private VoiceRouter voiceRouter;
 
 	private static boolean isDeviatedFromRoute = false;
 	private long deviateFromRouteDetected = 0;
 	//private long wrongMovementDetected = 0;
 	private boolean voiceRouterStopped = false;
 
-	private RouteCalculationProgressCallback progressRoute;
-
-//	private ProgressBar progress;
-//	private Handler progressHandler;
-
 	public boolean isDeviatedFromRoute() {
 		return isDeviatedFromRoute;
 	}
 
-	public RoutingHelper(OsmandApplication context){
-		this.app = context;
-		settings = context.getSettings();
-		voiceRouter = new VoiceRouter(this, settings);
-		provider = new RouteProvider();
-		setAppMode(settings.APPLICATION_MODE.get());
+	public boolean isRouteWasFinished() {
+		return routeWasFinished;
 	}
 
+	public RoutingHelper(OsmandApplication context) {
+		this.app = context;
+		settings = context.getSettings();
+		voiceRouter = new VoiceRouter(this);
+		provider = new RouteProvider();
+		routeRecalculationHelper = new RouteRecalculationHelper(this);
+		transportRoutingHelper = context.getTransportRoutingHelper();
+		transportRoutingHelper.setRoutingHelper(this);
+		setAppMode(settings.APPLICATION_MODE.get());
+
+		OsmAndAppCustomizationListener customizationListener = new OsmAndAppCustomizationListener() {
+			@Override
+			public void onOsmAndSettingsCustomized() {
+				settings = app.getSettings();
+			}
+		};
+		app.getAppCustomization().addListener(customizationListener);
+	}
+
+	RouteProvider getProvider() {
+		return provider;
+	}
+
+	void resetRouteWasFinished() {
+		routeWasFinished = false;
+	}
+
+	void setRoute(RouteCalculationResult route) {
+		this.route = route;
+	}
+
+	long getDeviateFromRouteDetected() {
+		return deviateFromRouteDetected;
+	}
+
+	void setDeviateFromRouteDetected(long deviateFromRouteDetected) {
+		this.deviateFromRouteDetected = deviateFromRouteDetected;
+	}
+
+	public TransportRoutingHelper getTransportRoutingHelper() {
+		return transportRoutingHelper;
+	}
 
 	public boolean isFollowingMode() {
 		return isFollowingMode;
@@ -112,11 +145,11 @@ public class RoutingHelper {
 	}
 
 	public String getLastRouteCalcError() {
-		return lastRouteCalcError;
+		return routeRecalculationHelper.getLastRouteCalcError();
 	}
 
 	public String getLastRouteCalcErrorShort() {
-		return lastRouteCalcErrorShort;
+		return routeRecalculationHelper.getLastRouteCalcErrorShort();
 	}
 
 	public void setPauseNavigation(boolean b) {
@@ -129,7 +162,7 @@ public class RoutingHelper {
 				app.getNotificationHelper().refreshNotifications();
 			}
 		} else {
-			app.startNavigationService(NavigationService.USED_BY_NAVIGATION, 0);
+			app.startNavigationService(NavigationService.USED_BY_NAVIGATION);
 		}
 	}
 
@@ -148,7 +181,7 @@ public class RoutingHelper {
 				app.getNotificationHelper().refreshNotifications();
 			}
 		} else {
-			app.startNavigationService(NavigationService.USED_BY_NAVIGATION, 0);
+			app.startNavigationService(NavigationService.USED_BY_NAVIGATION);
 		}
 	}
 
@@ -160,9 +193,8 @@ public class RoutingHelper {
 		this.isRoutePlanningMode = isRoutePlanningMode;
 	}
 
-
-
-	public synchronized void setFinalAndCurrentLocation(LatLon finalLocation, List<LatLon> intermediatePoints, Location currentLocation){
+	public synchronized void setFinalAndCurrentLocation(LatLon finalLocation, List<LatLon> intermediatePoints, Location currentLocation) {
+		RoutingHelperUtils.checkAndUpdateStartLocation(app, currentLocation);
 		RouteCalculationResult previousRoute = route;
 		clearCurrentRoute(finalLocation, intermediatePoints);
 		// to update route
@@ -172,16 +204,17 @@ public class RoutingHelper {
 	public synchronized void clearCurrentRoute(LatLon newFinalLocation, List<LatLon> newIntermediatePoints) {
 		route = new RouteCalculationResult("");
 		isDeviatedFromRoute = false;
-		evalWaitInterval = 0;
+		routeRecalculationHelper.resetEvalWaitInterval();
+		originalRoute = null;
 		app.getWaypointHelper().setNewRoute(route);
 		app.runInUIThread(new Runnable() {
 			@Override
 			public void run() {
 				Iterator<WeakReference<IRouteInformationListener>> it = listeners.iterator();
-				while(it.hasNext()) {
+				while (it.hasNext()) {
 					WeakReference<IRouteInformationListener> ref = it.next();
 					IRouteInformationListener l = ref.get();
-					if(l == null) {
+					if (l == null) {
 						it.remove();
 					} else {
 						l.routeWasCancelled();
@@ -191,9 +224,7 @@ public class RoutingHelper {
 		});
 		this.finalLocation = newFinalLocation;
 		this.intermediatePoints = newIntermediatePoints;
-		if(currentRunningJob instanceof RouteRecalculationThread) {
-			((RouteRecalculationThread) currentRunningJob).stopCalculation();
-		}
+		routeRecalculationHelper.stopCalculation();
 		if (newFinalLocation == null) {
 			settings.FOLLOW_THE_ROUTE.set(false);
 			settings.FOLLOW_THE_GPX_ROUTE.set(null);
@@ -201,17 +232,19 @@ public class RoutingHelper {
 			this.lastProjection = null;
 			setFollowingMode(false);
 		}
+		transportRoutingHelper.clearCurrentRoute(newFinalLocation);
 	}
 
 	private synchronized void finishCurrentRoute() {
+		routeWasFinished = true;
 		app.runInUIThread(new Runnable() {
 			@Override
 			public void run() {
 				Iterator<WeakReference<IRouteInformationListener>> it = listeners.iterator();
-				while(it.hasNext()) {
+				while (it.hasNext()) {
 					WeakReference<IRouteInformationListener> ref = it.next();
 					IRouteInformationListener l = ref.get();
-					if(l == null) {
+					if (l == null) {
 						it.remove();
 					} else {
 						l.routeWasFinished();
@@ -221,11 +254,40 @@ public class RoutingHelper {
 		});
 	}
 
+	void newRouteCalculated(final boolean newRoute, final RouteCalculationResult res) {
+		app.runInUIThread(new Runnable() {
+			@Override
+			public void run() {
+				ValueHolder<Boolean> showToast = new ValueHolder<>();
+				showToast.value = true;
+				Iterator<WeakReference<IRouteInformationListener>> it = listeners.iterator();
+				while (it.hasNext()) {
+					WeakReference<IRouteInformationListener> ref = it.next();
+					IRouteInformationListener l = ref.get();
+					if (l == null) {
+						it.remove();
+					} else {
+						l.newRouteIsCalculated(newRoute, showToast);
+					}
+				}
+				if (showToast.value && newRoute && OsmandPlugin.isDevelopment()) {
+					String msg = app.getString(R.string.new_route_calculated_dist_dbg,
+							OsmAndFormatter.getFormattedDistance(res.getWholeDistance(), app),
+							((int) res.getRoutingTime()) + " sec",
+							res.getCalculateTime(), res.getVisitedSegments(), res.getLoadedTiles());
+					app.showToastMessage(msg);
+				}
+			}
+		});
+	}
+
 	public GPXRouteParamsBuilder getCurrentGPXRoute() {
 		return currentGPXRoute;
 	}
 
-
+	public boolean isCurrentGPXRouteV2() {
+		return currentGPXRoute != null && RouteExporter.OSMAND_ROUTER_V2.equals(currentGPXRoute.getFile().author);
+	}
 
 	public void setGpxParams(GPXRouteParamsBuilder params) {
 		currentGPXRoute = params;
@@ -235,8 +297,10 @@ public class RoutingHelper {
 		return route.getImmutableAllLocations();
 	}
 
-	public void setAppMode(ApplicationMode mode){
+	public void setAppMode(ApplicationMode mode) {
 		this.mode = mode;
+		ARRIVAL_DISTANCE_FACTOR = Math.max(settings.ARRIVAL_DISTANCE_FACTOR.getModeValue(mode), 0.1f);
+		GPS_TOLERANCE = (int) (DEFAULT_GPS_TOLERANCE * ARRIVAL_DISTANCE_FACTOR);
 		voiceRouter.updateAppMode();
 	}
 
@@ -252,7 +316,7 @@ public class RoutingHelper {
 		return intermediatePoints;
 	}
 
-	public boolean isRouteCalculated(){
+	public boolean isRouteCalculated() {
 		return route.isCalculated();
 	}
 
@@ -260,29 +324,61 @@ public class RoutingHelper {
 		return voiceRouter;
 	}
 
-	public Location getLastProjection(){
+	public Location getLastProjection() {
 		return lastProjection;
 	}
 
-	public void addListener(IRouteInformationListener l){
-		listeners.add(new WeakReference<RoutingHelper.IRouteInformationListener>(l));
+	public Location getLastFixedLocation() {
+		return lastFixedLocation;
 	}
 
-	public boolean removeListener(IRouteInformationListener lt){
-		Iterator<WeakReference<IRouteInformationListener>> it = listeners.iterator();
-		while(it.hasNext()) {
-			WeakReference<IRouteInformationListener> ref = it.next();
-			IRouteInformationListener l = ref.get();
-			if(l == null || lt == l) {
+	public void addRouteDataListener(@NonNull IRoutingDataUpdateListener listener) {
+		updateListeners = updateListeners(new ArrayList<>(updateListeners), listener, true);
+	}
+
+	public void removeRouteDataListener(@NonNull IRoutingDataUpdateListener listener) {
+		updateListeners = updateListeners(new ArrayList<>(updateListeners), listener, false);
+	}
+
+	public void addRouteSettingsListener(@NonNull IRouteSettingsListener listener) {
+		settingsListeners = updateListeners(new ArrayList<>(settingsListeners), listener, true);
+	}
+
+	public void removeRouteSettingsListener(@NonNull IRouteSettingsListener listener) {
+		settingsListeners = updateListeners(new ArrayList<>(settingsListeners), listener, false);
+	}
+
+	public void addListener(@NonNull IRouteInformationListener l) {
+		listeners = updateListeners(new ArrayList<>(listeners), l, true);
+		transportRoutingHelper.addListener(l);
+	}
+
+	public void removeListener(@NonNull IRouteInformationListener lt) {
+		listeners = updateListeners(new ArrayList<>(listeners), lt, false);
+	}
+
+	private <T> List<WeakReference<T>> updateListeners(List<WeakReference<T>> copyList,
+													   T listener, boolean isNewListener) {
+		Iterator<WeakReference<T>> it = copyList.iterator();
+		while (it.hasNext()) {
+			WeakReference<T> ref = it.next();
+			T l = ref.get();
+			if (l == null || l == listener) {
 				it.remove();
-				return true;
 			}
 		}
-		return false;
+		if (isNewListener) {
+			copyList.add(new WeakReference<>(listener));
+		}
+		return copyList;
 	}
 
 	public void updateLocation(Location currentLocation) {
-		if(isFollowingMode() || (settings.getPointToStart() == null && isRoutePlanningMode) ||
+		if (settings.getPointToStart() == null && settings.getMyLocationToStart() == null && currentLocation != null) {
+			app.getTargetPointsHelper().setMyLocationPoint(
+					new LatLon(currentLocation.getLatitude(), currentLocation.getLongitude()), false, null);
+		}
+		if (isFollowingMode() || (settings.getPointToStart() == null && isRoutePlanningMode) ||
 				app.getLocationProvider().getLocationSimulation().isRouteAnimating()) {
 			setCurrentLocation(currentLocation, false);
 		}
@@ -292,34 +388,39 @@ public class RoutingHelper {
 		return setCurrentLocation(currentLocation, returnUpdatedLocation, route, false);
 	}
 
-	public double getRouteDeviation(){
+	public double getRouteDeviation() {
 		if (route == null ||
-			route.getImmutableAllDirections().size() < 2 ||
-			route.currentRoute == 0){
+				route.getImmutableAllDirections().size() < 2 ||
+				route.currentRoute == 0) {
 			return 0;
 		}
 		List<Location> routeNodes = route.getImmutableAllLocations();
-		return getOrthogonalDistance(lastFixedLocation, routeNodes.get(route.currentRoute -1), routeNodes.get(route.currentRoute));
+		return RoutingHelperUtils.getOrthogonalDistance(lastFixedLocation, routeNodes.get(route.currentRoute - 1), routeNodes.get(route.currentRoute));
 	}
 
 	private Location setCurrentLocation(Location currentLocation, boolean returnUpdatedLocation,
-			RouteCalculationResult previousRoute, boolean targetPointsChanged) {
+										RouteCalculationResult previousRoute, boolean targetPointsChanged) {
 		Location locationProjection = currentLocation;
-		if (finalLocation == null || currentLocation == null) {
+		if (isPublicTransportMode() && currentLocation != null && finalLocation != null &&
+				(targetPointsChanged || transportRoutingHelper.getStartLocation() == null)) {
+			lastFixedLocation = currentLocation;
+			lastProjection = locationProjection;
+			transportRoutingHelper.setApplicationMode(mode);
+			transportRoutingHelper.setFinalAndCurrentLocation(finalLocation,
+					new LatLon(currentLocation.getLatitude(), currentLocation.getLongitude()));
+		}
+		if (finalLocation == null || currentLocation == null || isPublicTransportMode()) {
 			isDeviatedFromRoute = false;
 			return locationProjection;
 		}
-		float posTolerance = POSITION_TOLERANCE;
-		if(currentLocation.hasAccuracy()) {
-			posTolerance = POSITION_TOLERANCE / 2 + currentLocation.getAccuracy();
-		}
+		float posTolerance = RoutingHelperUtils.getPosTolerance(currentLocation.hasAccuracy() ? currentLocation.getAccuracy() : 0);
 		boolean calculateRoute = false;
 		synchronized (this) {
 			isDeviatedFromRoute = false;
 			double distOrth = 0;
 
 			// 0. Route empty or needs to be extended? Then re-calculate route.
-			if(route.isEmpty()) {
+			if (route.isEmpty()) {
 				calculateRoute = true;
 			} else {
 				// 1. Update current route position status according to latest received location
@@ -329,12 +430,16 @@ public class RoutingHelper {
 				}
 				List<Location> routeNodes = route.getImmutableAllLocations();
 				int currentRoute = route.currentRoute;
+				double allowableDeviation = route.getRouteRecalcDistance();
+				if (allowableDeviation == 0) {
+					allowableDeviation = RoutingHelperUtils.getDefaultAllowedDeviation(settings, route.getAppMode(), posTolerance);
+				}
 
 				// 2. Analyze if we need to recalculate route
-				// >100m off current route (sideways)
-				if (currentRoute > 0) {
-					distOrth = getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
-					if ((!settings.DISABLE_OFFROUTE_RECALC.get()) && (distOrth > (1.7 * posTolerance))) {
+				// >100m off current route (sideways) or parameter (for Straight line)
+				if (currentRoute > 0 && allowableDeviation > 0) {
+					distOrth = RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
+					if (distOrth > allowableDeviation) {
 						log.info("Recalculate route, because correlation  : " + distOrth); //$NON-NLS-1$
 						isDeviatedFromRoute = true;
 						calculateRoute = true;
@@ -342,28 +447,31 @@ public class RoutingHelper {
 				}
 				// 3. Identify wrong movement direction
 				Location next = route.getNextRouteLocation();
-				boolean wrongMovementDirection = checkWrongMovementDirection(currentLocation, next);
-				if ((!settings.DISABLE_WRONG_DIRECTION_RECALC.get()) && wrongMovementDirection && (currentLocation.distanceTo(routeNodes.get(currentRoute)) > (2 * posTolerance))) {
+				boolean isStraight =
+						route.getRouteService() == RouteService.DIRECT_TO || route.getRouteService() == RouteService.STRAIGHT;
+				boolean wrongMovementDirection = RoutingHelperUtils.checkWrongMovementDirection(currentLocation, next);
+				if ((allowableDeviation > 0 && wrongMovementDirection && !isStraight
+						&& (currentLocation.distanceTo(routeNodes.get(currentRoute)) > allowableDeviation)) && !settings.DISABLE_WRONG_DIRECTION_RECALC.get()) {
 					log.info("Recalculate route, because wrong movement direction: " + currentLocation.distanceTo(routeNodes.get(currentRoute))); //$NON-NLS-1$
 					isDeviatedFromRoute = true;
 					calculateRoute = true;
 				}
 				// 4. Identify if UTurn is needed
-				if (identifyUTurnIsNeeded(currentLocation, posTolerance)) {
+				if (RoutingHelperUtils.identifyUTurnIsNeeded(this, currentLocation, posTolerance)) {
 					isDeviatedFromRoute = true;
 				}
 				// 5. Update Voice router
 				// Do not update in route planning mode
 				if (isFollowingMode) {
-					boolean inRecalc = calculateRoute || isRouteBeingCalculated();
+					boolean inRecalc = (calculateRoute || isRouteBeingCalculated());
 					if (!inRecalc && !wrongMovementDirection) {
 						voiceRouter.updateStatus(currentLocation, false);
 						voiceRouterStopped = false;
-					} else if (isDeviatedFromRoute && !voiceRouterStopped) {
+					} else if (isDeviatedFromRoute && !voiceRouterStopped && !settings.DISABLE_OFFROUTE_RECALC.get()) {
 						voiceRouter.interruptRouteCommands();
 						voiceRouterStopped = true; // Prevents excessive execution of stop() code
 					}
-					if (distOrth > 350) {
+					if (distOrth > mode.getOffRouteDistance() * ARRIVAL_DISTANCE_FACTOR && !settings.DISABLE_OFFROUTE_RECALC.get()) {
 						voiceRouter.announceOffRoute(distOrth);
 					}
 				}
@@ -372,7 +480,7 @@ public class RoutingHelper {
 				if (currentRoute > 0) {
 					locationProjection = new Location(currentLocation);
 					Location nextLocation = routeNodes.get(currentRoute);
-					LatLon project = getProject(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
+					LatLon project = RoutingHelperUtils.getProject(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
 
 					locationProjection.setLatitude(project.getLatitude());
 					locationProjection.setLongitude(project.getLongitude());
@@ -386,83 +494,46 @@ public class RoutingHelper {
 		}
 
 		if (calculateRoute) {
-			recalculateRouteInBackground(currentLocation, finalLocation, intermediatePoints, currentGPXRoute,
+			routeRecalculationHelper.recalculateRouteInBackground(currentLocation, finalLocation, intermediatePoints, currentGPXRoute,
 					previousRoute.isCalculated() ? previousRoute : null, false, !targetPointsChanged);
 		} else {
-			Thread job = currentRunningJob;
-			if(job instanceof RouteRecalculationThread) {
-				RouteRecalculationThread thread = (RouteRecalculationThread) job;
-				if(!thread.isParamsChanged()) {
-					thread.stopCalculation();
-				}
-				if (isFollowingMode){
-					voiceRouter.announceBackOnRoute();
-				}
-			}
+			routeRecalculationHelper.stopCalculationIfParamsNotChanged();
 		}
 
 		double projectDist = mode != null && mode.hasFastSpeed() ? posTolerance : posTolerance / 2;
-		if(returnUpdatedLocation && locationProjection != null && currentLocation.distanceTo(locationProjection) < projectDist) {
+		if (returnUpdatedLocation && locationProjection != null && currentLocation.distanceTo(locationProjection) < projectDist) {
 			return locationProjection;
 		} else {
 			return currentLocation;
 		}
 	}
 
-	private static double getOrthogonalDistance(Location loc, Location from, Location to) {
-		return MapUtils.getOrthogonalDistance(loc.getLatitude(),
-				loc.getLongitude(), from.getLatitude(), from.getLongitude(),
-				to.getLatitude(), to.getLongitude());
-	}
-
-	private static LatLon getProject(Location loc, Location from, Location to) {
-		return MapUtils.getProjection(loc.getLatitude(),
-				loc.getLongitude(), from.getLatitude(), from.getLongitude(),
-				to.getLatitude(), to.getLongitude());
-	}
-
-	private static int lookAheadFindMinOrthogonalDistance(Location currentLocation, List<Location> routeNodes, int currentRoute, int iterations) {
-		double newDist;
-		double dist = Double.POSITIVE_INFINITY;
-		int index = currentRoute;
-		while (iterations > 0 && currentRoute + 1 < routeNodes.size()) {
-			newDist = getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute), routeNodes.get(currentRoute + 1));
-			if (newDist < dist) {
-				index = currentRoute;
-				dist = newDist;
-			}
-			currentRoute++;
-			iterations--;
-		}
-		return index;
-	}
-
-	private boolean updateCurrentRouteStatus(Location currentLocation, float posTolerance) {
+	private boolean updateCurrentRouteStatus(Location currentLocation, double posTolerance) {
 		List<Location> routeNodes = route.getImmutableAllLocations();
 		int currentRoute = route.currentRoute;
 		// 1. Try to proceed to next point using orthogonal distance (finding minimum orthogonal dist)
 		while (currentRoute + 1 < routeNodes.size()) {
 			double dist = currentLocation.distanceTo(routeNodes.get(currentRoute));
-			if(currentRoute > 0) {
-				dist = getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1),
+			if (currentRoute > 0) {
+				dist = RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1),
 						routeNodes.get(currentRoute));
 			}
 			boolean processed = false;
 			// if we are still too far try to proceed many points
 			// if not then look ahead only 3 in order to catch sharp turns
 			boolean longDistance = dist >= 250;
-			int newCurrentRoute = lookAheadFindMinOrthogonalDistance(currentLocation, routeNodes, currentRoute, longDistance ? 15 : 8);
-			double newDist = getOrthogonalDistance(currentLocation, routeNodes.get(newCurrentRoute),
+			int newCurrentRoute = RoutingHelperUtils.lookAheadFindMinOrthogonalDistance(currentLocation, routeNodes, currentRoute, longDistance ? 15 : 8);
+			double newDist = RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(newCurrentRoute),
 					routeNodes.get(newCurrentRoute + 1));
-			if(longDistance) {
-				if(newDist < dist) {
+			if (longDistance) {
+				if (newDist < dist) {
 					if (log.isDebugEnabled()) {
 						log.debug("Processed by distance : (new) " + newDist + " (old) " + dist); //$NON-NLS-1$//$NON-NLS-2$
 					}
 					processed = true;
 				}
-			} else if (newDist < dist || newDist < 10) {
-				// newDist < 10 (avoid distance 0 till next turn)
+			} else if (newDist < dist || newDist < GPS_TOLERANCE / 2) {
+				// newDist < GPS_TOLERANCE (avoid distance 0 till next turn)
 				if (dist > posTolerance) {
 					processed = true;
 					if (log.isDebugEnabled()) {
@@ -492,38 +563,39 @@ public class RoutingHelper {
 				route.updateCurrentRoute(newCurrentRoute + 1);
 				currentRoute = newCurrentRoute + 1;
 				app.getNotificationHelper().refreshNotification(NotificationType.NAVIGATION);
+				fireRoutingDataUpdateEvent();
 			} else {
 				break;
 			}
 		}
 
 		// 2. check if intermediate found
-		if(route.getIntermediatePointsToPass()  > 0
-				&& route.getDistanceToNextIntermediate(lastFixedLocation) < getArrivalDistance() * 2f && !isRoutePlanningMode) {
+		if (route.getIntermediatePointsToPass() > 0
+				&& route.getDistanceToNextIntermediate(lastFixedLocation) < RoutingHelperUtils.getArrivalDistance(mode, settings) * 2f && !isRoutePlanningMode) {
 			showMessage(app.getString(R.string.arrived_at_intermediate_point));
 			route.passIntermediatePoint();
 			TargetPointsHelper targets = app.getTargetPointsHelper();
 			String name = "";
-			if(intermediatePoints != null && !intermediatePoints.isEmpty()) {
+			if (intermediatePoints != null && !intermediatePoints.isEmpty()) {
 				LatLon rm = intermediatePoints.remove(0);
 				List<TargetPoint> ll = targets.getIntermediatePointsNavigation();
 				int ind = -1;
-				for(int i = 0; i < ll.size(); i++) {
-					if(ll.get(i).point != null && MapUtils.getDistance(ll.get(i).point, rm) < 5) {
+				for (int i = 0; i < ll.size(); i++) {
+					if (ll.get(i).point != null && MapUtils.getDistance(ll.get(i).point, rm) < 5) {
 						name = ll.get(i).getOnlyName();
 						ind = i;
 						break;
 					}
 				}
-				if(ind >= 0) {
+				if (ind >= 0) {
 					targets.removeWayPoint(false, ind);
 				}
 			}
-			if(isFollowingMode) {
+			if (isFollowingMode) {
 				voiceRouter.arrivedIntermediatePoint(name);
 			}
 			// double check
-			while(intermediatePoints != null  && route.getIntermediatePointsToPass() < intermediatePoints.size()) {
+			while (intermediatePoints != null && route.getIntermediatePointsToPass() < intermediatePoints.size()) {
 				intermediatePoints.remove(0);
 			}
 		}
@@ -531,13 +603,13 @@ public class RoutingHelper {
 		// 3. check if destination found
 		Location lastPoint = routeNodes.get(routeNodes.size() - 1);
 		if (currentRoute > routeNodes.size() - 3
-				&& currentLocation.distanceTo(lastPoint) < getArrivalDistance()
+				&& currentLocation.distanceTo(lastPoint) < RoutingHelperUtils.getArrivalDistance(mode, settings)
 				&& !isRoutePlanningMode) {
 			//showMessage(app.getString(R.string.arrived_at_destination));
 			TargetPointsHelper targets = app.getTargetPointsHelper();
 			TargetPoint tp = targets.getPointToNavigate();
 			String description = tp == null ? "" : tp.getOnlyName();
-			if(isFollowingMode) {
+			if (isFollowingMode) {
 				voiceRouter.arrivedDestinationPoint(description);
 			}
 			boolean onDestinationReached = OsmandPlugin.onDestinationReached();
@@ -549,146 +621,82 @@ public class RoutingHelper {
 					@Override
 					public void run() {
 						settings.LAST_ROUTING_APPLICATION_MODE = settings.APPLICATION_MODE.get();
-						//settings.APPLICATION_MODE.set(settings.DEFAULT_APPLICATION_MODE.get());
+						//settings.setApplicationMode(settings.DEFAULT_APPLICATION_MODE.get());
 					}
 				});
 				finishCurrentRoute();
 				// targets.clearPointToNavigate(false);
 				return true;
 			}
+		}
+
+		// 4. update angle point
+		if (route.getRouteVisibleAngle() > 0) {
+			// proceed to the next point with min acceptable bearing
+			double ANGLE_TO_DECLINE = route.getRouteVisibleAngle();
+			int nextPoint = route.currentRoute;
+			for (; nextPoint < routeNodes.size() - 1; nextPoint++) {
+				float bearingTo = currentLocation.bearingTo(routeNodes.get(nextPoint));
+				float bearingTo2 = routeNodes.get(nextPoint).bearingTo(routeNodes.get(nextPoint + 1));
+				if (Math.abs(MapUtils.degreesDiff(bearingTo2, bearingTo)) <= ANGLE_TO_DECLINE) {
+					break;
+				}
+			}
+
+			if (nextPoint > 0) {
+				Location next = routeNodes.get(nextPoint);
+				Location prev = routeNodes.get(nextPoint - 1);
+				float bearing = prev.bearingTo(next);
+				double bearingTo = Math.abs(MapUtils.degreesDiff(bearing, currentLocation.bearingTo(next)));
+				double bearingPrev = Math.abs(MapUtils.degreesDiff(bearing, currentLocation.bearingTo(prev)));
+				while (true) {
+					Location mp = MapUtils.calculateMidPoint(prev, next);
+					if (mp.distanceTo(next) <= 100) {
+						break;
+					}
+					double bearingMid = Math.abs(MapUtils.degreesDiff(bearing, currentLocation.bearingTo(mp)));
+					if (bearingPrev < ANGLE_TO_DECLINE) {
+						next = mp;
+						bearingTo = bearingMid;
+					} else if (bearingTo < ANGLE_TO_DECLINE) {
+						prev = mp;
+						bearingPrev = bearingMid;
+					} else {
+						break;
+					}
+				}
+				route.updateNextVisiblePoint(nextPoint, next);
+			}
 
 		}
 		return false;
 	}
 
-	private float getArrivalDistance() {
-		return ((float)settings.getApplicationMode().getArrivalDistance()) * settings.ARRIVAL_DISTANCE_FACTOR.get();
-	}
-
-
-	private boolean identifyUTurnIsNeeded(Location currentLocation, float posTolerance) {
-		if (finalLocation == null || currentLocation == null || !route.isCalculated()) {
-			return false;
-		}
-		boolean isOffRoute = false;
-		if (currentLocation.hasBearing()) {
-			float bearingMotion = currentLocation.getBearing() ;
-			Location nextRoutePosition = route.getNextRouteLocation();
-			float bearingToRoute = currentLocation.bearingTo(nextRoutePosition);
-			double diff = MapUtils.degreesDiff(bearingMotion, bearingToRoute);
-			// 7. Check if you left the route and an unscheduled U-turn would bring you back (also Issue 863)
-			// This prompt is an interim advice and does only sound if a new route in forward direction could not be found in x seconds
-			if (Math.abs(diff) > 135f) {
-				float d = currentLocation.distanceTo(nextRoutePosition);
-				// 60m tolerance to allow for GPS inaccuracy
-				if (d > posTolerance) {
-					// require x sec continuous since first detection
-					if (deviateFromRouteDetected == 0) {
-						deviateFromRouteDetected = System.currentTimeMillis();
-					} else if ((System.currentTimeMillis() - deviateFromRouteDetected > 10000)) {
-						isOffRoute = true;
-						//log.info("bearingMotion is opposite to bearingRoute"); //$NON-NLS-1$
-					}
-				}
-			} else {
-				deviateFromRouteDetected = 0;
-			}
-		}
-		return isOffRoute;
-	}
-
-	/**
-	 * Wrong movement direction is considered when between
-	 * current location bearing (determines by 2 last fixed position or provided)
-	 * and bearing from currentLocation to next (current) point
-	 * the difference is more than 60 degrees
-	 */
-	public boolean checkWrongMovementDirection(Location currentLocation, Location nextRouteLocation) {
-		// measuring without bearing could be really error prone (with last fixed location)
-		// this code has an effect on route recalculation which should be detected without mistakes
-		if (currentLocation.hasBearing() && nextRouteLocation != null) {
-			float bearingMotion = currentLocation.getBearing();
-			float bearingToRoute = currentLocation.bearingTo(nextRouteLocation);
-			double diff = MapUtils.degreesDiff(bearingMotion, bearingToRoute);
-			if (Math.abs(diff) > 60f) {
-				// require delay interval since first detection, to avoid false positive
-				//but leave out for now, as late detection is worse than false positive (it may reset voice router then cause bogus turn and u-turn prompting)
-				//if (wrongMovementDetected == 0) {
-				//	wrongMovementDetected = System.currentTimeMillis();
-				//} else if ((System.currentTimeMillis() - wrongMovementDetected > 500)) {
-					return true;
-				//}
-			} else {
-				//wrongMovementDetected = 0;
-				return false;
-			}
-		}
-		//wrongMovementDetected = 0;
-		return false;
-	}
-
-	private void setNewRoute(RouteCalculationResult prevRoute, final RouteCalculationResult res, Location start){
-		final boolean newRoute = !prevRoute.isCalculated();
-		if (isFollowingMode) {
-			if(lastFixedLocation != null) {
-				start = lastFixedLocation;
-			}
-			// try remove false route-recalculated prompts by checking direction to second route node
-			boolean wrongMovementDirection  = false;
-			List<Location> routeNodes = res.getImmutableAllLocations();
-			if (routeNodes != null && !routeNodes.isEmpty()) {
-				int newCurrentRoute = lookAheadFindMinOrthogonalDistance(start, routeNodes, res.currentRoute, 15);
-				if (newCurrentRoute + 1 < routeNodes.size()) {
-					// This check is valid for Online/GPX services (offline routing is aware of route direction)
-					wrongMovementDirection = checkWrongMovementDirection(start, routeNodes.get(newCurrentRoute + 1));
-					// set/reset evalWaitInterval only if new route is in forward direction
-					if (wrongMovementDirection) {
-						evalWaitInterval = 3000;
-					} else {
-						evalWaitInterval = Math.max(3000, evalWaitInterval * 3 / 2);
-						evalWaitInterval = Math.min(evalWaitInterval, 120000);
-					}
-
+	private void fireRoutingDataUpdateEvent() {
+		if (!updateListeners.isEmpty()) {
+			ArrayList<WeakReference<IRoutingDataUpdateListener>> tmp = new ArrayList<>(updateListeners);
+			for (WeakReference<IRoutingDataUpdateListener> ref : tmp) {
+				IRoutingDataUpdateListener l = ref.get();
+				if (l != null) {
+					l.onRoutingDataUpdate();
 				}
 			}
-
-
-			// trigger voice prompt only if new route is in forward direction
-			// If route is in wrong direction after one more setLocation it will be recalculated
-			if (!wrongMovementDirection || newRoute) {
-				voiceRouter.newRouteIsCalculated(newRoute);
-			}
 		}
-		app.getWaypointHelper().setNewRoute(res);
-
-		app.runInUIThread(new Runnable() {
-			@Override
-			public void run() {
-				ValueHolder<Boolean> showToast = new ValueHolder<Boolean>();
-				showToast.value = true;
-				Iterator<WeakReference<IRouteInformationListener>> it = listeners.iterator();
-				while (it.hasNext()) {
-					WeakReference<IRouteInformationListener> ref = it.next();
-					IRouteInformationListener l = ref.get();
-					if (l == null) {
-						it.remove();
-					} else {
-						l.newRouteIsCalculated(newRoute, showToast);
-					}
-				}
-				if (showToast.value && OsmandPlugin.isDevelopment()) {
-					String msg = app.getString(R.string.new_route_calculated_dist) + ": "
-							+ OsmAndFormatter.getFormattedDistance(res.getWholeDistance(), app);
-					if (res.getRoutingTime() != 0f) {
-						msg += " (" + Algorithms.formatDuration((int) res.getRoutingTime(), app.accessibilityEnabled()) + ")";
-					}
-					app.showToastMessage(msg);
-				}
-			}
-		});
 	}
 
-	public int getLeftDistance(){
+	private void fireRouteSettingsChangedEvent(@Nullable ApplicationMode mode) {
+		if (!settingsListeners.isEmpty()) {
+			ArrayList<WeakReference<IRouteSettingsListener>> tmp = new ArrayList<>(settingsListeners);
+			for (WeakReference<IRouteSettingsListener> ref : tmp) {
+				IRouteSettingsListener l = ref.get();
+				if (l != null) {
+					l.onRouteSettingsChanged(mode);
+				}
+			}
+		}
+	}
+
+	public int getLeftDistance() {
 		return route.getDistanceToFinish(lastFixedLocation);
 	}
 
@@ -700,11 +708,15 @@ public class RoutingHelper {
 		return route.getLeftTime(lastFixedLocation);
 	}
 
+	public int getLeftTimeNextIntermediate() {
+		return route.getLeftTimeToNextIntermediate(lastFixedLocation);
+	}
+
 	public OsmandSettings getSettings() {
 		return settings;
 	}
 
-	public String getGeneralRouteInformation(){
+	public String getGeneralRouteInformation() {
 		int dist = getLeftDistance();
 		int hours = getLeftTime() / (60 * 60);
 		int minutes = (getLeftTime() / 60) % 60;
@@ -712,14 +724,14 @@ public class RoutingHelper {
 				hours, minutes);
 	}
 
-	public Location getLocationFromRouteDirection(RouteDirectionInfo i){
+	public Location getLocationFromRouteDirection(RouteDirectionInfo i) {
 		return route.getLocationFromRouteDirection(i);
 	}
 
-	public synchronized NextDirectionInfo getNextRouteDirectionInfo(NextDirectionInfo info, boolean toSpeak){
+	public synchronized NextDirectionInfo getNextRouteDirectionInfo(NextDirectionInfo info, boolean toSpeak) {
 		NextDirectionInfo i = route.getNextRouteDirectionInfo(info, lastProjection, toSpeak);
-		if(i != null) {
-			i.imminent =  voiceRouter.calculateImminent(i.distanceTo, lastProjection);
+		if (i != null) {
+			i.imminent = voiceRouter.calculateImminent(i.distanceTo, lastProjection);
 		}
 		return i;
 	}
@@ -728,312 +740,109 @@ public class RoutingHelper {
 		return route.getCurrentMaxSpeed();
 	}
 
-
-	public static String formatStreetName(String name, String ref, String destination, String towards) {
-	//Hardy, 2016-08-05:
-	//Now returns: (ref) + ((" ")+name) + ((" ")+"toward "+dest) or ""
-
-		String formattedStreetName = "";
-		if (ref != null && ref.length() > 0) {
-			formattedStreetName = ref;
-		}
-		if (name != null && name.length() > 0) {
-			if (formattedStreetName.length() > 0) {
-				formattedStreetName = formattedStreetName + " ";
-			}
-			formattedStreetName = formattedStreetName + name;
-		}
-		if (destination != null && destination.length() > 0) {
-			if (formattedStreetName.length() > 0) {
-				formattedStreetName = formattedStreetName + " ";
-			}
-			formattedStreetName = formattedStreetName + towards + " " + destination;
-		}
-		return formattedStreetName.replace(";", ", ");
-
+	@NonNull
+	public synchronized CurrentStreetName getCurrentName(NextDirectionInfo n) {
+		return CurrentStreetName.getCurrentName(this, n);
 	}
 
-//	protected boolean isDistanceLess(float currentSpeed, double dist, double etalon, float defSpeed){
-//		if(dist < etalon || ((dist / currentSpeed) < (etalon / defSpeed))){
-//			return true;
-//		}
-//		return false;
-//	}
-
-	public synchronized String getCurrentName(TurnType[] next){
-		NextDirectionInfo n = getNextRouteDirectionInfo(new NextDirectionInfo(), true);
-		Location l = lastFixedLocation;
-		float speed = 0;
-		if(l != null && l.hasSpeed()) {
-			speed = l.getSpeed();
-		}
-		if(n.distanceTo > 0  && n.directionInfo != null && !n.directionInfo.getTurnType().isSkipToSpeak() &&
-				voiceRouter.isDistanceLess(speed, n.distanceTo, voiceRouter.PREPARE_DISTANCE * 0.75f, 0f)) {
-			String nm = n.directionInfo.getStreetName();
-			String rf = n.directionInfo.getRef();
-			String dn = n.directionInfo.getDestinationName();
-			if(next != null) {
-				next[0] = n.directionInfo.getTurnType();
-			}
-			return formatStreetName(nm, rf, dn, "»");
-		}
-		RouteSegmentResult rs = getCurrentSegmentResult();
-		if(rs != null) {
-			String nm = rs.getObject().getName(settings.MAP_PREFERRED_LOCALE.get(), settings.MAP_TRANSLITERATE_NAMES.get());
-			String rf = rs.getObject().getRef(settings.MAP_PREFERRED_LOCALE.get(), settings.MAP_TRANSLITERATE_NAMES.get(), rs.isForwardDirection());
-			String dn = rs.getObject().getDestinationName(settings.MAP_PREFERRED_LOCALE.get(),
-					settings.MAP_TRANSLITERATE_NAMES.get(), rs.isForwardDirection());
-			return formatStreetName(nm, rf, dn, "»");
-		}
-		return null;
+	public RouteSegmentResult getCurrentSegmentResult() {
+		return route.getCurrentSegmentResult();
 	}
 
-    public RouteSegmentResult getCurrentSegmentResult() {
-        return route.getCurrentSegmentResult();
-    }
+	public RouteSegmentResult getNextStreetSegmentResult() {
+		return route.getNextStreetSegmentResult();
+	}
 
-    public List<RouteSegmentResult> getUpcomingTunnel(float distToStart) {
-    	return route.getUpcomingTunnel(distToStart);
-    }
+	public List<RouteSegmentResult> getUpcomingTunnel(float distToStart) {
+		return route.getUpcomingTunnel(distToStart);
+	}
 
-    public synchronized NextDirectionInfo getNextRouteDirectionInfoAfter(NextDirectionInfo previous, NextDirectionInfo to, boolean toSpeak){
+	public synchronized NextDirectionInfo getNextRouteDirectionInfoAfter(NextDirectionInfo previous, NextDirectionInfo to, boolean toSpeak) {
 		NextDirectionInfo i = route.getNextRouteDirectionInfoAfter(previous, to, toSpeak);
-		if(i != null) {
-			i.imminent =  voiceRouter.calculateImminent(i.distanceTo, null);
+		if (i != null) {
+			i.imminent = voiceRouter.calculateImminent(i.distanceTo, null);
 		}
 		return i;
 	}
 
-	public List<RouteDirectionInfo> getRouteDirections(){
+	public List<RouteDirectionInfo> getRouteDirections() {
 		return route.getRouteDirections();
 	}
 
-
-
-	private class RouteRecalculationThread extends Thread {
-
-		private final RouteCalculationParams params;
-		private boolean paramsChanged;
-		private Thread prevRunningJob;
-
-		public RouteRecalculationThread(String name, RouteCalculationParams params, boolean paramsChanged) {
-			super(name);
-			this.params = params;
-			this.paramsChanged = paramsChanged;
-			if(params.calculationProgress == null) {
-				params.calculationProgress = new RouteCalculationProgress();
-			}
-		}
-
-		public boolean isParamsChanged() {
-			return paramsChanged;
-		}
-
-		public void stopCalculation(){
-			params.calculationProgress.isCancelled = true;
-		}
-
-
-		@Override
-		public void run() {
-			synchronized (RoutingHelper.this) {
-				currentRunningJob = this;
-			}
-			if(prevRunningJob != null) {
-				while(prevRunningJob.isAlive()){
-					try {
-						Thread.sleep(50);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-				}
-				synchronized (RoutingHelper.this) {
-					currentRunningJob = this;
-				}
-			}
-			lastRouteCalcError = null;
-			lastRouteCalcErrorShort = null;
-			RouteCalculationResult res = provider.calculateRouteImpl(params);
-			if (params.calculationProgress.isCancelled) {
-				synchronized (RoutingHelper.this) {
-					currentRunningJob = null;
-				}
-				return;
-			}
-			final boolean onlineSourceWithoutInternet = !res.isCalculated() && params.type.isOnline() && !settings.isInternetConnectionAvailable();
-			if (onlineSourceWithoutInternet && settings.GPX_ROUTE_CALC_OSMAND_PARTS.get()) {
-				if (params.previousToRecalculate != null && params.previousToRecalculate.isCalculated()) {
-					res = provider.recalculatePartOfflineRoute(res, params);
-				}
-			}
-			RouteCalculationResult prev = route;
-			synchronized (RoutingHelper.this) {
-				if (res.isCalculated()) {
-					if (!params.inSnapToRoadMode) {
-						route = res;
-					}
-					if (params.resultListener != null) {
-						params.resultListener.onRouteCalculated(res.getRouteLocations());
-					}
-				} else {
-					evalWaitInterval = Math.max(3000, evalWaitInterval * 3 / 2); // for Issue #3899
-					evalWaitInterval = Math.min(evalWaitInterval, 120000);
-				}
-				currentRunningJob = null;
-			}
-			if(res.isCalculated()){
-				if (!params.inSnapToRoadMode) {
-					setNewRoute(prev, res, params.start);
-				}
-			} else if (onlineSourceWithoutInternet) {
-				lastRouteCalcError = app.getString(R.string.error_calculating_route)
-						+ ":\n" + app.getString(R.string.internet_connection_required_for_online_route);
-				lastRouteCalcErrorShort = app.getString(R.string.error_calculating_route);
-				showMessage(lastRouteCalcError); //$NON-NLS-1$
-			} else {
-				if (res.getErrorMessage() != null) {
-					lastRouteCalcError = app.getString(R.string.error_calculating_route) + ":\n" + res.getErrorMessage();
-					lastRouteCalcErrorShort = app.getString(R.string.error_calculating_route);
-					showMessage(lastRouteCalcError); //$NON-NLS-1$
-				} else {
-					lastRouteCalcError = app.getString(R.string.empty_route_calculated);
-					lastRouteCalcErrorShort = app.getString(R.string.empty_route_calculated);
-					showMessage(lastRouteCalcError);
-				}
-			}
-			app.getNotificationHelper().refreshNotification(NAVIGATION);
-			lastTimeEvaluatedRoute = System.currentTimeMillis();
-		}
-
-		public void setWaitPrevJob(Thread prevRunningJob) {
-			this.prevRunningJob = prevRunningJob;
-		}
+	public void onSettingsChanged() {
+		onSettingsChanged(false);
 	}
 
-	public void recalculateRouteDueToSettingsChange() {
+	public void onSettingsChanged(boolean forceRouteRecalculation) {
+		onSettingsChanged(mode, forceRouteRecalculation);
+	}
+
+	public void onSettingsChanged(@Nullable ApplicationMode mode) {
+		onSettingsChanged(mode, false);
+	}
+
+	public void onSettingsChanged(@Nullable ApplicationMode mode, boolean forceRouteRecalculation) {
+		if (forceRouteRecalculation ||
+				((mode == null || mode.equals(this.mode)) && (isRouteCalculated() || isRouteBeingCalculated()))) {
+			recalculateRouteDueToSettingsChange();
+		}
+		fireRouteSettingsChangedEvent(mode);
+	}
+
+	private void recalculateRouteDueToSettingsChange() {
 		clearCurrentRoute(finalLocation, intermediatePoints);
-		recalculateRouteInBackground(lastFixedLocation, finalLocation, intermediatePoints, currentGPXRoute, route, true, false);
-	}
-
-	private void recalculateRouteInBackground(final Location start, final LatLon end, final List<LatLon> intermediates,
-			final GPXRouteParamsBuilder gpxRoute, final RouteCalculationResult previousRoute, boolean paramsChanged, boolean onlyStartPointChanged){
-		if (start == null || end == null) {
-			return;
-		}
-		// do not evaluate very often
-		if ((currentRunningJob == null && System.currentTimeMillis() - lastTimeEvaluatedRoute > evalWaitInterval)
-				|| paramsChanged || !onlyStartPointChanged) {
-			if(System.currentTimeMillis() - lastTimeEvaluatedRoute < RECALCULATE_THRESHOLD_CAUSING_FULL_RECALCULATE_INTERVAL) {
-				recalculateCountInInterval ++;
-			}
-			RouteCalculationParams params = new RouteCalculationParams();
-			params.start = start;
-			params.end = end;
-			params.intermediates = intermediates;
-			params.gpxRoute = gpxRoute == null ? null : gpxRoute.build(start, settings);
-			params.onlyStartPointChanged = onlyStartPointChanged;
-			if(recalculateCountInInterval < RECALCULATE_THRESHOLD_COUNT_CAUSING_FULL_RECALCULATE) {
-				params.previousToRecalculate = previousRoute;
+		if (isPublicTransportMode()) {
+			Location start = lastFixedLocation;
+			LatLon finish = finalLocation;
+			transportRoutingHelper.setApplicationMode(mode);
+			if (start != null && finish != null) {
+				transportRoutingHelper.setFinalAndCurrentLocation(finish,
+						new LatLon(start.getLatitude(), start.getLongitude()));
 			} else {
-				recalculateCountInInterval = 0;
+				transportRoutingHelper.recalculateRouteDueToSettingsChange();
 			}
-			params.leftSide = settings.DRIVING_REGION.get().leftHandDriving;
-			params.fast = settings.FAST_ROUTE_MODE.getModeValue(mode);
-			params.type = settings.ROUTER_SERVICE.getModeValue(mode);
-			params.mode = mode;
-			params.ctx = app;
-			boolean updateProgress = false;
-			if (params.type == RouteService.OSMAND) {
-				params.calculationProgress = new RouteCalculationProgress();
-				updateProgress = true;
-			}
-			startRouteCalculationThread(params, paramsChanged, updateProgress);
-		}
-	}
-
-	public void startRouteCalculationThread(RouteCalculationParams params, boolean paramsChanged, boolean updateProgress) {
-		synchronized (this) {
-			final Thread prevRunningJob = currentRunningJob;
-			RouteRecalculationThread newThread = new RouteRecalculationThread(
-					"Calculating route", params, paramsChanged); //$NON-NLS-1$
-			currentRunningJob = newThread;
-			if (updateProgress) {
-				updateProgress(params);
-			}
-			if (prevRunningJob != null) {
-				newThread.setWaitPrevJob(prevRunningJob);
-			}
-			currentRunningJob.start();
-		}
-	}
-
-	private void updateProgress(final RouteCalculationParams params) {
-		final RouteCalculationProgressCallback progressRoute;
-		if (params.calculationProgressCallback != null) {
-			progressRoute = params.calculationProgressCallback;
 		} else {
-			progressRoute = this.progressRoute;
+			routeRecalculationHelper.recalculateRouteInBackground(lastFixedLocation, finalLocation,
+					intermediatePoints, currentGPXRoute, route, true, false);
 		}
-		if (progressRoute != null ) {
-			app.runInUIThread(new Runnable() {
+	}
 
-				@Override
-				public void run() {
-					RouteCalculationProgress calculationProgress = params.calculationProgress;
-					if (isRouteBeingCalculated()) {
-						float p = Math.max(calculationProgress.distanceFromBegin, calculationProgress.distanceFromEnd);
-						float all = calculationProgress.totalEstimatedDistance * 1.25f;
-						if (all > 0) {
-							int t = (int) Math.min(p * p / (all * all) * 100f, 99);
-							progressRoute.updateProgress(t);
-						} else {
-							progressRoute.updateProgress(0);
-						}
-						Thread t = currentRunningJob;
-						if(t instanceof RouteRecalculationThread && ((RouteRecalculationThread) t).params != params) {
-							// different calculation started
-							return;
-						} else {
-							if (calculationProgress.requestPrivateAccessRouting) {
-								progressRoute.requestPrivateAccessRouting();
-							}
-							updateProgress(params);
-						}
-					} else {
-						if (calculationProgress.requestPrivateAccessRouting) {
-							progressRoute.requestPrivateAccessRouting();
-						}
-						progressRoute.finish();
-					}
-				}
-			}, 300);
+	void updateOriginalRoute() {
+		if (originalRoute == null) {
+			originalRoute = route;
 		}
+	}
+
+	public void startRouteCalculationThread(RouteCalculationParams params) {
+		routeRecalculationHelper.startRouteCalculationThread(params, true, true);
 	}
 
 	public static void applyApplicationSettings(RouteCalculationParams params, OsmandSettings settings, ApplicationMode mode) {
 		params.leftSide = settings.DRIVING_REGION.get().leftHandDriving;
 		params.fast = settings.FAST_ROUTE_MODE.getModeValue(mode);
-		params.type = settings.ROUTER_SERVICE.getModeValue(mode);
 	}
 
 	public void setProgressBar(RouteCalculationProgressCallback progressRoute) {
-		this.progressRoute = progressRoute;
+		routeRecalculationHelper.setProgressBar(progressRoute);
 	}
 
-	public interface RouteCalculationProgressCallback {
-
-		// set visibility
-		public void updateProgress(int progress);
-		public void requestPrivateAccessRouting();
-		public void finish();
+	public boolean isPublicTransportMode() {
+		return mode.isDerivedRoutingFrom(ApplicationMode.PUBLIC_TRANSPORT);
 	}
 
-
-	public boolean isRouteBeingCalculated(){
-		return currentRunningJob instanceof RouteRecalculationThread;
+	public boolean isBoatMode() {
+		return mode.isDerivedRoutingFrom(ApplicationMode.BOAT);
 	}
 
-	private void showMessage(final String msg){
+	public boolean isOsmandRouting() {
+		return mode.getRouteService() == RouteService.OSMAND;
+	}
+
+	public boolean isRouteBeingCalculated() {
+		return routeRecalculationHelper.isRouteBeingCalculated();
+	}
+
+	private void showMessage(final String msg) {
 		app.runInUIThread(new Runnable() {
 			@Override
 			public void run() {
@@ -1042,22 +851,34 @@ public class RoutingHelper {
 		});
 	}
 
-
-	// NEVER returns null
+	@NonNull
 	public RouteCalculationResult getRoute() {
 		return route;
 	}
 
-	public GPXFile generateGPXFileWithRoute(){
-		return provider.createOsmandRouterGPX(route, app);
+	public GPXFile generateGPXFileWithRoute(String name) {
+		return generateGPXFileWithRoute(route, name);
 	}
 
+	public GPXFile generateGPXFileWithRoute(RouteCalculationResult route, String name) {
+		return provider.createOsmandRouterGPX(route, app, name);
+	}
+
+	public RoutingEnvironment getRoutingEnvironment(OsmandApplication ctx, ApplicationMode mode, LatLon start, LatLon end) throws IOException {
+		return provider.getRoutingEnvironment(ctx, mode, start, end);
+	}
+
+	public List<GpxPoint> generateGpxPoints(RoutingEnvironment env, GpxRouteApproximation gctx, LocationsHolder locationsHolder) {
+		return provider.generateGpxPoints(env, gctx, locationsHolder);
+	}
+
+	public GpxRouteApproximation calculateGpxApproximation(RoutingEnvironment env, GpxRouteApproximation gctx, List<GpxPoint> points, ResultMatcher<GpxRouteApproximation> resultMatcher) throws IOException, InterruptedException {
+		return provider.calculateGpxPointsApproximation(env, gctx, points, resultMatcher);
+	}
 
 	public void notifyIfRouteIsCalculated() {
-		if(route.isCalculated()) {
-			voiceRouter.newRouteIsCalculated(true)	;
+		if (route.isCalculated()) {
+			voiceRouter.newRouteIsCalculated(true);
 		}
 	}
-
-
 }

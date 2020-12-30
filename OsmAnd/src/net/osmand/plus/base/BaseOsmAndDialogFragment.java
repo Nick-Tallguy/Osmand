@@ -2,22 +2,23 @@ package net.osmand.plus.base;
 
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.ColorInt;
-import android.support.annotation.ColorRes;
-import android.support.annotation.DrawableRes;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.app.AppCompatActivity;
 import android.view.WindowManager;
 import android.widget.ImageView;
 
-import net.osmand.plus.IconsCache;
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
+import androidx.annotation.DrawableRes;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.DialogFragment;
+
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 
 public class BaseOsmAndDialogFragment extends DialogFragment {
 
-	private IconsCache iconsCache;
+	private UiUtilities iconsCache;
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -35,9 +36,9 @@ public class BaseOsmAndDialogFragment extends DialogFragment {
 		return (AppCompatActivity) getActivity();
 	}
 
-	protected IconsCache getIconsCache() {
+	protected UiUtilities getIconsCache() {
 		if (iconsCache == null) {
-			iconsCache = getMyApplication().getIconsCache();
+			iconsCache = getMyApplication().getUIUtilities();
 		}
 		return iconsCache;
 	}

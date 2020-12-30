@@ -1,36 +1,46 @@
 package net.osmand.plus.mapcontextmenu.controllers;
 
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.support.v4.app.Fragment;
+import android.text.SpannableString;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
 
 import net.osmand.data.Amenity;
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
 import net.osmand.data.TransportStop;
-import net.osmand.plus.MapMarkersHelper;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
+import net.osmand.plus.FavouritesDbHelper;
+import net.osmand.plus.mapmarkers.MapMarkersHelper;
+import net.osmand.plus.mapmarkers.MapMarker;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.base.FavoriteImageDrawable;
+import net.osmand.plus.base.PointImageDrawable;
+import net.osmand.plus.helpers.FontCache;
 import net.osmand.plus.mapcontextmenu.MenuController;
 import net.osmand.plus.mapcontextmenu.builders.FavouritePointMenuBuilder;
 import net.osmand.plus.mapcontextmenu.editors.FavoritePointEditor;
-import net.osmand.plus.mapcontextmenu.editors.FavoritePointEditorFragment;
+import net.osmand.plus.mapcontextmenu.editors.FavoritePointEditorFragmentNew;
 import net.osmand.plus.transport.TransportStopRoute;
+import net.osmand.plus.widgets.style.CustomTypefaceSpan;
 import net.osmand.util.Algorithms;
 import net.osmand.util.OpeningHoursParser;
+import net.osmand.view.GravityDrawable;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class FavouritePointMenuController extends MenuController {
 
 	private FavouritePoint fav;
 	private MapMarker mapMarker;
-	private List<TransportStopRoute> routes = new ArrayList<>();
 
-	public FavouritePointMenuController(MapActivity mapActivity, PointDescription pointDescription, final FavouritePoint fav) {
+	private TransportStopController transportStopController;
+
+	public FavouritePointMenuController(@NonNull MapActivity mapActivity, @NonNull PointDescription pointDescription, final @NonNull FavouritePoint fav) {
 		super(new FavouritePointMenuBuilder(mapActivity, fav), pointDescription, mapActivity);
 		this.fav = fav;
 
@@ -47,9 +57,8 @@ public class FavouritePointMenuController extends MenuController {
 		}
 		if (getObject() instanceof TransportStop) {
 			TransportStop stop = (TransportStop) getObject();
-			TransportStopController transportStopController = new TransportStopController(getMapActivity(), pointDescription, stop);
-			routes = transportStopController.processTransportStop();
-			builder.setRoutes(routes);
+			transportStopController = new TransportStopController(mapActivity, pointDescription, stop);
+			transportStopController.processRoutes();
 		}
 
 		Object originObject = getBuilder().getOriginObject();
@@ -72,15 +81,29 @@ public class FavouritePointMenuController extends MenuController {
 
 	@Override
 	public List<TransportStopRoute> getTransportStopRoutes() {
-		return routes;
+		if (transportStopController != null) {
+			return transportStopController.getTransportStopRoutes();
+		}
+		return null;
+	}
+
+	@Override
+	protected List<TransportStopRoute> getSubTransportStopRoutes(boolean nearby) {
+		if (transportStopController != null) {
+			return transportStopController.getSubTransportStopRoutes(nearby);
+		}
+		return null;
 	}
 
 	@Override
 	public boolean handleSingleTapOnMap() {
-		Fragment fragment = getMapActivity().getSupportFragmentManager().findFragmentByTag(FavoritePointEditor.TAG);
-		if (fragment != null) {
-			((FavoritePointEditorFragment)fragment).dismiss();
-			return true;
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			Fragment fragment = mapActivity.getSupportFragmentManager().findFragmentByTag(FavoritePointEditor.TAG);
+			if (fragment instanceof FavoritePointEditorFragmentNew) {
+				((FavoritePointEditorFragmentNew) fragment).dismiss();
+				return true;
+			}
 		}
 		return false;
 	}
@@ -102,7 +125,14 @@ public class FavouritePointMenuController extends MenuController {
 
 	@Override
 	public Drawable getRightIcon() {
-		return FavoriteImageDrawable.getOrCreate(getMapActivity().getMyApplication(), fav.getColor(), false);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return PointImageDrawable.getFromFavorite(mapActivity.getMyApplication(),
+					mapActivity.getMyApplication().getFavorites().getColorWithCategory(fav,
+							ContextCompat.getColor(mapActivity, R.color.color_favorite)), false, fav);
+		} else {
+			return null;
+		}
 	}
 
 	@Override
@@ -110,14 +140,55 @@ public class FavouritePointMenuController extends MenuController {
 		return mapMarker == null;
 	}
 
+	@NonNull
+	@Override
+	public String getNameStr() {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return fav.getDisplayName(mapActivity);
+		} else {
+			return super.getNameStr();
+		}
+	}
+
+	@NonNull
+	@Override
+	public CharSequence getSubtypeStr() {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null && !Algorithms.isEmpty(fav.getAddress())) {
+			Typeface typeface = FontCache.getRobotoRegular(mapActivity);
+			SpannableString addressSpannable = new SpannableString(fav.getAddress());
+			addressSpannable.setSpan(new CustomTypefaceSpan(typeface), 0, addressSpannable.length(), 0);
+
+			return addressSpannable;
+		} else {
+			return "";
+		}
+	}
+
 	@Override
 	public Drawable getSecondLineTypeIcon() {
-		return getIcon(R.drawable.ic_action_group_name_16, isLight() ? R.color.icon_color : R.color.ctx_menu_bottom_view_icon_dark);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			OsmandApplication app = mapActivity.getMyApplication();
+			FavouritesDbHelper helper = app.getFavorites();
+			String group = fav.getCategory();
+			Drawable line2icon = helper.getGroup(group) != null ? helper.getColoredIconForGroup(group) : null;
+			if (line2icon != null) {
+				GravityDrawable gravityIcon = new GravityDrawable(line2icon);
+				gravityIcon.setBoundsFrom(line2icon);
+				return gravityIcon;
+			} else {
+				int colorId = isLight() ? R.color.icon_color_default_light : R.color.ctx_menu_bottom_view_icon_dark;
+				return getIcon(R.drawable.ic_action_group_name_16, colorId);
+			}
+		}
+		return null;
 	}
 
 	@Override
 	public int getFavActionIconId() {
-		return R.drawable.map_action_edit_dark;
+		return R.drawable.ic_action_edit_dark;
 	}
 
 	@Override
@@ -126,9 +197,20 @@ public class FavouritePointMenuController extends MenuController {
 	}
 
 	@Override
+	public boolean isFavButtonEnabled() {
+		return !fav.isSpecialPoint();
+	}
+
+	@NonNull
+	@Override
 	public String getTypeStr() {
-		return fav.getCategory().length() == 0 ?
-				getMapActivity().getString(R.string.shared_string_favorites) : fav.getCategory();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return fav.getCategory().length() == 0 ?
+					mapActivity.getString(R.string.shared_string_favorites) : fav.getCategoryDisplayName(mapActivity);
+		} else {
+			return "";
+		}
 	}
 
 	private FavouritePointMenuBuilder getBuilder() {
@@ -142,8 +224,6 @@ public class FavouritePointMenuController extends MenuController {
 			if (originObject instanceof Amenity) {
 				AmenityMenuController.addTypeMenuItem((Amenity) originObject, builder);
 			}
-		} else {
-			addMyLocationToPlainItems(latLon);
 		}
 	}
 }

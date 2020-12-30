@@ -1,22 +1,29 @@
 package net.osmand.plus.quickaction.actions;
 
 import android.content.Context;
-import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.appcompat.widget.SwitchCompat;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.other.DestinationReachedMenu;
 import net.osmand.plus.quickaction.QuickAction;
+import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.routing.RoutingHelper;
 
 public class NavStartStopAction extends QuickAction {
 
-	public static final int TYPE = 25;
 	private static final String KEY_DIALOG = "dialog";
+	public static final QuickActionType TYPE = new QuickActionType(25,
+			"nav.startstop", NavStartStopAction .class).
+			nameRes(R.string.quick_action_start_stop_navigation).iconRes(R.drawable.ic_action_start_navigation).nonEditable().
+			category(QuickActionType.NAVIGATION);
+
+
 
 	public NavStartStopAction() {
 		super(TYPE);
@@ -82,9 +89,9 @@ public class NavStartStopAction extends QuickAction {
 		if (context instanceof MapActivity) {
 			RoutingHelper helper = ((MapActivity) context).getRoutingHelper();
 			if (!helper.isRoutePlanningMode() && !helper.isFollowingMode()) {
-				return ((MapActivity) context).getMapActions().getRouteMode(null).getSmallIconDark();
+				return ((MapActivity) context).getMapActions().getRouteMode(null).getIconRes();
 			}
-			return helper.getAppMode().getSmallIconDark();
+			return helper.getAppMode().getIconRes();
 		}
 		return super.getIconRes(context);
 	}

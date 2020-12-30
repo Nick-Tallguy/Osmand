@@ -1,8 +1,6 @@
 package net.osmand.plus.audionotes.adapters;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,8 +12,12 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.audionotes.AudioVideoNotesPlugin.Recording;
 import net.osmand.plus.audionotes.NotesFragment;
 
@@ -65,6 +67,8 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 	@NonNull
 	@Override
 	public View getView(final int position, View row, @NonNull ViewGroup parent) {
+		boolean nightMode = !app.getSettings().isLightContent();
+		Context themedCtx = UiUtilities.getThemedContext(getContext(), nightMode);
 		if (portrait) {
 			final int type = getItemViewType(position);
 			boolean header = type == TYPE_DATE_HEADER
@@ -73,7 +77,7 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 					|| type == TYPE_VIDEO_HEADER;
 
 			if (row == null) {
-				LayoutInflater inflater = (LayoutInflater) app.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+				LayoutInflater inflater = UiUtilities.getInflater(app, nightMode);
 				if (header) {
 					row = inflater.inflate(R.layout.list_item_header, parent, false);
 					HeaderViewHolder hHolder = new HeaderViewHolder(row);
@@ -96,16 +100,16 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 
 			return row;
 		} else {
-			LayoutInflater inflater = (LayoutInflater) app.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+			LayoutInflater inflater = UiUtilities.getInflater(app, nightMode);
 			boolean lastCard = getCardsCount() == position + 1;
 			int margin = app.getResources().getDimensionPixelSize(R.dimen.content_padding);
 			int sideMargin = app.getResources().getDisplayMetrics().widthPixels / 10;
 
-			FrameLayout fl = new FrameLayout(getContext());
-			LinearLayout ll = new LinearLayout(getContext());
+			FrameLayout fl = new FrameLayout(themedCtx);
+			LinearLayout ll = new LinearLayout(themedCtx);
 			fl.addView(ll);
 			ll.setOrientation(LinearLayout.VERTICAL);
-			ll.setBackgroundResource(app.getSettings().isLightContent() ? R.drawable.bg_card_light : R.drawable.bg_card_dark);
+			ll.setBackgroundResource(nightMode ? R.drawable.bg_card_dark : R.drawable.bg_card_light);
 			((FrameLayout.LayoutParams) ll.getLayoutParams()).setMargins(sideMargin, margin, sideMargin, lastCard ? margin : 0);
 
 			if (position == 0 && hasShareLocationItem()) {
@@ -201,7 +205,7 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 		return R.string.shared_string_video;
 	}
 
-	private void setupItem(int position, final Recording recording, final ItemViewHolder holder) {
+	private void setupItem(final int position, final Recording recording, final ItemViewHolder holder) {
 		setupBackground(holder.view);
 		if (recording == NotesFragment.SHARE_LOCATION_FILE) {
 			holder.title.setText(R.string.av_locations);
@@ -211,8 +215,8 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 			holder.description.setText(recording.getExtendedDescription(app));
 			int iconRes = recording.isAudio() ? R.drawable.ic_type_audio
 					: (recording.isVideo() ? R.drawable.ic_type_video : R.drawable.ic_type_img);
-			int colorRes = app.getSettings().isLightContent() ? R.color.icon_color : R.color.ctx_menu_info_text_dark;
-			holder.icon.setImageDrawable(app.getIconsCache().getIcon(iconRes, colorRes));
+			int colorRes = app.getSettings().isLightContent() ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
+			holder.icon.setImageDrawable(app.getUIUtilities().getIcon(iconRes, colorRes));
 		}
 
 		holder.bottomDivider.setVisibility(hideBottomDivider(position) ? View.GONE : View.VISIBLE);
@@ -230,7 +234,7 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 				}
 			});
 		} else {
-			holder.options.setImageDrawable(app.getIconsCache().getThemedIcon(R.drawable.ic_overflow_menu_white));
+			holder.options.setImageDrawable(app.getUIUtilities().getThemedIcon(R.drawable.ic_overflow_menu_white));
 			holder.options.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
@@ -248,7 +252,7 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 					holder.checkBox.performClick();
 				} else {
 					if (listener != null) {
-						listener.onItemClick(recording);
+						listener.onItemClick(recording, position);
 					}
 				}
 			}
@@ -368,7 +372,7 @@ public class NotesAdapter extends ArrayAdapter<Object> {
 
 		void onCheckBoxClick(Recording rec, boolean checked);
 
-		void onItemClick(Recording rec);
+		void onItemClick(Recording rec, int position);
 
 		void onOptionsClick(Recording rec);
 	}

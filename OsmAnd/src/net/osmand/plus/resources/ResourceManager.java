@@ -5,11 +5,12 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.database.sqlite.SQLiteException;
 import android.os.HandlerThread;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.format.DateFormat;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import net.osmand.AndroidUtils;
 import net.osmand.GeoidAltitudeCorrection;
@@ -23,6 +24,7 @@ import net.osmand.binary.BinaryMapIndexReader.SearchPoiTypeFilter;
 import net.osmand.binary.CachedOsmandIndexes;
 import net.osmand.data.Amenity;
 import net.osmand.data.RotatedTileBox;
+import net.osmand.data.TransportRoute;
 import net.osmand.data.TransportStop;
 import net.osmand.map.ITileSource;
 import net.osmand.map.MapTileDownloader;
@@ -30,12 +32,16 @@ import net.osmand.map.MapTileDownloader.DownloadRequest;
 import net.osmand.map.OsmandRegions;
 import net.osmand.osm.MapPoiTypes;
 import net.osmand.osm.PoiCategory;
+import net.osmand.osm.PoiType;
 import net.osmand.plus.AppInitializer;
 import net.osmand.plus.AppInitializer.InitEvents;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
 import net.osmand.plus.R;
 import net.osmand.plus.Version;
+import net.osmand.plus.download.DownloadOsmandIndexesHelper;
+import net.osmand.plus.download.DownloadOsmandIndexesHelper.AssetEntry;
+import net.osmand.plus.inapp.InAppPurchaseHelper;
 import net.osmand.plus.render.MapRenderRepositories;
 import net.osmand.plus.render.NativeOsmandLibrary;
 import net.osmand.plus.resources.AsyncLoadingThread.MapLoadRequest;
@@ -43,13 +49,12 @@ import net.osmand.plus.resources.AsyncLoadingThread.OnMapLoadedListener;
 import net.osmand.plus.resources.AsyncLoadingThread.TileLoadDownloadRequest;
 import net.osmand.plus.srtmplugin.SRTMPlugin;
 import net.osmand.plus.views.OsmandMapLayer.DrawSettings;
+import net.osmand.router.TransportStopsRouteReader;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
 
 import org.apache.commons.logging.Log;
-import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -61,11 +66,16 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static net.osmand.IndexConstants.VOICE_INDEX_DIR;
 
 /**
  * Resource manager is responsible to work with all resources 
@@ -105,7 +115,8 @@ public class ResourceManager {
 		TRANSPORT,
 		ADDRESS,
 		QUICK_SEARCH, 
-		ROUTING
+		ROUTING,
+		TRANSPORT_ROUTING
 	}
 	
 	public static class BinaryMapReaderResource {
@@ -113,6 +124,7 @@ public class ResourceManager {
 		private File filename;
 		private List<BinaryMapIndexReader> readers = new ArrayList<>(BinaryMapReaderResourceType.values().length);
 		private boolean useForRouting;
+		private boolean useForPublicTransport;
 		public BinaryMapReaderResource(File f, BinaryMapIndexReader initialReader) {
 			this.filename = f;
 			this.initialReader = initialReader;
@@ -120,17 +132,18 @@ public class ResourceManager {
 				readers.add(null);
 			}
 		}
-		
+
+		@Nullable
 		public BinaryMapIndexReader getReader(BinaryMapReaderResourceType type) {
 			BinaryMapIndexReader r = readers.get(type.ordinal());
-			if(r == null) {
+			BinaryMapIndexReader initialReader = this.initialReader;
+			if (r == null && initialReader != null) {
 				try {
 					RandomAccessFile raf = new RandomAccessFile(filename, "r");
 					r = new BinaryMapIndexReader(raf, initialReader);
 					readers.set(type.ordinal(), r);
 				} catch (IOException e) {
 					log.error("Fail to initialize " + filename.getName(), e);
-					e.printStackTrace();
 				}
 			}
 			return r;
@@ -140,16 +153,20 @@ public class ResourceManager {
 			return filename.getName();
 		}
 
-		
+		public long getFileLastModified() {
+			return filename.lastModified();
+		}
+
 		// should not use methods to read from file!
+		@Nullable
 		public BinaryMapIndexReader getShallowReader() {
 			return initialReader;
 		}
 
 		public void close() {
 			close(initialReader);
-			for(BinaryMapIndexReader rr : readers) {
-				if(rr != null) {
+			for (BinaryMapIndexReader rr : readers) {
+				if (rr != null) {
 					close(rr);
 				}
 			}
@@ -165,7 +182,6 @@ public class ResourceManager {
 				r.close();
 			} catch (IOException e) {
 				log.error("Fail to close " + filename.getName(), e);
-				e.printStackTrace();
 			}
 		}
 
@@ -176,6 +192,14 @@ public class ResourceManager {
 		public boolean isUseForRouting() {
 			return useForRouting;
 		}
+
+		public boolean isUseForPublicTransport() {
+			return useForPublicTransport;
+		}
+
+		public void setUseForPublicTransport(boolean useForPublicTransport) {
+			this.useForPublicTransport = useForPublicTransport;
+		}
 	}
 	
 	protected final Map<String, BinaryMapReaderResource> fileReaders = new ConcurrentHashMap<String, BinaryMapReaderResource>();
@@ -184,8 +208,8 @@ public class ResourceManager {
 	private final Map<String, RegionAddressRepository> addressMap = new ConcurrentHashMap<String, RegionAddressRepository>();
 	protected final Map<String, AmenityIndexRepository> amenityRepositories =  new ConcurrentHashMap<String, AmenityIndexRepository>();
 //	protected final Map<String, BinaryMapIndexReader> routingMapFiles = new ConcurrentHashMap<String, BinaryMapIndexReader>();
-	protected final Map<String, TransportIndexRepository> transportRepositories = new ConcurrentHashMap<String, TransportIndexRepository>();
-	
+	protected final Map<String, BinaryMapReaderResource> transportRepositories = new ConcurrentHashMap<String, BinaryMapReaderResource>();
+	protected final Map<String, BinaryMapReaderResource> travelRepositories = new ConcurrentHashMap<String, BinaryMapReaderResource>();
 	protected final Map<String, String> indexFileNames = new ConcurrentHashMap<String, String>();
 	protected final Map<String, String> basemapFileNames = new ConcurrentHashMap<String, String>();
 	
@@ -201,7 +225,6 @@ public class ResourceManager {
 	private HandlerThread renderingBufferImageThread;
 	
 	protected boolean internetIsNotAccessible = false;
-	private java.text.DateFormat dateFormat;
 	private boolean depthContours;
 	
 	public ResourceManager(OsmandApplication context) {
@@ -219,7 +242,6 @@ public class ResourceManager {
 		renderingBufferImageThread.start();
 
 		tileDownloader = MapTileDownloader.getInstance(Version.getFullVersion(context));
-		dateFormat = DateFormat.getDateFormat(context);
 		resetStoreDirectory();
 
 		WindowManager mgr = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
@@ -230,6 +252,11 @@ public class ResourceManager {
 		float tiles = (dm.widthPixels / 256 + 2) * (dm.heightPixels / 256 + 2) * 3;
 		log.info("Bitmap tiles to load in memory : " + tiles);
 		bitmapTilesCache.setMaxCacheSize((int) (tiles));
+
+		File path = context.getAppPath(IndexConstants.ROUTING_PROFILES_DIR);
+		if (!path.exists()) {
+			path.mkdir();
+		}
 	}
 
 	public BitmapTilesCache getBitmapTilesCache() {
@@ -273,7 +300,7 @@ public class ResourceManager {
 	}
 	
 	public java.text.DateFormat getDateFormat() {
-		return dateFormat;
+		return DateFormat.getDateFormat(context);
 	}
 	
 	public OsmandApplication getContext() {
@@ -375,18 +402,21 @@ public class ResourceManager {
 	}
 
 
-	public List<String> indexVoiceFiles(IProgress progress){
-		File file = context.getAppPath(IndexConstants.VOICE_INDEX_DIR);
+	public List<String> indexVoiceFiles(IProgress progress) {
+		File file = context.getAppPath(VOICE_INDEX_DIR);
 		file.mkdirs();
 		List<String> warnings = new ArrayList<String>();
 		if (file.exists() && file.canRead()) {
 			File[] lf = file.listFiles();
 			if (lf != null) {
+				java.text.DateFormat dateFormat = getDateFormat();
 				for (File f : lf) {
 					if (f.isDirectory()) {
-						File conf = new File(f, "_config.p");
+						String lang = f.getName().replace(IndexConstants.VOICE_PROVIDER_SUFFIX, "");
+						File conf = new File(f, lang + "_" + IndexConstants.TTSVOICE_INDEX_EXT_JS);
 						if (!conf.exists()) {
-							conf = new File(f, "_ttsconfig.p");
+							conf = new File(f, "_config.p");
+							conf = conf.exists() ? conf : new File(f, "_ttsconfig.p");
 						}
 						if (conf.exists()) {
 							indexFileNames.put(f.getName(), dateFormat.format(conf.lastModified())); //$NON-NLS-1$
@@ -405,6 +435,7 @@ public class ResourceManager {
 		if (file.exists() && file.canRead()) {
 			File[] lf = file.listFiles();
 			if (lf != null) {
+				java.text.DateFormat dateFormat = getDateFormat();
 				for (File f : lf) {
 					if (!f.isDirectory()) {
 						indexFileNames.put(f.getName(), dateFormat.format(f.lastModified()));
@@ -414,9 +445,39 @@ public class ResourceManager {
 		}
 		return warnings;
 	}
+
+	public void copyMissingJSAssets() {
+		try {
+			List<AssetEntry> assets = DownloadOsmandIndexesHelper.getBundledAssets(context.getAssets());
+			File appPath = context.getAppPath(null);
+			if (appPath.canWrite()) {
+				for (AssetEntry asset : assets) {
+					File jsFile = new File(appPath, asset.destination);
+					if (asset.destination.contains(IndexConstants.VOICE_PROVIDER_SUFFIX) && asset.destination
+							.endsWith(IndexConstants.TTSVOICE_INDEX_EXT_JS)) {
+						File oggFile = new File(appPath, asset.destination.replace(
+								IndexConstants.VOICE_PROVIDER_SUFFIX, ""));
+						if (oggFile.getParentFile().exists() && !oggFile.exists()) {
+							copyAssets(context.getAssets(), asset.source, oggFile);
+						}
+					}
+					if (jsFile.getParentFile().exists() && !jsFile.exists()) {
+						copyAssets(context.getAssets(), asset.source, jsFile);
+					}
+				}
+			}
+		} catch (XmlPullParserException e) {
+			log.error("Error while loading tts files from assets", e);
+		} catch (IOException e) {
+			log.error("Error while loading tts files from assets", e);
+		}
+	}
 	
 	public List<String> checkAssets(IProgress progress, boolean forceUpdate) {
 		String fv = Version.getFullVersion(context);
+		if(context.getAppInitializer().isAppVersionChanged()) {
+			copyMissingJSAssets();
+		}
 		if (!fv.equalsIgnoreCase(context.getSettings().PREVIOUS_INSTALLED_VERSION.get()) || forceUpdate) {
 			File applicationDataDir = context.getAppPath(null);
 			applicationDataDir.mkdirs();
@@ -424,7 +485,7 @@ public class ResourceManager {
 				try {
 					progress.startTask(context.getString(R.string.installing_new_resources), -1);
 					AssetManager assetManager = context.getAssets();
-					boolean isFirstInstall = context.getSettings().PREVIOUS_INSTALLED_VERSION.get().equals("");
+					boolean isFirstInstall = context.getSettings().PREVIOUS_INSTALLED_VERSION.get().isEmpty();
 					unpackBundledAssets(assetManager, applicationDataDir, progress, isFirstInstall || forceUpdate);
 					context.getSettings().PREVIOUS_INSTALLED_VERSION.set(fv);
 					copyRegionsBoundaries();
@@ -463,7 +524,7 @@ public class ResourceManager {
 	
 	private void copyPoiTypes() {
 		try {
-			File file = context.getAppPath("poi_types.xml");
+			File file = context.getAppPath(IndexConstants.SETTINGS_DIR + "poi_types.xml");
 			if (file != null) {
 				FileOutputStream fout = new FileOutputStream(file);
 				Algorithms.streamCopy(MapPoiTypes.class.getResourceAsStream("poi_types.xml"), fout);
@@ -479,54 +540,43 @@ public class ResourceManager {
 	private final static String ASSET_COPY_MODE__alwaysOverwriteOrCopy = "alwaysOverwriteOrCopy";
 	private final static String ASSET_COPY_MODE__copyOnlyIfDoesNotExist = "copyOnlyIfDoesNotExist";
 	private void unpackBundledAssets(AssetManager assetManager, File appDataDir, IProgress progress, boolean isFirstInstall) throws IOException, XmlPullParserException {
-		XmlPullParser xmlParser = XmlPullParserFactory.newInstance().newPullParser(); 
-		InputStream isBundledAssetsXml = assetManager.open("bundled_assets.xml");
-		xmlParser.setInput(isBundledAssetsXml, "UTF-8");
-		
-		int next = 0;
-		while ((next = xmlParser.next()) != XmlPullParser.END_DOCUMENT) {
-			if (next == XmlPullParser.START_TAG && xmlParser.getName().equals("asset")) {
-				final String source = xmlParser.getAttributeValue(null, "source");
-				final String destination = xmlParser.getAttributeValue(null, "destination");
-				final String combinedMode = xmlParser.getAttributeValue(null, "mode");
-				
-				final String[] modes = combinedMode.split("\\|");
-				if(modes.length == 0) {
-					log.error("Mode '" + combinedMode + "' is not valid");
-					continue;
-				}
-				String installMode = null;
-				String copyMode = null;
-				for(String mode : modes) {
-					if(ASSET_INSTALL_MODE__alwaysCopyOnFirstInstall.equals(mode))
-						installMode = mode;
-					else if(ASSET_COPY_MODE__overwriteOnlyIfExists.equals(mode) ||
-							ASSET_COPY_MODE__alwaysOverwriteOrCopy.equals(mode) ||
-							ASSET_COPY_MODE__copyOnlyIfDoesNotExist.equals(mode))
-						copyMode = mode;
-					else
-						log.error("Mode '" + mode + "' is unknown");
-				}
-				
-				final File destinationFile = new File(appDataDir, destination);
-				
-				boolean unconditional = false;
-				if(installMode != null)
-					unconditional = unconditional || (ASSET_INSTALL_MODE__alwaysCopyOnFirstInstall.equals(installMode) && isFirstInstall);
-				if(copyMode == null)
-					log.error("No copy mode was defined for " + source);
-				unconditional = unconditional || ASSET_COPY_MODE__alwaysOverwriteOrCopy.equals(copyMode);
-				
-				boolean shouldCopy = unconditional;
-				shouldCopy = shouldCopy || (ASSET_COPY_MODE__overwriteOnlyIfExists.equals(copyMode) && destinationFile.exists());
-				shouldCopy = shouldCopy || (ASSET_COPY_MODE__copyOnlyIfDoesNotExist.equals(copyMode) && !destinationFile.exists());
-				
-				if(shouldCopy)
-					copyAssets(assetManager, source, destinationFile);
+		List<AssetEntry> assetEntries = DownloadOsmandIndexesHelper.getBundledAssets(assetManager);
+		for (AssetEntry asset : assetEntries) {
+			final String[] modes = asset.combinedMode.split("\\|");
+			if (modes.length == 0) {
+				log.error("Mode '" + asset.combinedMode + "' is not valid");
+				continue;
+			}
+			String installMode = null;
+			String copyMode = null;
+			for (String mode : modes) {
+				if (ASSET_INSTALL_MODE__alwaysCopyOnFirstInstall.equals(mode))
+					installMode = mode;
+				else if (ASSET_COPY_MODE__overwriteOnlyIfExists.equals(mode) ||
+						ASSET_COPY_MODE__alwaysOverwriteOrCopy.equals(mode) ||
+						ASSET_COPY_MODE__copyOnlyIfDoesNotExist.equals(mode))
+					copyMode = mode;
+				else
+					log.error("Mode '" + mode + "' is unknown");
+			}
+
+			final File destinationFile = new File(appDataDir, asset.destination);
+
+			boolean unconditional = false;
+			if (installMode != null)
+				unconditional = unconditional || (ASSET_INSTALL_MODE__alwaysCopyOnFirstInstall.equals(installMode) && isFirstInstall);
+			if (copyMode == null)
+				log.error("No copy mode was defined for " + asset.source);
+			unconditional = unconditional || ASSET_COPY_MODE__alwaysOverwriteOrCopy.equals(copyMode);
+
+			boolean shouldCopy = unconditional;
+			shouldCopy = shouldCopy || (ASSET_COPY_MODE__overwriteOnlyIfExists.equals(copyMode) && destinationFile.exists());
+			shouldCopy = shouldCopy || (ASSET_COPY_MODE__copyOnlyIfDoesNotExist.equals(copyMode) && !destinationFile.exists());
+
+			if (shouldCopy) {
+				copyAssets(assetManager, asset.source, destinationFile);
 			}
 		}
-		
-		isBundledAssetsXml.close();
 	}
 
 	public static void copyAssets(AssetManager assetManager, String assetName, File file) throws IOException {
@@ -581,10 +631,11 @@ public class ResourceManager {
 		collectFiles(appPath, IndexConstants.BINARY_MAP_INDEX_EXT, files);
 		renameRoadsFiles(files, roadsPath);
 		collectFiles(roadsPath, IndexConstants.BINARY_MAP_INDEX_EXT, files);
-		if (!Version.isFreeVersion(context) || context.getSettings().FULL_VERSION_PURCHASED.get()) {
+		if (Version.isPaidVersion(context)) {
 			collectFiles(context.getAppPath(IndexConstants.WIKI_INDEX_DIR), IndexConstants.BINARY_MAP_INDEX_EXT, files);
+			collectFiles(context.getAppPath(IndexConstants.WIKIVOYAGE_INDEX_DIR), IndexConstants.BINARY_TRAVEL_GUIDE_MAP_INDEX_EXT, files);
 		}
-		if (OsmandPlugin.getEnabledPlugin(SRTMPlugin.class) != null) {
+		if (OsmandPlugin.getEnabledPlugin(SRTMPlugin.class) != null || InAppPurchaseHelper.isSubscribedToLiveUpdates(context)) {
 			collectFiles(context.getAppPath(IndexConstants.SRTM_INDEX_DIR), IndexConstants.BINARY_MAP_INDEX_EXT, files);
 		}
 		
@@ -604,6 +655,34 @@ public class ResourceManager {
 		}
 		File liveDir = context.getAppPath(IndexConstants.LIVE_INDEX_DIR);
 		depthContours = false;
+		File worldBasemapStd = null;
+		File worldBasemapDetailed = null;
+		File worldBasemapMini = null;
+		for (File f : files) {
+			if (f.getName().equals("World_basemap.obf")) {
+				worldBasemapStd = f;
+			}
+			if (f.getName().startsWith("World_basemap_mini")) {
+				worldBasemapMini = f;
+			}
+			if (f.getName().startsWith("World_basemap_detailed")) {
+				worldBasemapDetailed = f;
+			}
+		}
+
+		if (worldBasemapDetailed != null) {
+			if (worldBasemapStd != null) {
+				files.remove(worldBasemapStd);
+			}
+			if (worldBasemapMini != null) {
+				files.remove(worldBasemapMini);
+			}
+
+		} else if (worldBasemapStd != null && worldBasemapMini != null) {
+			files.remove(worldBasemapMini);
+		}
+
+		java.text.DateFormat dateFormat = getDateFormat();
 		for (File f : files) {
 			progress.startTask(context.getString(R.string.indexing_map) + " " + f.getName(), -1); //$NON-NLS-1$
 			try {
@@ -618,7 +697,7 @@ public class ResourceManager {
 				}
 				boolean wikiMap = (f.getName().contains("_wiki") || f.getName().contains(IndexConstants.BINARY_WIKI_MAP_INDEX_EXT));
 				boolean srtmMap = f.getName().contains(IndexConstants.BINARY_SRTM_MAP_INDEX_EXT);
-				if (mapReader == null || (Version.isFreeVersion(context) && wikiMap && !context.getSettings().FULL_VERSION_PURCHASED.get())) {
+				if (mapReader == null || (!Version.isPaidVersion(context) && wikiMap)) {
 					warnings.add(MessageFormat.format(context.getString(R.string.version_index_is_not_supported), f.getName())); //$NON-NLS-1$
 				} else {
 					if (mapReader.isBasemap()) {
@@ -647,28 +726,29 @@ public class ResourceManager {
 					}
 					renderer.initializeNewResource(progress, f, mapReader);
 					BinaryMapReaderResource resource = new BinaryMapReaderResource(f, mapReader);
-					
+					if (collectTravelFiles(resource)){
+						//travel files are indexed
+						continue;
+					}
 					fileReaders.put(f.getName(), resource);
 					if (!mapReader.getRegionNames().isEmpty()) {
 						RegionAddressRepositoryBinary rarb = new RegionAddressRepositoryBinary(this, resource);
 						addressMap.put(f.getName(), rarb);
 					}
 					if (mapReader.hasTransportData()) {
-						transportRepositories.put(f.getName(), new TransportIndexRepositoryBinary(resource));
+						transportRepositories.put(f.getName(), resource);
 					}
 					// disable osmc for routing temporarily due to some bugs
 					if (mapReader.containsRouteData() && (!f.getParentFile().equals(liveDir) || 
 							context.getSettings().USE_OSM_LIVE_FOR_ROUTING.get())) {
 						resource.setUseForRouting(true);
 					}
+					if (mapReader.hasTransportData() && (!f.getParentFile().equals(liveDir) ||
+							context.getSettings().USE_OSM_LIVE_FOR_PUBLIC_TRANSPORT.get())) {
+						resource.setUseForPublicTransport(true);
+					}
 					if (mapReader.containsPoiData()) {
-						try {
-							RandomAccessFile raf = new RandomAccessFile(f, "r"); //$NON-NLS-1$
-							amenityRepositories.put(f.getName(), new AmenityIndexRepositoryBinary(new BinaryMapIndexReader(raf, mapReader)));
-						} catch (IOException e) {
-							log.error("Exception reading " + f.getAbsolutePath(), e); //$NON-NLS-1$
-							warnings.add(MessageFormat.format(context.getString(R.string.version_index_is_not_supported), f.getName())); //$NON-NLS-1$
-						}
+						amenityRepositories.put(f.getName(), new AmenityIndexRepositoryBinary(resource, context));
 					}
 				}
 			} catch (SQLiteException e) {
@@ -678,6 +758,34 @@ public class ResourceManager {
 				log.error("Exception reading " + f.getAbsolutePath(), oome); //$NON-NLS-1$
 				warnings.add(MessageFormat.format(context.getString(R.string.version_index_is_big_for_memory), f.getName()));
 			}
+		}
+		Map<PoiCategory, Map<String, PoiType>> toAddPoiTypes = new HashMap<>();
+		for (AmenityIndexRepository repo : amenityRepositories.values()) {
+			Map<String, List<String>> categories = ((AmenityIndexRepositoryBinary) repo).getDeltaPoiCategories();
+			if (!categories.isEmpty()) {
+				for (Map.Entry<String, List<String>> entry : categories.entrySet()) {
+					PoiCategory poiCategory = context.getPoiTypes().getPoiCategoryByName(entry.getKey(), true);
+					if (!toAddPoiTypes.containsKey(poiCategory)) {
+						toAddPoiTypes.put(poiCategory, new TreeMap<String, PoiType>());
+					}
+					Map<String, PoiType> poiTypes = toAddPoiTypes.get(poiCategory);
+					if (poiTypes != null) {
+						for (String s : entry.getValue()) {
+							PoiType pt = new PoiType(MapPoiTypes.getDefault(), poiCategory, null, s);
+							pt.setOsmTag("");
+							pt.setOsmValue("");
+							pt.setNotEditableOsm(true);
+							poiTypes.put(s, pt);
+						}
+					}
+				}
+			}
+		}
+		Iterator<Entry<PoiCategory, Map<String, PoiType>>> it = toAddPoiTypes.entrySet().iterator();
+		while(it.hasNext()) {
+			Entry<PoiCategory, Map<String, PoiType>> next = it.next();
+			PoiCategory category = next.getKey();
+			category.addExtraPoiTypes(next.getValue());
 		}
 		log.debug("All map files initialized " + (System.currentTimeMillis() - val) + " ms");
 		if (files.size() > 0 && (!indCache.exists() || indCache.canWrite())) {
@@ -693,7 +801,43 @@ public class ResourceManager {
 		return warnings;
 	}
 
-	
+	public List<BinaryMapIndexReader> getTravelRepositories() {
+		List<String> fileNames = new ArrayList<>(travelRepositories.keySet());
+		Collections.sort(fileNames, Algorithms.getStringVersionComparator());
+		List<BinaryMapIndexReader> res = new ArrayList<>();
+		for (String fileName : fileNames) {
+			BinaryMapReaderResource r = travelRepositories.get(fileName);
+			if (r != null) {
+				res.add(r.getReader(BinaryMapReaderResourceType.POI));
+			}
+		}
+		return res;
+	}
+
+	public List<BinaryMapIndexReader> getTravelRepositories(double topLat, double leftLon, double bottomLat, double rightLon) {
+		List<String> fileNames = new ArrayList<>(travelRepositories.keySet());
+		Collections.sort(fileNames, Algorithms.getStringVersionComparator());
+		int leftX31 = MapUtils.get31TileNumberX(leftLon);
+		int topX31 = MapUtils.get31TileNumberY(topLat);
+		int rightX31 = MapUtils.get31TileNumberX(rightLon);
+		int bottomX31 = MapUtils.get31TileNumberY(bottomLat);
+		List<BinaryMapIndexReader> res = new ArrayList<>();
+		for (String fileName : fileNames) {
+			BinaryMapReaderResource r = travelRepositories.get(fileName);
+			if (r != null && r.getShallowReader().containsPoiData(leftX31, topX31, rightX31, bottomX31)) {
+				res.add(r.getReader(BinaryMapReaderResourceType.POI));
+			}
+		}
+		return res;
+	}
+
+	private boolean collectTravelFiles(BinaryMapReaderResource resource) {
+		if (resource.getFileName().contains(IndexConstants.BINARY_TRAVEL_GUIDE_MAP_INDEX_EXT)){
+			travelRepositories.put(resource.getFileName(), resource);
+			return true;
+		}
+		return false;
+	}
 
 	public void initMapBoundariesCacheNative() {
 		File indCache = context.getAppPath(INDEXES_CACHE);
@@ -706,6 +850,20 @@ public class ResourceManager {
 	}
 	
 	////////////////////////////////////////////// Working with amenities ////////////////////////////////////////////////
+
+	public List<AmenityIndexRepository> getAmenityRepositories() {
+		List<String> fileNames = new ArrayList<>(amenityRepositories.keySet());
+		Collections.sort(fileNames, Algorithms.getStringVersionComparator());
+		List<AmenityIndexRepository> res = new ArrayList<>();
+		for (String fileName : fileNames) {
+			AmenityIndexRepository r = amenityRepositories.get(fileName);
+			if (r != null) {
+				res.add(r);
+			}
+		}
+		return res;
+	}
+
 	public List<Amenity> searchAmenities(SearchPoiTypeFilter filter,
 			double topLatitude, double leftLongitude, double bottomLatitude, double rightLongitude, int zoom, final ResultMatcher<Amenity> matcher) {
 		final List<Amenity> amenities = new ArrayList<Amenity>();
@@ -716,14 +874,11 @@ public class ResourceManager {
 				int left31 = MapUtils.get31TileNumberX(leftLongitude);
 				int bottom31 = MapUtils.get31TileNumberY(bottomLatitude);
 				int right31 = MapUtils.get31TileNumberX(rightLongitude);
-				List<String> fileNames = new ArrayList<>(amenityRepositories.keySet());
-				Collections.sort(fileNames, Algorithms.getStringVersionComparator());
-				for (String name : fileNames) {
+				for (AmenityIndexRepository index : getAmenityRepositories()) {
 					if (matcher != null && matcher.isCancelled()) {
 						searchAmenitiesInProgress = false;
 						break;
 					}
-					AmenityIndexRepository index = amenityRepositories.get(name);
 					if (index != null && index.checkContainsInt(top31, left31, bottom31, right31)) {
 						List<Amenity> r = index.searchAmenities(top31,
 								left31, bottom31, right31, zoom, filter, matcher);
@@ -757,7 +912,7 @@ public class ResourceManager {
 					rightLongitude = Math.max(rightLongitude, l.getLongitude());
 				}
 				if (!filter.isEmpty()) {
-					for (AmenityIndexRepository index : amenityRepositories.values()) {
+					for (AmenityIndexRepository index : getAmenityRepositories()) {
 						if (index.checkContainsInt(
 								MapUtils.get31TileNumberY(topLatitude), 
 								MapUtils.get31TileNumberX(leftLongitude), 
@@ -784,7 +939,7 @@ public class ResourceManager {
 	
 	
 	public boolean containsAmenityRepositoryToSearch(boolean searchByName){
-		for (AmenityIndexRepository index : amenityRepositories.values()) {
+		for (AmenityIndexRepository index : getAmenityRepositories()) {
 			if(searchByName){
 				if(index instanceof AmenityIndexRepositoryBinary){
 					return true;
@@ -805,7 +960,7 @@ public class ResourceManager {
 		int top = MapUtils.get31TileNumberY(topLatitude);
 		int right = MapUtils.get31TileNumberX(rightLongitude);
 		int bottom = MapUtils.get31TileNumberY(bottomLatitude);
-		for (AmenityIndexRepository index : amenityRepositories.values()) {
+		for (AmenityIndexRepository index : getAmenityRepositories()) {
 			if (matcher != null && matcher.isCancelled()) {
 				break;
 			}
@@ -841,7 +996,7 @@ public class ResourceManager {
 	
 	public Map<PoiCategory, List<String>> searchAmenityCategoriesByName(String searchQuery, double lat, double lon) {
 		Map<PoiCategory, List<String>> map = new LinkedHashMap<PoiCategory, List<String>>();
-		for (AmenityIndexRepository index : amenityRepositories.values()) {
+		for (AmenityIndexRepository index : getAmenityRepositories()) {
 			if (index instanceof AmenityIndexRepositoryBinary) {
 				if (index.checkContains(lat, lon)) {
 					((AmenityIndexRepositoryBinary) index).searchAmenityCategoriesByName(searchQuery, map);
@@ -850,7 +1005,10 @@ public class ResourceManager {
 		}
 		return map;
 	}
-	
+
+	public AmenityIndexRepositoryBinary getAmenityRepositoryByFileName(String filename) {
+		return (AmenityIndexRepositoryBinary) amenityRepositories.get(filename);
+	}
 	
 	////////////////////////////////////////////// Working with address ///////////////////////////////////////////
 	
@@ -863,39 +1021,60 @@ public class ResourceManager {
 	}
 	
 	public Collection<BinaryMapReaderResource> getFileReaders() {
-		return fileReaders.values();
+		List<String> fileNames = new ArrayList<>(fileReaders.keySet());
+		Collections.sort(fileNames, Algorithms.getStringVersionComparator());
+		List<BinaryMapReaderResource> res = new ArrayList<>();
+		for (String fileName : fileNames) {
+			BinaryMapReaderResource r = fileReaders.get(fileName);
+			if (r != null) {
+				res.add(r);
+			}
+		}
+		return res;
 	}
 	
 	
 	////////////////////////////////////////////// Working with transport ////////////////////////////////////////////////
-	public List<TransportIndexRepository> searchTransportRepositories(double latitude, double longitude) {
-		List<TransportIndexRepository> repos = new ArrayList<TransportIndexRepository>();
-		for (TransportIndexRepository index : transportRepositories.values()) {
-			if (index.checkContains(latitude,longitude)) {
-				repos.add(index);
+
+	private List<BinaryMapIndexReader> getTransportRepositories(double topLat, double leftLon, double bottomLat, double rightLon) {
+		List<String> fileNames = new ArrayList<>(transportRepositories.keySet());
+		Collections.sort(fileNames, Algorithms.getStringVersionComparator());
+		List<BinaryMapIndexReader> res = new ArrayList<>();
+		for (String fileName : fileNames) {
+			BinaryMapReaderResource r = transportRepositories.get(fileName);
+			if (r != null && r.isUseForPublicTransport() &&
+					r.getShallowReader().containTransportData(topLat, leftLon, bottomLat, rightLon)) {
+				res.add(r.getReader(BinaryMapReaderResourceType.TRANSPORT));
 			}
 		}
-		return repos;
+		return res;
 	}
-	
-	
-	public List<TransportStop> searchTransportSync(double topLatitude, double leftLongitude, double bottomLatitude, double rightLongitude, ResultMatcher<TransportStop> matcher){
-		List<TransportIndexRepository> repos = new ArrayList<TransportIndexRepository>();
+
+
+	public List<TransportStop> searchTransportSync(double topLat, double leftLon, double bottomLat, double rightLon,
+												   ResultMatcher<TransportStop> matcher) throws IOException {
+		TransportStopsRouteReader readers =
+				new TransportStopsRouteReader(getTransportRepositories(topLat, leftLon, bottomLat, rightLon));
 		List<TransportStop> stops = new ArrayList<>();
-		for (TransportIndexRepository index : transportRepositories.values()) {
-			if (index.checkContains(topLatitude, leftLongitude, bottomLatitude, rightLongitude)) {
-				repos.add(index);
-			}
-		}
-		if(!repos.isEmpty()){
-			for (TransportIndexRepository repository : repos) {
-				repository.searchTransportStops(topLatitude, leftLongitude, bottomLatitude, rightLongitude, 
-						-1, stops, matcher);
+		BinaryMapIndexReader.SearchRequest<TransportStop> req = BinaryMapIndexReader.buildSearchTransportRequest(MapUtils.get31TileNumberX(leftLon),
+				MapUtils.get31TileNumberX(rightLon), MapUtils.get31TileNumberY(topLat),
+				MapUtils.get31TileNumberY(bottomLat), -1, stops);
+		for (TransportStop s : readers.readMergedTransportStops(req)) {
+			if (!s.isDeleted() && !s.isMissingStop()) {
+				stops.add(s);
 			}
 		}
 		return stops;
 	}
-	
+
+	public List<TransportRoute> getRoutesForStop(TransportStop stop) {
+		List<TransportRoute> rts = stop.getRoutes();
+		if(rts != null) {
+			return rts;
+		}
+		return Collections.emptyList();
+	}
+
 	////////////////////////////////////////////// Working with map ////////////////////////////////////////////////
 	public boolean updateRenderedMapNeeded(RotatedTileBox rotatedTileBox, DrawSettings drawSettings) {
 		return renderer.updateMapIsNeeded(rotatedTileBox, drawSettings);
@@ -925,6 +1104,7 @@ public class ResourceManager {
 		addressMap.remove(fileName);
 		transportRepositories.remove(fileName);
 		indexFileNames.remove(fileName);
+		travelRepositories.remove(fileName);
 		renderer.closeConnection(fileName);
 		BinaryMapReaderResource resource = fileReaders.remove(fileName);
 		if(resource != null) {
@@ -940,6 +1120,7 @@ public class ResourceManager {
 		basemapFileNames.clear();
 		renderer.clearAllResources();
 		transportRepositories.clear();
+		travelRepositories.clear();
 		addressMap.clear();
 		amenityRepositories.clear();
 		for(BinaryMapReaderResource res : fileReaders.values()) {
@@ -947,29 +1128,49 @@ public class ResourceManager {
 		}
 		fileReaders.clear();
 	}
-	
-	
+
 	public BinaryMapIndexReader[] getRoutingMapFiles() {
+		Collection<BinaryMapReaderResource> fileReaders = getFileReaders();
 		List<BinaryMapIndexReader> readers = new ArrayList<>(fileReaders.size());
-		for(BinaryMapReaderResource r : fileReaders.values()) {
-			if(r.isUseForRouting()) {
-				readers.add(r.getReader(BinaryMapReaderResourceType.ROUTING));
+		for (BinaryMapReaderResource r : fileReaders) {
+			if (r.isUseForRouting()) {
+				BinaryMapIndexReader reader = r.getReader(BinaryMapReaderResourceType.ROUTING);
+				if (reader != null) {
+					readers.add(reader);
+				}
 			}
 		}
-		return readers.toArray(new BinaryMapIndexReader[readers.size()]);
+		return readers.toArray(new BinaryMapIndexReader[0]);
 	}
-	
+
+	public BinaryMapIndexReader[] getTransportRoutingMapFiles() {
+		Collection<BinaryMapReaderResource> fileReaders = getFileReaders();
+		List<BinaryMapIndexReader> readers = new ArrayList<>(fileReaders.size());
+		for (BinaryMapReaderResource r : fileReaders) {
+			if  (r.isUseForPublicTransport()) {
+				BinaryMapIndexReader reader = r.getReader(BinaryMapReaderResourceType.TRANSPORT_ROUTING);
+				if (reader != null) {
+					readers.add(reader);
+				}
+			}
+		}
+		return readers.toArray(new BinaryMapIndexReader[0]);
+	}
+
 	public BinaryMapIndexReader[] getQuickSearchFiles() {
+		Collection<BinaryMapReaderResource> fileReaders = getFileReaders();
 		List<BinaryMapIndexReader> readers = new ArrayList<>(fileReaders.size());
-		for(BinaryMapReaderResource r : fileReaders.values()) {
-			if(r.getShallowReader().containsPoiData() || 
-					r.getShallowReader().containsAddressData()) {
-				readers.add(r.getReader(BinaryMapReaderResourceType.QUICK_SEARCH));
+		for (BinaryMapReaderResource r : fileReaders) {
+			BinaryMapIndexReader shallowReader = r.getShallowReader();
+			if (shallowReader != null && (shallowReader.containsPoiData() || shallowReader.containsAddressData())) {
+				BinaryMapIndexReader reader = r.getReader(BinaryMapReaderResourceType.QUICK_SEARCH);
+				if (reader != null) {
+					readers.add(reader);
+				}
 			}
 		}
-		return readers.toArray(new BinaryMapIndexReader[readers.size()]);
+		return readers.toArray(new BinaryMapIndexReader[0]);
 	}
-	
 
 	public Map<String, String> getIndexFileNames() {
 		return new LinkedHashMap<String, String>(indexFileNames);
@@ -989,7 +1190,8 @@ public class ResourceManager {
 		File[] maps = dir.listFiles(new FileFilter() {
 			@Override
 			public boolean accept(File pathname) {
-				return pathname.getName().endsWith(IndexConstants.BINARY_MAP_INDEX_EXT);
+				return pathname.getName().endsWith(IndexConstants.BINARY_MAP_INDEX_EXT) &&
+						!pathname.getName().endsWith("World_basemap_mini.obf");
 			}
 		});
 		return maps != null && maps.length > 0;

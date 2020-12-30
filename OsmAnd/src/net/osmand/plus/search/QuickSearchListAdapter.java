@@ -1,10 +1,8 @@
 package net.osmand.plus.search;
 
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
+import android.text.SpannableString;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,11 +10,19 @@ import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.fragment.app.FragmentActivity;
 
 import net.osmand.AndroidUtils;
 import net.osmand.CollatorStringMatcher;
-import net.osmand.Location;
 import net.osmand.access.AccessibilityAssistant;
 import net.osmand.data.Amenity;
 import net.osmand.data.LatLon;
@@ -24,7 +30,11 @@ import net.osmand.osm.AbstractPoiType;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
-import net.osmand.plus.dashboard.DashLocationFragment;
+import net.osmand.plus.UiUtilities.UpdateLocationViewCache;
+import net.osmand.plus.chooseplan.ChoosePlanDialogFragment;
+import net.osmand.plus.search.listitems.QuickSearchBannerListItem;
+import net.osmand.plus.search.listitems.QuickSearchFreeBannerListItem;
+import net.osmand.plus.mapcontextmenu.MenuController;
 import net.osmand.plus.search.listitems.QuickSearchHeaderListItem;
 import net.osmand.plus.search.listitems.QuickSearchListItem;
 import net.osmand.plus.search.listitems.QuickSearchListItemType;
@@ -32,6 +42,7 @@ import net.osmand.plus.search.listitems.QuickSearchMoreListItem;
 import net.osmand.plus.search.listitems.QuickSearchSelectAllListItem;
 import net.osmand.search.SearchUICore;
 import net.osmand.search.core.SearchPhrase;
+import net.osmand.search.core.SearchWord;
 import net.osmand.util.Algorithms;
 import net.osmand.util.OpeningHoursParser;
 
@@ -39,17 +50,19 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
+import static net.osmand.plus.search.listitems.QuickSearchBannerListItem.INVALID_ID;
+import static net.osmand.search.core.ObjectType.POI_TYPE;
+import static net.osmand.plus.search.listitems.QuickSearchBannerListItem.ButtonItem;
+
 public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 
 	private OsmandApplication app;
-	private Activity activity;
+	private FragmentActivity activity;
 	private AccessibilityAssistant accessibilityAssistant;
+	private LayoutInflater inflater;
 
-	private LatLon location;
-	private Float heading;
 	private boolean useMapCenter;
 
-	private int screenOrientation;
 	private int dp56;
 	private int dp1;
 
@@ -59,6 +72,7 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 	private boolean selectionMode;
 	private boolean selectAll;
 	private List<QuickSearchListItem> selectedItems = new ArrayList<>();
+	private UpdateLocationViewCache updateLocationViewCache;
 
 	public interface OnSelectionListener {
 
@@ -67,12 +81,18 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 		void reloadData();
 	}
 
-	public QuickSearchListAdapter(OsmandApplication app, Activity activity) {
+	public QuickSearchListAdapter(OsmandApplication app, FragmentActivity activity) {
 		super(app, R.layout.search_list_item);
 		this.app = app;
 		this.activity = activity;
+
+		int themeRes = !app.getSettings().isLightContent() ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
+		Context themedContext = new ContextThemeWrapper(activity, themeRes);
+		this.inflater = activity.getLayoutInflater().cloneInContext(themedContext);
+
 		dp56 = AndroidUtils.dpToPx(app, 56f);
 		dp1 = AndroidUtils.dpToPx(app, 1f);
+		updateLocationViewCache = app.getUIUtilities().getUpdateLocationViewCache();
 	}
 
 	public void setAccessibilityAssistant(AccessibilityAssistant accessibilityAssistant) {
@@ -85,30 +105,6 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 
 	public void setSelectionListener(OnSelectionListener selectionListener) {
 		this.selectionListener = selectionListener;
-	}
-
-	public int getScreenOrientation() {
-		return screenOrientation;
-	}
-
-	public void setScreenOrientation(int screenOrientation) {
-		this.screenOrientation = screenOrientation;
-	}
-
-	public LatLon getLocation() {
-		return location;
-	}
-
-	public void setLocation(LatLon location) {
-		this.location = location;
-	}
-
-	public Float getHeading() {
-		return heading;
-	}
-
-	public void setHeading(Float heading) {
-		this.heading = heading;
 	}
 
 	public boolean isUseMapCenter() {
@@ -214,9 +210,68 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 		final QuickSearchListItem listItem = getItem(position);
 		QuickSearchListItemType type = listItem.getType();
 		LinearLayout view;
-		if (type == QuickSearchListItemType.SEARCH_MORE) {
+		if (type == QuickSearchListItemType.BANNER) {
+			final QuickSearchBannerListItem banner = (QuickSearchBannerListItem) listItem;
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+				view = (LinearLayout) inflater.inflate(R.layout.search_banner_list_item, null);
+			} else {
+				view = (LinearLayout) convertView;
+			}
+
+			((TextView) view.findViewById(R.id.empty_search_description)).setText(R.string.nothing_found_descr);
+
+			SearchUICore searchUICore = app.getSearchUICore().getCore();
+			SearchPhrase searchPhrase = searchUICore.getPhrase();
+
+			String textTitle;
+			int minimalSearchRadius = searchUICore.getMinimalSearchRadius(searchPhrase);
+			if (searchUICore.isSearchMoreAvailable(searchPhrase) && minimalSearchRadius != Integer.MAX_VALUE) {
+				double rd = OsmAndFormatter.calculateRoundedDist(minimalSearchRadius, app);
+				textTitle = app.getString(R.string.nothing_found_in_radius) + " "
+						+ OsmAndFormatter.getFormattedDistance((float) rd, app, false);
+			} else {
+				textTitle = app.getString(R.string.search_nothing_found);
+			}
+			((TextView) view.findViewById(R.id.empty_search_title)).setText(textTitle);
+
+			ViewGroup buttonContainer = view.findViewById(R.id.buttons_container);
+			if (buttonContainer != null) {
+				buttonContainer.removeAllViews();
+				for (ButtonItem button : banner.getButtonItems()) {
+					View v = inflater.inflate(R.layout.search_banner_button_list_item, null);
+					TextView title = v.findViewById(R.id.title);
+					title.setText(button.getTitle());
+					ImageView icon = v.findViewById(R.id.icon);
+					if (button.getIconId() != INVALID_ID) {
+						icon.setImageResource(button.getIconId());
+						icon.setVisibility(View.VISIBLE);
+					} else {
+						icon.setVisibility(View.GONE);
+					}
+					v.setOnClickListener(button.getListener());
+					buttonContainer.addView(v);
+				}
+			}
+		} else if (type == QuickSearchListItemType.FREE_VERSION_BANNER) {
+			if (convertView == null) {
+				view = (LinearLayout) inflater.inflate(
+						R.layout.read_wikipedia_ofline_banner, null);
+			} else {
+				view = (LinearLayout) convertView;
+			}
+
+			View btnGet = view.findViewById(R.id.btn_get);
+			if (btnGet != null) {
+				btnGet.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						ChoosePlanDialogFragment.showWikipediaInstance(
+								activity.getSupportFragmentManager());
+					}
+				});
+			}
+		} else if (type == QuickSearchListItemType.SEARCH_MORE) {
+			if (convertView == null) {
 				view = (LinearLayout) inflater.inflate(R.layout.search_more_list_item, null);
 			} else {
 				view = (LinearLayout) convertView;
@@ -237,34 +292,42 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 			view.findViewById(R.id.empty_search).setVisibility(emptySearchVisible ? View.VISIBLE : View.GONE);
 			view.findViewById(R.id.more_divider).setVisibility(moreDividerVisible ? View.VISIBLE : View.GONE);
 			SearchUICore searchUICore = app.getSearchUICore().getCore();
-			String textTitle = app.getString(R.string.nothing_found_in_radius) + " "
-					+ OsmAndFormatter.getFormattedDistance(searchUICore.getMinimalSearchRadius(searchUICore.getPhrase()), app);
+			SearchPhrase searchPhrase = searchUICore.getPhrase();
+
+			String textTitle;
+			int minimalSearchRadius = searchUICore.getMinimalSearchRadius(searchPhrase);
+			if (searchUICore.isSearchMoreAvailable(searchPhrase) && minimalSearchRadius != Integer.MAX_VALUE) {
+				double rd = OsmAndFormatter.calculateRoundedDist(minimalSearchRadius, app);
+				textTitle = app.getString(R.string.nothing_found_in_radius) + " "
+						+ OsmAndFormatter.getFormattedDistance((float) rd, app, false);
+			} else {
+				textTitle = app.getString(R.string.search_nothing_found);
+			}
 			((TextView) view.findViewById(R.id.empty_search_title)).setText(textTitle);
-			View increaseRadiusRow = view.findViewById(R.id.increase_radius_row);
-			increaseRadiusRow.setVisibility(searchMoreItem.isSearchMoreAvailable() ? View.VISIBLE : View.GONE);
-			increaseRadiusRow.setOnClickListener(new View.OnClickListener() {
+			View primaryButton = view.findViewById(R.id.primary_button);
+
+			((TextView) view.findViewById(R.id.title)).setText(getIncreaseSearchButtonTitle(app, searchPhrase));
+			
+			primaryButton.setVisibility(searchMoreItem.isSearchMoreAvailable() ? View.VISIBLE : View.GONE);
+			primaryButton.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View view) {
-					((QuickSearchMoreListItem) listItem).increaseRadiusOnClick();
+					((QuickSearchMoreListItem) listItem).onPrimaryButtonClick();
 				}
 			});
 
-			if (!searchMoreItem.isOnlineSearch()) {
-				View onlineSearchRow = view.findViewById(R.id.online_search_row);
-				onlineSearchRow.setVisibility(View.VISIBLE);
-				onlineSearchRow.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View view) {
-						searchMoreItem.onlineSearchOnClick();
-					}
-				});
-			}
+			View secondaryButton = view.findViewById(R.id.secondary_button);
+			secondaryButton.setVisibility(searchMoreItem.isSecondaryButtonVisible() ?
+					View.VISIBLE : View.GONE);
+			secondaryButton.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					searchMoreItem.onSecondaryButtonClick();
+				}
+			});
 		} else if (type == QuickSearchListItemType.BUTTON) {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.search_custom_list_item, null);
+				view = (LinearLayout) inflater.inflate(R.layout.search_custom_list_item, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
@@ -276,10 +339,7 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 			}
 		} else if (type == QuickSearchListItemType.SELECT_ALL) {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.select_all_list_item, null);
+				view = (LinearLayout) inflater.inflate(R.layout.select_all_list_item, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
@@ -295,10 +355,7 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 			});
 		} else if (type == QuickSearchListItemType.HEADER) {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.search_header_list_item, null);
+				view = (LinearLayout) inflater.inflate(R.layout.search_header_list_item, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
@@ -311,30 +368,21 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 			}
 		} else if (type == QuickSearchListItemType.TOP_SHADOW) {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.list_shadow_header, null);
+				view = (LinearLayout) inflater.inflate(R.layout.list_shadow_header, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
 			return view;
 		} else if (type == QuickSearchListItemType.BOTTOM_SHADOW) {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.list_shadow_footer, null);
+				view = (LinearLayout) inflater.inflate(R.layout.list_shadow_footer, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
 			return view;
 		} else {
 			if (convertView == null) {
-				LayoutInflater inflater = (LayoutInflater) app
-						.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-				view = (LinearLayout) inflater.inflate(
-						R.layout.search_list_item, null);
+				view = (LinearLayout) inflater.inflate(R.layout.search_list_item, null);
 			} else {
 				view = (LinearLayout) convertView;
 			}
@@ -416,19 +464,17 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 					&& ((Amenity) listItem.getSearchResult().object).getOpeningHours() != null) {
 				Amenity amenity = (Amenity) listItem.getSearchResult().object;
 				OpeningHoursParser.OpeningHours rs = OpeningHoursParser.parseOpenedHours(amenity.getOpeningHours());
-				if (rs != null) {
-					Calendar inst = Calendar.getInstance();
-					inst.setTimeInMillis(System.currentTimeMillis());
-					boolean worksNow = rs.isOpenedForTime(inst);
-					inst.setTimeInMillis(System.currentTimeMillis() + 30 * 60 * 1000); // 30 minutes later
-					boolean worksLater = rs.isOpenedForTime(inst);
-					int colorId = worksNow ? worksLater ? R.color.color_ok : R.color.color_intermediate : R.color.color_warning;
-
+				if (rs != null && rs.getInfo() != null) {
+					int colorOpen = R.color.ctx_menu_amenity_opened_text_color;
+					int colorClosed = R.color.ctx_menu_amenity_closed_text_color;
+					SpannableString openHours = MenuController.getSpannableOpeningHours(
+							rs.getInfo(),
+							ContextCompat.getColor(app, colorOpen),
+							ContextCompat.getColor(app, colorClosed));
+					int colorId = rs.isOpenedForTime(Calendar.getInstance()) ? colorOpen : colorClosed;
 					timeLayout.setVisibility(View.VISIBLE);
-					timeIcon.setImageDrawable(app.getIconsCache().getIcon(R.drawable.ic_small_time, colorId));
-					timeText.setTextColor(app.getResources().getColor(colorId));
-					String rt = rs.getCurrentRuleTime(inst);
-					timeText.setText(rt == null ? "" : rt);
+					timeIcon.setImageDrawable(app.getUIUtilities().getIcon(R.drawable.ic_action_opening_hour_16, colorId));
+					timeText.setText(openHours);
 				} else {
 					timeLayout.setVisibility(View.GONE);
 				}
@@ -439,7 +485,7 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 			updateCompassVisibility(view, listItem);
 		}
 		view.setBackgroundColor(app.getResources().getColor(
-						app.getSettings().isLightContent() ? R.color.bg_color_light : R.color.bg_color_dark));
+						app.getSettings().isLightContent() ? R.color.list_background_color_light : R.color.list_background_color_dark));
 		View divider = view.findViewById(R.id.divider);
 		if (divider != null) {
 			if (position == getCount() - 1 || getItem(position + 1).getType() == QuickSearchListItemType.HEADER
@@ -454,13 +500,26 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 					divider.setLayoutParams(p);
 				} else {
 					LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp1);
-					p.setMargins(dp56, 0, 0 ,0);
+					AndroidUtils.setMargins(p, dp56, 0, 0, 0);
 					divider.setLayoutParams(p);
 				}
 			}
 		}
 		ViewCompat.setAccessibilityDelegate(view, accessibilityAssistant);
 		return view;
+	}
+
+	public static String getIncreaseSearchButtonTitle(OsmandApplication app, SearchPhrase searchPhrase) {
+		SearchWord word = searchPhrase.getLastSelectedWord();
+		SearchUICore searchUICore = app.getSearchUICore().getCore();
+		if (word != null && word.getType() != null && word.getType().equals(POI_TYPE)) {
+			float rd = (float) OsmAndFormatter.calculateRoundedDist(
+					searchUICore.getNextSearchRadius(searchPhrase), app);
+			return app.getString(R.string.increase_search_radius_to,
+					OsmAndFormatter.getFormattedDistance(rd, app, false));
+		} else {
+			return app.getString(R.string.increase_search_radius);
+		}
 	}
 
 	public void toggleCheckbox(int position, CheckBox ch) {
@@ -497,17 +556,12 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 
 	private void updateCompassVisibility(View view, QuickSearchListItem listItem) {
 		View compassView = view.findViewById(R.id.compass_layout);
-		Location ll = app.getLocationProvider().getLastKnownLocation();
-		boolean showCompass = location != null && listItem.getSearchResult().location != null;
-		if ((ll != null || useMapCenter) && showCompass) {
+		boolean showCompass = listItem.getSearchResult().location != null;
+		if (showCompass) {
 			updateDistanceDirection(view, listItem);
 			compassView.setVisibility(View.VISIBLE);
 		} else {
-			if (!showCompass) {
-				compassView.setVisibility(View.GONE);
-			} else {
-				compassView.setVisibility(View.INVISIBLE);
-			}
+			compassView.setVisibility(View.GONE);
 		}
 	}
 
@@ -515,17 +569,11 @@ public class QuickSearchListAdapter extends ArrayAdapter<QuickSearchListItem> {
 		TextView distanceText = (TextView) view.findViewById(R.id.distance);
 		ImageView direction = (ImageView) view.findViewById(R.id.direction);
 		SearchPhrase phrase = listItem.getSearchResult().requiredSearchPhrase;
-		LatLon loc = location;
+		updateLocationViewCache.specialFrom =  null;
 		if(phrase != null && useMapCenter) {
-			LatLon ol = phrase.getSettings().getOriginalLocation();
-			if(ol != null) {
-				loc = ol;
-			}
+			updateLocationViewCache.specialFrom = phrase.getSettings().getOriginalLocation();
 		}
-		DashLocationFragment.updateLocationView(useMapCenter, loc,
-				heading, direction, distanceText,
-				listItem.getSearchResult().location.getLatitude(),
-				listItem.getSearchResult().location.getLongitude(),
-				screenOrientation, app, activity);
+		LatLon toloc = listItem.getSearchResult().location;
+		app.getUIUtilities().updateLocationView(updateLocationViewCache, direction, distanceText, toloc);
 	}
 }

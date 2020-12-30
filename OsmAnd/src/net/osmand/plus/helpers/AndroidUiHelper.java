@@ -1,6 +1,5 @@
 package net.osmand.plus.helpers;
 
-import net.osmand.PlatformUtil;
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -9,12 +8,17 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.View;
 
+import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
+
+import net.osmand.PlatformUtil;
+
 /**
  * Created by dummy on 28.01.15.
  */
 public class AndroidUiHelper {
 
-    public static int getScreenOrientation(Activity activity) {
+    public static int getScreenOrientation(@NonNull Activity activity) {
         int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
         DisplayMetrics dm = new DisplayMetrics();
         activity.getWindowManager().getDefaultDisplay().getMetrics(dm);
@@ -89,13 +93,22 @@ public class AndroidUiHelper {
 		}
 		return false;
 	}
+
+	public static void setVisibility(@NonNull Activity activity, int visibility, @IdRes int... widgets) {
+		for (int widget : widgets) {
+			View view = activity.findViewById(widget);
+			if (view != null && view.getVisibility() != visibility) {
+				view.setVisibility(visibility);
+			}
+		}
+	}
     
-	public static boolean isXLargeDevice(Activity ctx) {
+	public static boolean isXLargeDevice(@NonNull Activity ctx) {
 		int lt = (ctx.getResources().getConfiguration().screenLayout & Configuration.SCREENLAYOUT_SIZE_MASK);
 		return lt == Configuration.SCREENLAYOUT_SIZE_XLARGE;
 	}
 
-	public static boolean isOrientationPortrait(Activity ctx) {
+	public static boolean isOrientationPortrait(@NonNull Activity ctx) {
 		int orientation = AndroidUiHelper.getScreenOrientation(ctx);
 		return orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT ||
 				orientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;

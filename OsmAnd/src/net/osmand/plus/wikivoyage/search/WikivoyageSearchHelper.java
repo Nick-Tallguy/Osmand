@@ -42,7 +42,7 @@ public class WikivoyageSearchHelper {
 					}
 
 					if (!isCancelled()) {
-						List<WikivoyageSearchResult> results = application.getWikivoyageDbHelper().search(query);
+						List<WikivoyageSearchResult> results = application.getTravelHelper().search(query);
 						if (!isCancelled()) {
 							rm.publish(results);
 						}

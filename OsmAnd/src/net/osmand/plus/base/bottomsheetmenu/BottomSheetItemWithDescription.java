@@ -1,21 +1,26 @@
 package net.osmand.plus.base.bottomsheetmenu;
 
+import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.ColorRes;
-import android.support.annotation.LayoutRes;
-import android.support.v4.content.ContextCompat;
+import android.text.method.LinkMovementMethod;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import net.osmand.plus.OsmandApplication;
+import androidx.annotation.ColorRes;
+import androidx.annotation.LayoutRes;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.plus.R;
+import net.osmand.util.Algorithms;
 
 public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 
 	protected CharSequence description;
 	@ColorRes
 	private int descriptionColorId = INVALID_ID;
+	private int descriptionMaxLines = INVALID_VALUE;
+	private boolean descriptionLinksClickable = false;
 
 	private TextView descriptionTv;
 
@@ -26,13 +31,19 @@ public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 										  View.OnClickListener onClickListener,
 										  int position,
 										  Drawable icon,
-										  String title,
+										  Drawable background,
+										  CharSequence title,
 										  @ColorRes int titleColorId,
+										  boolean iconHidden,
 										  CharSequence description,
-										  @ColorRes int descriptionColorId) {
-		super(customView, layoutId, tag, disabled, onClickListener, position, icon, title, titleColorId);
+										  @ColorRes int descriptionColorId,
+										  int descriptionMaxLines,
+										  boolean descriptionLinksClickable) {
+		super(customView, layoutId, tag, disabled, onClickListener, position, icon, background, title, titleColorId, iconHidden);
 		this.description = description;
 		this.descriptionColorId = descriptionColorId;
+		this.descriptionMaxLines = descriptionMaxLines;
+		this.descriptionLinksClickable = descriptionLinksClickable;
 	}
 
 	protected BottomSheetItemWithDescription() {
@@ -42,17 +53,49 @@ public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 	public void setDescription(CharSequence description) {
 		this.description = description;
 		descriptionTv.setText(description);
+		changeDescriptionVisibility();
+	}
+
+	public void setDescriptionMaxLines(int maxLines) {
+		this.descriptionMaxLines = maxLines;
+		descriptionTv.setMaxLines(maxLines);
+	}
+
+	public void setDescriptionLinksClickable(boolean descriptionLinksClickable) {
+		this.descriptionLinksClickable = descriptionLinksClickable;
+		if (descriptionTv != null) {
+			if (descriptionLinksClickable) {
+				descriptionTv.setMovementMethod(LinkMovementMethod.getInstance());
+			} else {
+				descriptionTv.setMovementMethod(null);
+			}
+		}
 	}
 
 	@Override
-	public void inflate(OsmandApplication app, ViewGroup container, boolean nightMode) {
-		super.inflate(app, container, nightMode);
-		descriptionTv = (TextView) view.findViewById(R.id.description);
+	public void inflate(Context context, ViewGroup container, boolean nightMode) {
+		super.inflate(context, container, nightMode);
+		descriptionTv = view.findViewById(R.id.description);
 		if (descriptionTv != null) {
+			changeDescriptionVisibility();
 			descriptionTv.setText(description);
 			if (descriptionColorId != INVALID_ID) {
-				descriptionTv.setTextColor(ContextCompat.getColor(app, descriptionColorId));
+				descriptionTv.setTextColor(ContextCompat.getColor(context, descriptionColorId));
 			}
+			if (descriptionMaxLines != INVALID_VALUE) {
+				descriptionTv.setMaxLines(descriptionMaxLines);
+			}
+			if (descriptionLinksClickable) {
+				descriptionTv.setMovementMethod(LinkMovementMethod.getInstance());
+			}
+		}
+	}
+
+	private void changeDescriptionVisibility() {
+		if (Algorithms.isEmpty(description)) {
+			descriptionTv.setVisibility(View.GONE);
+		} else {
+			descriptionTv.setVisibility(View.VISIBLE);
 		}
 	}
 
@@ -61,6 +104,8 @@ public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 		protected CharSequence description;
 		@ColorRes
 		protected int descriptionColorId = INVALID_ID;
+		protected int descriptionMaxLines = INVALID_POSITION;
+		protected boolean descriptionLinksClickable = false;
 
 		public Builder setDescription(CharSequence description) {
 			this.description = description;
@@ -72,6 +117,16 @@ public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 			return this;
 		}
 
+		public Builder setDescriptionMaxLines(int maxLines) {
+			this.descriptionMaxLines = maxLines;
+			return this;
+		}
+
+		public Builder setDescriptionLinksClickable(boolean descriptionLinksClickable) {
+			this.descriptionLinksClickable = descriptionLinksClickable;
+			return this;
+		}
+
 		public BottomSheetItemWithDescription create() {
 			return new BottomSheetItemWithDescription(customView,
 					layoutId,
@@ -80,10 +135,14 @@ public class BottomSheetItemWithDescription extends SimpleBottomSheetItem {
 					onClickListener,
 					position,
 					icon,
+					background,
 					title,
 					titleColorId,
+					iconHidden,
 					description,
-					descriptionColorId);
+					descriptionColorId,
+					descriptionMaxLines,
+					descriptionLinksClickable);
 		}
 	}
 }

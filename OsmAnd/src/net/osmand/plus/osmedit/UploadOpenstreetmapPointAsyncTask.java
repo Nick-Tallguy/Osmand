@@ -1,8 +1,10 @@
 package net.osmand.plus.osmedit;
 
 import android.content.DialogInterface;
+import android.net.TrafficStats;
 import android.os.AsyncTask;
 
+import net.osmand.osm.edit.Entity;
 import net.osmand.osm.edit.EntityInfo;
 import net.osmand.osm.edit.Node;
 import net.osmand.plus.dialogs.ProgressDialogFragment;
@@ -23,6 +25,7 @@ public class UploadOpenstreetmapPointAsyncTask
 	private OsmEditingPlugin plugin;
 	private final boolean closeChangeSet;
 	private final boolean loadAnonymous;
+	private static final int THREAD_ID = 10102;
 
 	public UploadOpenstreetmapPointAsyncTask(ProgressDialogFragment progress,
 											 OsmEditsUploadListener listener,
@@ -42,6 +45,8 @@ public class UploadOpenstreetmapPointAsyncTask
 
 	@Override
 	protected Map<OsmPoint, String> doInBackground(OsmPoint... points) {
+		TrafficStats.setThreadStatsTag(THREAD_ID);
+
 		Map<OsmPoint, String> loadErrorsMap = new HashMap<>();
 
 		boolean uploaded = false;
@@ -53,9 +58,9 @@ public class UploadOpenstreetmapPointAsyncTask
 				OpenstreetmapPoint p = (OpenstreetmapPoint) point;
 				EntityInfo entityInfo = null;
 				if (OsmPoint.Action.CREATE != p.getAction()) {
-					entityInfo = remotepoi.loadNode(p.getEntity());
+					entityInfo = remotepoi.loadEntity(p.getEntity());
 				}
-				Node n = remotepoi.commitNodeImpl(p.getAction(), p.getEntity(), entityInfo,
+				Entity n = remotepoi.commitEntityImpl(p.getAction(), p.getEntity(), entityInfo,
 						p.getComment(), false, null);
 				if (n != null) {
 					uploaded = true;
@@ -91,6 +96,7 @@ public class UploadOpenstreetmapPointAsyncTask
 			}
 		});
 		progress.setMax(listSize);
+		progress.setRetainInstance(true);
 	}
 
 	@Override

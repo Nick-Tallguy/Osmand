@@ -1,7 +1,10 @@
 package net.osmand.plus.mapcontextmenu.controllers;
 
+import androidx.annotation.NonNull;
+
 import net.osmand.NativeLibrary.RenderedObject;
 import net.osmand.data.LatLon;
+import net.osmand.data.MapObject;
 import net.osmand.data.PointDescription;
 import net.osmand.osm.AbstractPoiType;
 import net.osmand.osm.MapPoiTypes;
@@ -20,7 +23,9 @@ public class RenderedObjectMenuController extends MenuController {
 
 	private RenderedObject renderedObject;
 
-	public RenderedObjectMenuController(MapActivity mapActivity, PointDescription pointDescription, final RenderedObject renderedObject) {
+	public RenderedObjectMenuController(@NonNull MapActivity mapActivity,
+										@NonNull PointDescription pointDescription,
+										@NonNull RenderedObject renderedObject) {
 		super(new MenuBuilder(mapActivity), pointDescription, mapActivity);
 		builder.setShowNearestWiki(true);
 		this.renderedObject = renderedObject;
@@ -53,10 +58,11 @@ public class RenderedObjectMenuController extends MenuController {
 		if (renderedObject.getIconRes() != null && RenderingIcons.containsBigIcon(renderedObject.getIconRes())) {
 			return RenderingIcons.getBigIconResourceId(renderedObject.getIconRes());
 		} else {
-			return R.drawable.ic_type_address;
+			return R.drawable.ic_action_street_name;
 		}
 	}
 
+	@NonNull
 	@Override
 	public String getNameStr() {
 		if (!Algorithms.isEmpty(renderedObject.getName()) && !isStartingWithRTLChar(renderedObject.getName())) {
@@ -77,9 +83,15 @@ public class RenderedObjectMenuController extends MenuController {
 		return "";
 	}
 
+	@NonNull
 	@Override
 	public String getCommonTypeStr() {
-		return getMapActivity().getString(R.string.shared_string_location);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return mapActivity.getString(R.string.shared_string_location);
+		} else {
+			return "";
+		}
 	}
 
 	@Override
@@ -89,30 +101,32 @@ public class RenderedObjectMenuController extends MenuController {
 
 	@Override
 	public void addPlainMenuItems(String typeStr, PointDescription pointDescription, final LatLon latLon) {
-
-		MapPoiTypes poiTypes = getMapActivity().getMyApplication().getPoiTypes();
-		for (Map.Entry<String, String> entry : renderedObject.getTags().entrySet()) {
-			if (entry.getKey().equalsIgnoreCase("maxheight")) {
-				AbstractPoiType pt = poiTypes.getAnyPoiAdditionalTypeByKey(entry.getKey());
-				if (pt != null) {
-					addPlainMenuItem(R.drawable.ic_action_note_dark, null, pt.getTranslation() + ": " + entry.getValue(), false, false, null);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			MapPoiTypes poiTypes = mapActivity.getMyApplication().getPoiTypes();
+			for (Map.Entry<String, String> entry : renderedObject.getTags().entrySet()) {
+				if (entry.getKey().equalsIgnoreCase("maxheight")) {
+					AbstractPoiType pt = poiTypes.getAnyPoiAdditionalTypeByKey(entry.getKey());
+					if (pt != null) {
+						addPlainMenuItem(R.drawable.ic_action_note_dark, null, pt.getTranslation() + ": " + entry.getValue(), false, false, null);
+					}
 				}
 			}
-		}
 
-		boolean osmEditingEnabled = OsmandPlugin.getEnabledPlugin(OsmEditingPlugin.class) != null;
-		if (osmEditingEnabled && renderedObject.getId() != null
-				&& renderedObject.getId() > 0 && 
-				(renderedObject.getId() % 2 == 1 || (renderedObject.getId() >> 7) < Integer.MAX_VALUE)) {
-			String link;
-			if ((renderedObject.getId() >> 6) % 2 == 1) {
-				link = "https://www.openstreetmap.org/node/";
-			} else {
-				link = "https://www.openstreetmap.org/way/";
+			boolean osmEditingEnabled = OsmandPlugin.getEnabledPlugin(OsmEditingPlugin.class) != null;
+			if (osmEditingEnabled && renderedObject.getId() != null
+					&& renderedObject.getId() > 0 &&
+					(renderedObject.getId() % 2 == MapObject.AMENITY_ID_RIGHT_SHIFT 
+							|| (renderedObject.getId() >> MapObject.NON_AMENITY_ID_RIGHT_SHIFT) < Integer.MAX_VALUE)) {
+				String link;
+				if ((renderedObject.getId()) % 2 == MapObject.WAY_MODULO_REMAINDER) {
+					link = "https://www.openstreetmap.org/way/";
+				} else {
+					link = "https://www.openstreetmap.org/node/";
+				}
+				addPlainMenuItem(R.drawable.ic_action_info_dark, null, link + (renderedObject.getId() >> MapObject.NON_AMENITY_ID_RIGHT_SHIFT), true, true, null);
 			}
-			addPlainMenuItem(R.drawable.ic_action_info_dark, null, link + (renderedObject.getId() >> 7), true, true, null);
 		}
-		addMyLocationToPlainItems(latLon);
 	}
 
 	private boolean isStartingWithRTLChar(String s) {

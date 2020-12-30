@@ -1,42 +1,39 @@
 package net.osmand.plus.mapmarkers;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.design.widget.Snackbar;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.helper.ItemTouchHelper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
-import net.osmand.AndroidUtils;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.snackbar.Snackbar;
+
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.Location;
 import net.osmand.data.Amenity;
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.GPXUtilities.WptPt;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
+import net.osmand.data.WptLocationPoint;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndCompassListener;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.base.MapViewTrackingUtilities;
-import net.osmand.plus.dashboard.DashLocationFragment;
 import net.osmand.plus.mapmarkers.SelectionMarkersGroupBottomSheetDialogFragment.AddMarkersGroupFragmentListener;
 import net.osmand.plus.mapmarkers.adapters.MapMarkerItemViewHolder;
 import net.osmand.plus.mapmarkers.adapters.MapMarkersGroupsAdapter;
@@ -47,24 +44,30 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 
 	public static final String TAG = "MapMarkersGroupsFragment";
 
+	private OsmandApplication app;
 	private MapMarkersGroupsAdapter adapter;
-	private Float heading;
-	private Location location;
-	private boolean locationUpdateStarted;
 	private Paint backgroundPaint = new Paint();
-	private Paint iconPaint = new Paint();
 	private Paint textPaint = new Paint();
 	private Snackbar snackbar;
-	private boolean compassUpdateAllowed = true;
 	private View mainView;
 	private String groupIdToOpen;
+	private Location location;
+	private Float heading;
+	private boolean locationUpdateStarted;
+	private boolean compassUpdateAllowed = true;
+
+	@Override
+	public void onCreate(@Nullable Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		app = getMyApplication();
+	}
 
 	@Nullable
 	@Override
 	public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
 		final MapActivity mapActivity = (MapActivity) getActivity();
 		final boolean night = !mapActivity.getMyApplication().getSettings().isLightContent();
-		mainView = inflater.inflate(R.layout.fragment_map_markers_groups, container, false);
+		mainView = UiUtilities.getInflater(mapActivity, night).inflate(R.layout.fragment_map_markers_groups, container, false);
 
 		Fragment selectionMarkersGroupFragment = getChildFragmentManager().findFragmentByTag(SelectionMarkersGroupBottomSheetDialogFragment.TAG);
 		if (selectionMarkersGroupFragment != null) {
@@ -85,12 +88,9 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 			}
 		});
 
-		backgroundPaint.setColor(ContextCompat.getColor(getActivity(), night ? R.color.dashboard_divider_dark : R.color.dashboard_divider_light));
+		backgroundPaint.setColor(ContextCompat.getColor(getActivity(), night ? R.color.divider_color_dark : R.color.divider_color_light));
 		backgroundPaint.setStyle(Paint.Style.FILL_AND_STROKE);
 		backgroundPaint.setAntiAlias(true);
-		iconPaint.setAntiAlias(true);
-		iconPaint.setFilterBitmap(true);
-		iconPaint.setDither(true);
 		textPaint.setTextSize(getResources().getDimension(R.dimen.default_desc_text_size));
 		textPaint.setFakeBoldText(true);
 		textPaint.setAntiAlias(true);
@@ -105,8 +105,6 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 
 		ItemTouchHelper.SimpleCallback simpleItemTouchCallback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
 			private float marginSides = getResources().getDimension(R.dimen.list_content_padding);
-			private Bitmap deleteBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_action_delete_dark);
-			private Bitmap historyBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ic_action_history);
 			private boolean iconHidden;
 
 			@Override
@@ -145,27 +143,30 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 						colorIcon = R.color.map_widget_blue;
 						colorText = R.color.map_widget_blue;
 					} else {
-						colorIcon = night ? 0 : R.color.icon_color;
-						colorText = R.color.dashboard_subheader_text_light;
+						colorIcon = night ? R.color.icon_color_default_dark : R.color.icon_color_default_light;
+						colorText = night ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light;
 					}
-					if (colorIcon != 0) {
-						iconPaint.setColorFilter(new PorterDuffColorFilter(ContextCompat.getColor(getActivity(), colorIcon), PorterDuff.Mode.SRC_IN));
-					}
-					textPaint.setColor(ContextCompat.getColor(getActivity(), colorText));
+					textPaint.setColor(ContextCompat.getColor(app, colorText));
+					Drawable icon = app.getUIUtilities().getIcon(
+							dX > 0 ? R.drawable.ic_action_history : R.drawable.ic_action_delete_dark,
+							colorIcon);
+					int iconWidth = icon.getIntrinsicWidth();
+					int iconHeight = icon.getIntrinsicHeight();
 					float textMarginTop = ((float) itemView.getHeight() - (float) textHeight) / 2;
+					float iconMarginTop = ((float) itemView.getHeight() - (float) iconHeight) / 2;
+					int iconTopY = itemView.getTop() + (int) iconMarginTop;
+					int iconLeftX;
 					if (dX > 0) {
+						iconLeftX = itemView.getLeft() + (int) marginSides;
 						c.drawRect(itemView.getLeft(), itemView.getTop(), dX, itemView.getBottom(), backgroundPaint);
-						float iconMarginTop = ((float) itemView.getHeight() - (float) historyBitmap.getHeight()) / 2;
-						c.drawBitmap(historyBitmap, itemView.getLeft() + marginSides, itemView.getTop() + iconMarginTop, iconPaint);
-						c.drawText(moveToHistoryStr, itemView.getLeft() + 2 * marginSides + historyBitmap.getWidth(),
-								itemView.getTop() + textMarginTop + textHeight, textPaint);
+						c.drawText(moveToHistoryStr, itemView.getLeft() + 2 * marginSides + iconWidth, itemView.getTop() + textMarginTop + textHeight, textPaint);
 					} else {
+						iconLeftX = itemView.getRight() - iconWidth - (int) marginSides;
 						c.drawRect(itemView.getRight() + dX, itemView.getTop(), itemView.getRight(), itemView.getBottom(), backgroundPaint);
-						float iconMarginTop = ((float) itemView.getHeight() - (float) deleteBitmap.getHeight()) / 2;
-						c.drawBitmap(deleteBitmap, itemView.getRight() - deleteBitmap.getWidth() - marginSides, itemView.getTop() + iconMarginTop, iconPaint);
-						c.drawText(delStr, itemView.getRight() - deleteBitmap.getWidth() - 2 * marginSides - delStrWidth,
-								itemView.getTop() + textMarginTop + textHeight, textPaint);
+						c.drawText(delStr, itemView.getRight() - iconWidth - 2 * marginSides - delStrWidth, itemView.getTop() + textMarginTop + textHeight, textPaint);
 					}
+					icon.setBounds(iconLeftX, iconTopY, iconLeftX + iconWidth, iconTopY + iconHeight);
+					icon.draw(c);
 				}
 				super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
 			}
@@ -188,10 +189,10 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 					final MapMarker marker = (MapMarker) item;
 					int snackbarStringRes;
 					if (direction == ItemTouchHelper.RIGHT) {
-						mapActivity.getMyApplication().getMapMarkersHelper().moveMapMarkerToHistory((MapMarker) item);
+						app.getMapMarkersHelper().moveMapMarkerToHistory((MapMarker) item);
 						snackbarStringRes = R.string.marker_moved_to_history;
 					} else {
-						mapActivity.getMyApplication().getMapMarkersHelper().removeMarker((MapMarker) item);
+						app.getMapMarkersHelper().removeMarker((MapMarker) item);
 						snackbarStringRes = R.string.item_removed;
 					}
 					updateAdapter();
@@ -200,14 +201,14 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 								@Override
 								public void onClick(View view) {
 									if (direction == ItemTouchHelper.RIGHT) {
-										mapActivity.getMyApplication().getMapMarkersHelper().restoreMarkerFromHistory(marker, 0);
+										app.getMapMarkersHelper().restoreMarkerFromHistory(marker, 0);
 									} else {
-										mapActivity.getMyApplication().getMapMarkersHelper().addMarker(marker);
+										app.getMapMarkersHelper().addMarker(marker);
 									}
 									updateAdapter();
 								}
 							});
-					AndroidUtils.setSnackbarTextColor(snackbar, R.color.color_dialog_buttons_dark);
+					UiUtilities.setupSnackbar(snackbar, night);
 					snackbar.show();
 				}
 			}
@@ -236,7 +237,7 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 									? app.getFavorites().getVisibleFavByLatLon(marker.point)
 									: marker.favouritePoint;
 							if (fav != null) {
-								showMap(marker.point, fav.getPointDescription(), fav);
+								showMap(marker.point, fav.getPointDescription(mapActivity), fav);
 								return;
 							}
 
@@ -244,7 +245,7 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 									? app.getSelectedGpxHelper().getVisibleWayPointByLatLon(marker.point)
 									: marker.wptPt;
 							if (pt != null) {
-								showMap(marker.point, pt.getPointDescription(mapActivity), pt);
+								showMap(marker.point, new WptLocationPoint(pt).getPointDescription(mapActivity), pt);
 								return;
 							}
 
@@ -400,7 +401,6 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 	@Override
 	public void onResume() {
 		super.onResume();
-		adapter.setScreenOrientation(DashLocationFragment.getScreenOrientation(getActivity()));
 		startLocationUpdate();
 	}
 
@@ -442,11 +442,7 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 
 	@Override
 	public void updateLocation(Location location) {
-		boolean newLocation = this.location == null && location != null;
-		boolean locationChanged = this.location != null && location != null
-				&& this.location.getLatitude() != location.getLatitude()
-				&& this.location.getLongitude() != location.getLongitude();
-		if (newLocation || locationChanged) {
+		if (!MapUtils.areLatLonEqual(this.location, location)) {
 			this.location = location;
 			updateLocationUi();
 		}
@@ -484,12 +480,6 @@ public class MapMarkersGroupsFragment extends Fragment implements OsmAndCompassL
 					if (location == null) {
 						location = mapActivity.getMyApplication().getLocationProvider().getLastKnownLocation();
 					}
-					MapViewTrackingUtilities utilities = mapActivity.getMapViewTrackingUtilities();
-					boolean useCenter = !(utilities.isMapLinkedToLocation() && location != null);
-
-					adapter.setUseCenter(useCenter);
-					adapter.setLocation(useCenter ? mapActivity.getMapLocation() : new LatLon(location.getLatitude(), location.getLongitude()));
-					adapter.setHeading(useCenter ? -mapActivity.getMapRotate() : heading != null ? heading : 99);
 					adapter.notifyDataSetChanged();
 				}
 			});

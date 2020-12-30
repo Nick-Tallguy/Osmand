@@ -106,7 +106,7 @@
   <string name="send_files_to_osm">Stuur GPX lêers na OSM?</string>
   <string name="gpx_visibility_txt">Sigbaarheid</string>
   <string name="gpx_tags_txt">Naamplaatjies</string>
-  <string name="gpx_description_txt">Beskrywing</string>
+  <string name="shared_string_description">Beskrywing</string>
   <string name="validate_gpx_upload_name_pwd">Spesifiseer asseblief die OSM gebruiker naam en wagwoord om GPX lêers op te laai.</string>
   <string name="default_buttons_support">Ondersteuning</string>
   <string name="support_new_features">Ondersteun nuwe funksies</string>
@@ -268,7 +268,6 @@
   
   <string name="file_can_not_be_renamed">Lêer kan nie herbenoem word nie.</string>
   <string name="file_with_name_already_exists">Lêer met daardie naam bestaan reeds.</string>
-  <string name="gpx_navigation">GPX roete</string>
   <string name="poi_query_by_name_matches_categories">Verskeie interessante plek kategorieë gevind vir die soektog:</string>
   <string name="data_to_search_poi_not_available">Plaaslike inligting om interessante plek te soek is nie teenwoordig nie.</string>
   <string name="poi_filter_by_name">Soek met die naam</string>
@@ -283,14 +282,13 @@
   <string name="search_position_current_location_found">Ligging (gevind)</string>
   <string name="search_position_address">Adres…</string>
   <string name="search_position_favorites">Gunstelinge…</string>
-  <string name="search_position_undefined">ongedefinieerd</string>
+  <string name="shared_string_undefined">ongedefinieerd</string>
   
   
   <string name="search_position_map_view">Laaste kaart uitsig</string>
   <string name="select_search_position">Soek naby:</string>
   <string name="context_menu_item_search">Soek hier naby</string>
   
-  <string name="shared_string_save_as_gpx">Berg roete as GPX spoor</string>
   <string name="route_successfully_saved_at">Roete suksesvol geberg as \'%1$s\'.</string>
   <string name="filename_input">"Dokument naam:
 " </string>
@@ -327,7 +325,7 @@
   <string name="local_index_mi_restore">Aktiveer</string>
   <string name="local_index_mi_backup">Deaktiveer</string>
   
-  <string name="local_index_mi_reload">Herlaai van sd kaart</string>
+  
   <string name="shared_string_download">Aflaai</string>
   
   <string name="local_index_poi_data">Interessante plek inligting</string>
@@ -391,7 +389,6 @@
   
   <string name="create_poi_link_to_osm_doc">"<u> Aanlyn OSM </u> kaart klassifikasie met prentjies"</string>
   <string name="error_doing_search">Fout tydens aflyn soek</string>
-  <string name="search_offline_geo_error">Kon nie die geo opset \'%s\' ontleed nie</string>
   <string name="search_osm_offline">Soek adres met behulp van aflyn kaarte</string>
   <string name="system_locale">Stelsel</string>
   <string name="preferred_locale_descr">Kies die taal vir die program</string>
@@ -414,7 +411,6 @@
   <string name="context_menu_item_share_location">Deel ligging</string>
   <string name="add_waypoint_dialog_added">GPX Roetebaken \'\'{0}\'\' was suksesvol bygevoeg</string>
   <string name="add_waypoint_dialog_title">Voeg roetebaken by tot opgeneemde GPX spoor</string>
-  <string name="context_menu_item_add_waypoint">Voeg GPX roetebaken by</string>
   <string name="amenity_type_administrative">Administratief</string>
   <string name="amenity_type_barrier">versperring</string>
   <string name="amenity_type_education">Opvoeding</string>
@@ -516,7 +512,6 @@
   <string name="no_vector_map_loaded">Vektor kaarte was nie gelaai nie</string>
   
   <string name="gpx_files_not_found">GPX lêers nie gevind in /tracks adres nie</string>
-  <string name="layer_gpx_layer">GPX spoor…</string>
   <string name="error_reading_gpx">Fout met lees van GPX inligting</string>
   <string name="vector_data">Aflyn vektor kaarte</string>
   <string name="transport_context_menu">Soek vervoer by stop</string>
@@ -718,7 +713,6 @@
   <string name="save_track_interval">Log tussenpose</string>
   <string name="save_track_interval_descr">Kies posisioneringstussenpose vir spore</string>
   <string name="save_track_to_gpx_descrp">Spore sal geberg word in die spoor bergadres in daaglikse groepe</string>
-  <string name="save_track_to_gpx">Skryf die spoor in `n GPX dokument</string>
   <string name="update_tile">Opgradeer kaart</string>
   <string name="reload_tile">Laai teël weer af</string>
   <string name="mark_point">Teiken</string>
@@ -842,8 +836,8 @@
   
   <string name="edit_filter_save_as_menu_item">Berg As</string>
   <string name="edit_filter_delete_dialog_title">Verwyder gekose filter?</string>
-  <string name="edit_filter_delete_message">Filter {0} is verwyder</string>
-  <string name="edit_filter_create_message">Filter {0} is geskep</string>
+  <string name="edit_filter_delete_message">Filter %1$s is verwyder</string>
+  <string name="edit_filter_create_message">Filter %1$s is geskep</string>
   
   <string name="continue_follow_previous_route_auto">Die vorige navigasie was onvoltooid. Wil jy dit nog volg? (%1$s sekondes)</string>
   
@@ -865,7 +859,6 @@
 
 
 <string name="map_widget_parking">Parkering</string>
-<string name="map_widget_monitoring">GPX opname</string>
 <string name="map_widget_speed">Spoed</string>
 <string name="map_widget_distance">Teiken</string>
 <string name="map_widget_altitude">Hoogte</string>
@@ -896,14 +889,12 @@
 	<string name="avoid_unpaved">Vermy ongeteerde paaie</string>
 	<string name="avoid_ferries">Vermy veerbote</string>
 	<string name="avoid_in_routing_title">Vermy…</string>
-	<string name="avoid_in_routing_descr">Vermy tolpaaie, grondpaaie, veerbote</string>
 	<string name="map_widget_fluorescent">Helder roetes</string>
 	<string name="map_widget_show_ruler">Liniaal</string>
 	
 	<string name="map_widget_view_direction">Kykrigting</string>
 	<string name="map_widget_transparent">Deursigtige vel</string>
 	
-	<string name="gps_wakeup_interval">GPS opwek tussenpose: %s</string>
 	<string name="int_continuosly">Aaneenlopende</string>
 	<string name="zxing_barcode_scanner_not_found">ZXing Barcode Scanner toepassing is nie geïnstaleer nie. Wil jy dit in die mark soek?</string>
 	<string name="enable_plugin_monitoring_services">Aktiveer spoorsny inlasmodule om ligging aanteken diens te gebruik (aantekening, lewende spoor-natrek)</string>
@@ -922,7 +913,7 @@
     <string name="add_as_first_destination_point">Voeg by as eerste oorgangspunt</string>
     <string name="replace_destination_point">Vervang bestemmingspunt</string>
     <string name="new_destination_point_dialog">Jy het al reeds `n bestemming ingestel.</string>
-    <string name="target_points">Wegpunte</string>
+    <string name="shared_string_target_points">Wegpunte</string>
     <string name="intermediate_point_too_far">Oorgangspunt %1$s is te ver van die naaste pad.</string>
     <string name="arrived_at_intermediate_point">Jy het jou oorgangspunt bereik</string>
     <string name="context_menu_item_intermediate_point">Voeg by as oorgangspunt</string>
@@ -1068,7 +1059,6 @@
     <string name="map_widget_gps_info">GPS inligting</string>
     
     <string name="index_name_openmaps">\\\'OpenMaps EU\\\'</string>
-    <string name="monitoring_control_start">\\\'GPX\\\'</string>
     <string name="osmand_play_title_30_chars">OsmAnd Kaarte &amp; Navigasie</string>
 	
 	<string name="osmand_plus_play_title_30_chars">OsmAnd+ Kaarte &amp; Navigasie</string>
@@ -1162,7 +1152,7 @@
     <string name="route_via">Via:</string>
     <string name="route_from">Van:</string>
     <string name="osb_author_dialog_password">OSM kodewoord (opsioneel)</string>
-	<string name="announce_gpx_waypoints">Kondig GPX oorgangspunte aan</string>
+	
     <string name="speak_title">Aankondig…</string>
 	<string name="speak_descr">Verstel aankondig van straatname, verkeerswaarskuwings(geforseerde stoppe, spoed-hobbels), spoedkamera, spoedbeperkings</string>
 	<string name="speak_street_names">Kondig straatname aan(TTS)</string>

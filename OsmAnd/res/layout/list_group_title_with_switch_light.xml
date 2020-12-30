@@ -24,8 +24,10 @@
         android:background="?attr/bg_color"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp">
+        android:paddingLeft="@dimen/content_padding"
+        android:paddingRight="@dimen/content_padding"
+	    android:paddingStart="@dimen/content_padding"
+	    android:paddingEnd="@dimen/content_padding">
 
         <TextView
             android:id="@+id/title"
@@ -38,7 +40,7 @@
             android:textColor="?android:textColorPrimary"
             tools:text="Live updates"/>
 
-        <android.support.v7.widget.SwitchCompat
+        <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/toggle_item"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

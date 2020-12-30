@@ -3,7 +3,6 @@ package net.osmand.plus.mapmarkers;
 import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,8 +10,10 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import net.osmand.AndroidUtils;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.base.BottomSheetDialogFragment;
 import net.osmand.plus.helpers.AndroidUiHelper;
@@ -44,7 +45,7 @@ public class OptionsBottomSheetDialogFragment extends BottomSheetDialogFragment 
 
 	@Nullable
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
 		final int themeRes = getMyApplication().getSettings().isLightContent() ? R.style.OsmandLightTheme : R.style.OsmandDarkTheme;
 
 		View view = View.inflate(new ContextThemeWrapper(getContext(), themeRes), R.layout.fragment_marker_options_bottom_sheet_dialog, null);
@@ -61,7 +62,7 @@ public class OptionsBottomSheetDialogFragment extends BottomSheetDialogFragment 
 		}
 
 		((ImageView) mainView.findViewById(R.id.sort_by_icon)).setImageDrawable(getContentIcon(R.drawable.ic_sort_waypoint_dark));
-		OsmandSettings.MapMarkersMode mode = getMyApplication().getSettings().MAP_MARKERS_MODE.get();
+		MapMarkersMode mode = getMyApplication().getSettings().MAP_MARKERS_MODE.get();
 		int displayedCount = getMyApplication().getSettings().DISPLAYED_MARKERS_WIDGETS_COUNT.get();
 		ImageView showDirectionIcon = (ImageView) mainView.findViewById(R.id.show_direction_icon);
 		int imageResId = 0;
@@ -75,7 +76,7 @@ public class OptionsBottomSheetDialogFragment extends BottomSheetDialogFragment 
 		}
 		showDirectionIcon.setBackgroundDrawable(getContentIcon(R.drawable.ic_action_device_top));
 		if (imageResId != 0) {
-			showDirectionIcon.setImageDrawable(getIcon(imageResId, R.color.dashboard_blue));
+			showDirectionIcon.setImageDrawable(getIcon(imageResId, R.color.active_color_primary_light));
 		}
 		((ImageView) mainView.findViewById(R.id.coordinate_input_icon)).setImageDrawable(getContentIcon(R.drawable.ic_action_coordinates_longitude));
 		((ImageView) mainView.findViewById(R.id.build_route_icon)).setImageDrawable(getContentIcon(R.drawable.ic_action_gdirections_dark));

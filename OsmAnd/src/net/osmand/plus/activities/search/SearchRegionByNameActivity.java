@@ -1,18 +1,21 @@
 package net.osmand.plus.activities.search;
 
-import java.text.Collator;
-import java.util.ArrayList;
-import java.util.Comparator;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.Toast;
+
+import androidx.annotation.Nullable;
 
 import net.osmand.data.LatLon;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.helpers.FileNameTranslationHelper;
 import net.osmand.plus.resources.RegionAddressRepository;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.AdapterView;
-import android.widget.Toast;
+
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Comparator;
 
 
 public class SearchRegionByNameActivity extends SearchByNameAbstractActivity<RegionAddressRepository> {
@@ -36,6 +39,7 @@ public class SearchRegionByNameActivity extends SearchByNameAbstractActivity<Reg
 		super.reset();
 	}
 
+	@Nullable
 	@Override
 	protected LatLon getLocation(RegionAddressRepository item) {
 		return item.getEstimatedRegionCenter();

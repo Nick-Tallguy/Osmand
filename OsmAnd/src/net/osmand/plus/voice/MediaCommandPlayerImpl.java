@@ -1,11 +1,14 @@
 package net.osmand.plus.voice;
 
 
+import android.media.AudioAttributes;
 import android.media.MediaPlayer;
+import android.os.Build;
 
 import net.osmand.PlatformUtil;
-import net.osmand.plus.ApplicationMode;
+import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.plus.routing.VoiceRouter;
 
 import org.apache.commons.logging.Log;
@@ -29,10 +32,10 @@ public class MediaCommandPlayerImpl extends AbstractPrologCommandPlayer implemen
 	private static final Log log = PlatformUtil.getLog(MediaCommandPlayerImpl.class);
 	
 	// playing media
-	private MediaPlayer mediaPlayer;
+	MediaPlayer mediaPlayer;
 	// indicates that player is ready to play first file
-	private List<String> filesToPlay = Collections.synchronizedList(new ArrayList<String>());
-	private VoiceRouter vrt;
+	List<String> filesToPlay = Collections.synchronizedList(new ArrayList<String>());
+	VoiceRouter vrt;
 
 	
 	public MediaCommandPlayerImpl(OsmandApplication ctx, ApplicationMode applicationMode, VoiceRouter vrt, String voiceProvider)
@@ -67,7 +70,7 @@ public class MediaCommandPlayerImpl extends AbstractPrologCommandPlayer implemen
 
 	//  Called from the calculating route thread.
 	@Override
-	public synchronized void playCommands(CommandBuilder builder) {
+	public synchronized List<String> playCommands(CommandBuilder builder) {
 		if(vrt.isMute()) {
 			StringBuilder bld = new StringBuilder();
 			for (String s : builder.execute()) {
@@ -76,26 +79,32 @@ public class MediaCommandPlayerImpl extends AbstractPrologCommandPlayer implemen
 			if (ctx != null) {
 				// sendAlertToAndroidWear(ctx, bld.toString());
 			}
-			return;
+			return Collections.emptyList();
 		}
-		filesToPlay.addAll(builder.execute());
+		List<String> lst = builder.execute();
+
+		filesToPlay.addAll(lst);
 		
 		// If we have not already started to play audio, start.
 		if (mediaPlayer == null) {
 			requestAudioFocus();
-			// Delay first prompt of each batch to allow BT SCO connection being established
-			if (ctx != null && ctx.getSettings().AUDIO_STREAM_GUIDANCE.getModeValue(getApplicationMode()) == 0) {
-				try {
-					log.debug("Delaying MediaCommandPlayer for BT SCO");
-					Thread.sleep(ctx.getSettings().BT_SCO_DELAY.get());
-				} catch (InterruptedException e) {
+			// Delay first prompt of each batch to allow BT SCO link being established, or when VOICE_PROMPT_DELAY is set >0 for the other stream types
+			if (ctx != null) {
+				Integer stream = ctx.getSettings().AUDIO_MANAGER_STREAM.getModeValue(getApplicationMode());
+				OsmandPreference<Integer> pref = ctx.getSettings().VOICE_PROMPT_DELAY[stream];
+				if (pref.getModeValue(getApplicationMode()) > 0) {
+					try {
+						Thread.sleep(pref.getModeValue(getApplicationMode()));
+					} catch (InterruptedException e) {
+					}
 				}
 			}
 		}
 		playQueue();
+		return lst;
 	}
 	
-	private synchronized void playQueue() {
+	synchronized void playQueue() {
 		if (mediaPlayer == null) {
 			mediaPlayer = new MediaPlayer();
 		}
@@ -159,7 +168,7 @@ public class MediaCommandPlayerImpl extends AbstractPrologCommandPlayer implemen
 	 * @param file
 	 */
 	private void playFile(File file)  {
-		if (!file.exists()) {
+		if (!file.exists() || file.isDirectory()) {
 			log.error("Unable to play, does not exist: "+file);
 			playQueue();
 			return;
@@ -167,7 +176,16 @@ public class MediaCommandPlayerImpl extends AbstractPrologCommandPlayer implemen
 		try {
 			log.debug("Playing file : " + file); //$NON-NLS-1$
 			mediaPlayer.reset();
-			mediaPlayer.setAudioStreamType(streamType);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
+						.setUsage(ctx.getSettings().AUDIO_USAGE.get())
+						.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+						.build());
+
+			} else {
+				// Deprecated in API Level 26, use above AudioAtrributes instead
+				mediaPlayer.setAudioStreamType(streamType);
+			}
 			mediaPlayer.setDataSource(file.getAbsolutePath());
 			mediaPlayer.prepare();
 			mediaPlayer.setOnCompletionListener(this);

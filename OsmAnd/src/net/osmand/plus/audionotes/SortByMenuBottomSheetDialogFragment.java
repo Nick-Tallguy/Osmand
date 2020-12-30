@@ -3,8 +3,7 @@ package net.osmand.plus.audionotes;
 import android.os.Bundle;
 import android.view.View;
 
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.NotesSortByMode;
+import net.osmand.plus.settings.backend.CommonPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
 import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
@@ -26,7 +25,7 @@ public class SortByMenuBottomSheetDialogFragment extends MenuBottomSheetDialogFr
 		items.add(new TitleItem(getString(R.string.shared_string_sort)));
 
 		BaseBottomSheetItem byTypeItem = new SimpleBottomSheetItem.Builder()
-				.setIcon(getContentIcon(R.drawable.ic_groped_by_type))
+				.setIcon(getContentIcon(R.drawable.ic_grouped_by_type))
 				.setTitle(getString(R.string.by_type))
 				.setLayoutId(R.layout.bottom_sheet_item_simple)
 				.setOnClickListener(new View.OnClickListener() {
@@ -53,7 +52,7 @@ public class SortByMenuBottomSheetDialogFragment extends MenuBottomSheetDialogFr
 	}
 
 	private void selectSortByMode(NotesSortByMode mode) {
-		final OsmandSettings.CommonPreference<NotesSortByMode> sortByMode = getMyApplication().getSettings().NOTES_SORT_BY_MODE;
+		final CommonPreference<NotesSortByMode> sortByMode = getMyApplication().getSettings().NOTES_SORT_BY_MODE;
 		if (sortByMode.get() != mode) {
 			sortByMode.set(mode);
 			if (listener != null) {

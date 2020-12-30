@@ -11,22 +11,25 @@ import android.graphics.Canvas;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationCompat.BigTextStyle;
-import android.support.v4.app.NotificationCompat.Builder;
 import android.view.View;
 
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationCompat.BigTextStyle;
+import androidx.core.app.NotificationCompat.Builder;
+
+import net.osmand.Location;
 import net.osmand.plus.NavigationService;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.TargetPointsHelper.TargetPoint;
+import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.routing.RouteCalculationResult;
 import net.osmand.plus.routing.RouteCalculationResult.NextDirectionInfo;
 import net.osmand.plus.routing.RouteDirectionInfo;
 import net.osmand.plus.routing.RoutingHelper;
 import net.osmand.plus.views.TurnPathHelper;
-import net.osmand.plus.views.mapwidgets.NextTurnInfoWidget.TurnDrawable;
+import net.osmand.plus.views.mapwidgets.TurnDrawable;
 import net.osmand.router.TurnType;
 import net.osmand.util.Algorithms;
 
@@ -75,6 +78,7 @@ public class NavigationNotification extends OsmandNotification {
 				RoutingHelper routingHelper = app.getRoutingHelper();
 				routingHelper.setRoutePlanningMode(false);
 				routingHelper.setFollowingMode(true);
+				routingHelper.setCurrentLocation(getLastKnownLocation(), false);
 			}
 		}, new IntentFilter(OSMAND_RESUME_NAVIGATION_SERVICE_ACTION));
 
@@ -113,6 +117,11 @@ public class NavigationNotification extends OsmandNotification {
 	}
 
 	@Override
+	public Intent getContentIntent() {
+		return new Intent(app, MapActivity.class);
+	}
+
+	@Override
 	public Builder buildNotification(boolean wearable) {
 		if (!isEnabled()) {
 			return null;
@@ -121,18 +130,22 @@ public class NavigationNotification extends OsmandNotification {
 		String notificationTitle;
 		StringBuilder notificationText = new StringBuilder();
 		color = 0;
-		icon = R.drawable.ic_action_start_navigation;
+		icon = R.drawable.ic_notification_start_navigation;
 		turnBitmap = null;
 		ongoing = true;
 		RoutingHelper routingHelper = app.getRoutingHelper();
-		boolean followingMode = routingHelper.isFollowingMode() || app.getLocationProvider().getLocationSimulation().isRouteAnimating();
 		if (service != null && (service.getUsedBy() & USED_BY_NAVIGATION) != 0) {
 			color = app.getResources().getColor(R.color.osmand_orange);
 
-			String distanceStr = OsmAndFormatter.getFormattedDistance(app.getRoutingHelper().getLeftDistance(), app);
-			String timeStr = OsmAndFormatter.getFormattedDuration(app.getRoutingHelper().getLeftTime(), app);
+			String distanceStr = OsmAndFormatter.getFormattedDistance(routingHelper.getLeftDistance(), app);
+			String timeStr = OsmAndFormatter.getFormattedDuration(routingHelper.getLeftTime(), app);
 			String etaStr = SimpleDateFormat.getTimeInstance(DateFormat.SHORT)
-					.format(new Date(System.currentTimeMillis() + app.getRoutingHelper().getLeftTime() * 1000));
+					.format(new Date(System.currentTimeMillis() + routingHelper.getLeftTime() * 1000));
+			String speedStr = null;
+			Location location = getLastKnownLocation();
+			if (location != null && location.hasSpeed()) {
+				speedStr = OsmAndFormatter.getFormattedSpeed(location.getSpeed(), app);
+			}
 
 			TurnType turnType = null;
 			boolean deviatedFromRoute;
@@ -140,7 +153,7 @@ public class NavigationNotification extends OsmandNotification {
 			int nextTurnDistance = 0;
 			int nextNextTurnDistance = 0;
 			RouteDirectionInfo ri = null;
-			if (routingHelper.isRouteCalculated() && followingMode) {
+			if (routingHelper.isRouteCalculated() && routingHelper.isFollowingMode()) {
 				deviatedFromRoute = routingHelper.isDeviatedFromRoute();
 
 				if (deviatedFromRoute) {
@@ -192,9 +205,12 @@ public class NavigationNotification extends OsmandNotification {
 						notificationText.append("\n");
 					}
 				}
-
-				notificationText.append(distanceStr).append(" • ").append(timeStr).append(" • ").append(etaStr);
-
+				notificationText.append(distanceStr)
+						.append(" • ").append(timeStr)
+						.append(" • ").append(etaStr);
+				if (speedStr != null) {
+					notificationText.append(" • ").append(speedStr);
+				}
 			} else {
 				notificationTitle = app.getString(R.string.shared_string_navigation);
 				String error = routingHelper.getLastRouteCalcErrorShort();
@@ -204,7 +220,6 @@ public class NavigationNotification extends OsmandNotification {
 					notificationText.append(error);
 				}
 			}
-
 		} else if (routingHelper.isRoutePlanningMode() && routingHelper.isPauseNavigation()) {
 			ongoing = false;
 			notificationTitle = app.getString(R.string.shared_string_navigation);
@@ -221,21 +236,21 @@ public class NavigationNotification extends OsmandNotification {
 		Intent stopIntent = new Intent(OSMAND_STOP_NAVIGATION_SERVICE_ACTION);
 		PendingIntent stopPendingIntent = PendingIntent.getBroadcast(app, 0, stopIntent,
 				PendingIntent.FLAG_UPDATE_CURRENT);
-		notificationBuilder.addAction(R.drawable.ic_action_remove_dark,
+		notificationBuilder.addAction(R.drawable.ic_notification_remove,
 				app.getString(R.string.shared_string_control_stop), stopPendingIntent);
 
-		if (routingHelper.isRouteCalculated() && followingMode) {
+		if (routingHelper.isRouteCalculated() && routingHelper.isFollowingMode()) {
 			Intent pauseIntent = new Intent(OSMAND_PAUSE_NAVIGATION_SERVICE_ACTION);
 			PendingIntent pausePendingIntent = PendingIntent.getBroadcast(app, 0, pauseIntent,
 					PendingIntent.FLAG_UPDATE_CURRENT);
-			notificationBuilder.addAction(R.drawable.ic_pause,
+			notificationBuilder.addAction(R.drawable.ic_notification_pause,
 					app.getString(R.string.shared_string_pause), pausePendingIntent);
 		} else if (routingHelper.isRouteCalculated() && routingHelper.isPauseNavigation()) {
 			Intent resumeIntent = new Intent(OSMAND_RESUME_NAVIGATION_SERVICE_ACTION);
 			PendingIntent resumePendingIntent = PendingIntent.getBroadcast(app, 0, resumeIntent,
 					PendingIntent.FLAG_UPDATE_CURRENT);
-			notificationBuilder.addAction(R.drawable.ic_play_dark,
-					app.getString(R.string.shared_string_continue), resumePendingIntent);
+			notificationBuilder.addAction(R.drawable.ic_notification_play,
+					app.getString(R.string.shared_string_resume), resumePendingIntent);
 		}
 
 		return notificationBuilder;
@@ -257,6 +272,10 @@ public class NavigationNotification extends OsmandNotification {
 					notification.bigContentView.setViewVisibility(smallIconViewId, View.INVISIBLE);
 			}
 		}
+	}
+
+	private Location getLastKnownLocation() {
+		return app.getLocationProvider().getLastKnownLocation();
 	}
 
 	public Bitmap drawableToBitmap(Drawable drawable) {

@@ -5,7 +5,8 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.os.SystemClock;
 import android.os.Vibrator;
-import android.support.v7.app.AlertDialog;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.Location;
 import net.osmand.data.LatLon;
@@ -14,7 +15,7 @@ import net.osmand.plus.OsmAndLocationProvider.OsmAndCompassListener;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.TargetPointsHelper.TargetPoint;
 import net.osmand.plus.access.RelativeDirectionStyle;
@@ -372,7 +373,7 @@ public class NavigationInfo implements OsmAndCompassListener, OsmAndLocationList
 				dialog.cancel();
 			}
 		});
-		info.setItems(attributes.toArray(new String[attributes.size()]), new DialogInterface.OnClickListener() {
+		info.setItems(attributes.toArray(new String[0]), new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
 			}

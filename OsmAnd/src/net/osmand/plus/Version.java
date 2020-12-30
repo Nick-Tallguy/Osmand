@@ -1,10 +1,14 @@
 package net.osmand.plus;
 
 
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+
+import net.osmand.plus.inapp.InAppPurchaseHelper;
+
+import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import android.content.pm.PackageInfo;
-import 	android.content.pm.PackageManager;
 
 public class Version {
 	
@@ -21,6 +25,10 @@ public class Version {
 	
 	public static boolean isBlackberry(OsmandApplication ctx) {
 		return ctx.getString(R.string.versionFeatures).contains("+blackberry");
+	}
+	
+	public static boolean isHuawei(OsmandApplication ctx) {
+		return ctx.getPackageName().endsWith(".huawei");
 	}
 	
 	public static boolean isMarketEnabled(OsmandApplication ctx) {
@@ -115,20 +123,24 @@ public class Version {
 	public static boolean isFreeVersion(OsmandApplication ctx){
 		return ctx.getPackageName().equals(FREE_VERSION_NAME) || 
 				ctx.getPackageName().equals(FREE_DEV_VERSION_NAME) ||
-				ctx.getPackageName().equals(FREE_CUSTOM_VERSION_NAME)
-				;
+				ctx.getPackageName().equals(FREE_CUSTOM_VERSION_NAME) ||
+				isHuawei(ctx);
 	}
 
 	public static boolean isPaidVersion(OsmandApplication ctx) {
 		return !isFreeVersion(ctx)
-				|| ctx.getSettings().FULL_VERSION_PURCHASED.get()
-				|| ctx.getSettings().LIVE_UPDATES_PURCHASED.get();
+				|| InAppPurchaseHelper.isFullVersionPurchased(ctx)
+				|| InAppPurchaseHelper.isSubscribedToLiveUpdates(ctx);
 	}
 	
 	public static boolean isDeveloperVersion(OsmandApplication ctx){
 		return getAppName(ctx).contains("~") || ctx.getPackageName().equals(FREE_DEV_VERSION_NAME);
 	}
-	
+
+	public static boolean isDeveloperBuild(OsmandApplication ctx){
+		return getAppName(ctx).contains("~");
+	}
+
 	public static String getVersionForTracker(OsmandApplication ctx) {
 		String v = Version.getAppName(ctx);
 		if(Version.isProductionVersion(ctx)){
@@ -139,4 +151,21 @@ public class Version {
 		return v;
 	}
 
+	public static boolean isOpenGlAvailable(OsmandApplication app) {
+		if ("qnx".equals(System.getProperty("os.name"))) {
+			return false;
+		}
+		File nativeLibraryDir = new File(app.getApplicationInfo().nativeLibraryDir);
+		if (nativeLibraryDir.exists() && nativeLibraryDir.canRead()) {
+			File[] files = nativeLibraryDir.listFiles();
+			if (files != null) {
+				for (File file : files) {
+					if ("libOsmAndCoreWithJNI.so".equals(file.getName())) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
 }

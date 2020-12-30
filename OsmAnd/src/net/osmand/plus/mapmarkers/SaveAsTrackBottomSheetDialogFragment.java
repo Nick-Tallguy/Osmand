@@ -1,10 +1,6 @@
 package net.osmand.plus.mapmarkers;
 
-import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.design.widget.TextInputLayout;
-import android.support.v4.content.ContextCompat;
 import android.text.format.DateFormat;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
@@ -16,23 +12,31 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+
+import com.google.android.material.textfield.TextInputLayout;
 
 import net.osmand.AndroidUtils;
+import net.osmand.FileUtils;
 import net.osmand.IndexConstants;
-import net.osmand.plus.widgets.OsmandTextFieldBoxes;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
-import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.BottomSheetDialogFragment;
 import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.widgets.OsmandTextFieldBoxes;
 
-import java.io.File;
 import java.util.Date;
 
-import static net.osmand.plus.helpers.ImportHelper.GPX_SUFFIX;
+import static net.osmand.plus.mapmarkers.CoordinateInputDialogFragment.ADDED_POINTS_NUMBER_KEY;
 
 public class SaveAsTrackBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
 	public final static String TAG = "SaveAsTrackBottomSheetDialogFragment";
+	public static final String COORDINATE_INPUT_MODE_KEY = "coordinate_input_mode_key";
 
 	private boolean portrait;
 	private MarkerSaveAsTrackFragmentListener listener;
@@ -43,21 +47,32 @@ public class SaveAsTrackBottomSheetDialogFragment extends BottomSheetDialogFragm
 
 	@Nullable
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-		MapActivity mapActivity = (MapActivity) getActivity();
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		final OsmandApplication app = getMyApplication();
+		boolean openFromCoordinateInput = false;
+		int number = 0;
+		Bundle args = getArguments();
+		if (args != null) {
+			openFromCoordinateInput = args.getBoolean(COORDINATE_INPUT_MODE_KEY);
+			if (openFromCoordinateInput) {
+				number = args.getInt(ADDED_POINTS_NUMBER_KEY);
+			}
+		}
 		portrait = AndroidUiHelper.isOrientationPortrait(getActivity());
-		final boolean nightMode = !getMyApplication().getSettings().isLightContent();
+		final boolean nightMode = !app.getSettings().isLightContent();
 		final int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
+		final int textPrimaryColor = nightMode ? R.color.text_color_primary_dark : R.color.text_color_primary_light;
 
 		final View mainView = View.inflate(new ContextThemeWrapper(getContext(), themeRes), R.layout.fragment_marker_save_as_track_bottom_sheet_dialog, container);
 		LinearLayout contentLayout = (LinearLayout) mainView.findViewById(R.id.content_linear_layout);
-		int layoutRes;
-		if (Build.VERSION.SDK_INT > Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-			layoutRes = R.layout.markers_track_name_text_field_box;
-		} else {
-			layoutRes = R.layout.markers_track_name_edit_text;
-		}
-		contentLayout.addView(getLayoutInflater().inflate(layoutRes, contentLayout, false), 2);
+		TextView titleTv = (TextView) mainView.findViewById(R.id.save_as_track_title);
+		titleTv.setText(openFromCoordinateInput ? R.string.coord_input_save_as_track : R.string.marker_save_as_track);
+		titleTv.setTextColor(ContextCompat.getColor(getContext(), textPrimaryColor));
+		TextView descriptionTv = (TextView) mainView.findViewById(R.id.save_as_track_description);
+		descriptionTv.setText(openFromCoordinateInput
+				? getString(R.string.coord_input_save_as_track_descr, String.valueOf(number))
+				: getString(R.string.marker_save_as_track_descr));
+		contentLayout.addView(getLayoutInflater().inflate(R.layout.track_name_edit_text, contentLayout, false), 2);
 		if (portrait) {
 			AndroidUtils.setBackground(getActivity(), mainView, nightMode, R.drawable.bg_bottom_menu_light, R.drawable.bg_bottom_menu_dark);
 		}
@@ -66,28 +81,18 @@ public class SaveAsTrackBottomSheetDialogFragment extends BottomSheetDialogFragm
 			if (textBox instanceof TextInputLayout) {
 				((TextInputLayout) textBox).setHintTextAppearance(R.style.TextAppearance_App_DarkTextInputLayout);
 			} else if (textBox instanceof OsmandTextFieldBoxes) {
-				((OsmandTextFieldBoxes) textBox).setPrimaryColor(ContextCompat.getColor(mapActivity, R.color.color_dialog_buttons_dark));
+				((OsmandTextFieldBoxes) textBox).setPrimaryColor(ContextCompat.getColor(app, R.color.active_color_primary_dark));
 			}
 		}
 
-		final File dir = mapActivity.getMyApplication().getAppPath(IndexConstants.GPX_INDEX_DIR + "/map markers");
-		if (!dir.exists()) {
-			dir.mkdirs();
-		}
 		Date date = new Date();
-		final String suggestedName = mapActivity.getString(R.string.markers) + "_" + DateFormat.format("yyyy-MM-dd", date).toString();
-		String displayedName = suggestedName;
-		File fout = new File(dir, suggestedName + GPX_SUFFIX);
-		int ind = 1;
-		while (fout.exists()) {
-			displayedName = suggestedName + "_" + (++ind);
-			fout = new File(dir, displayedName + GPX_SUFFIX);
-		}
-		final EditText nameEditText = (EditText) mainView.findViewById(R.id.name_edit_text);
-		nameEditText.setText(displayedName);
-		if (textBox instanceof OsmandTextFieldBoxes) {
-			((OsmandTextFieldBoxes) textBox).activate(true);
-		}
+		String dirName = IndexConstants.GPX_INDEX_DIR + IndexConstants.MAP_MARKERS_INDEX_DIR;
+		String suggestedName = app.getString(R.string.markers) + "_" + DateFormat.format("yyyy-MM-dd", date).toString();
+		String uniqueFileName = FileUtils.createUniqueFileName(app, suggestedName, dirName, IndexConstants.GPX_FILE_EXT);
+
+		final EditText nameEditText = mainView.findViewById(R.id.name_edit_text);
+		nameEditText.setText(uniqueFileName);
+		nameEditText.setTextColor(ContextCompat.getColor(getContext(), textPrimaryColor));
 
 		mainView.findViewById(R.id.save_button).setOnClickListener(new View.OnClickListener() {
 			@Override

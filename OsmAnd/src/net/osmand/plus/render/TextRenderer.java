@@ -1,5 +1,6 @@
 package net.osmand.plus.render;
 
+
 import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.procedure.TIntObjectProcedure;
 
@@ -8,6 +9,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import net.osmand.PlatformUtil;
 import net.osmand.binary.BinaryMapDataObject;
 import net.osmand.binary.BinaryMapIndexReader.TagValuePair;
 import net.osmand.data.QuadRect;
@@ -16,7 +18,7 @@ import net.osmand.plus.render.OsmandRenderer.RenderingContext;
 import net.osmand.render.RenderingRuleSearchRequest;
 import net.osmand.render.RenderingRulesStorage;
 import net.osmand.util.Algorithms;
-import net.sf.junidecode.Junidecode;
+import net.osmand.util.TransliterationHelper;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -29,6 +31,9 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+
+import org.apache.commons.logging.Log;
 
 public class TextRenderer {
 
@@ -40,7 +45,7 @@ public class TextRenderer {
 	private Typeface italicTypeface;
 	private Typeface boldTypeface;
 
-	static class TextDrawInfo {
+	public static class TextDrawInfo {
 
 		public TextDrawInfo(String text) {
 			this.text = text;
@@ -91,6 +96,30 @@ public class TextRenderer {
 				shieldResIcon = render.getStringPropertyValue(render.ALL.R_ICON);
 			}
 			textOrder = render.getIntPropertyValue(render.ALL.R_TEXT_ORDER, 100);
+		}
+
+		public float getCenterX() {
+			return centerX;
+		}
+
+		public void setCenterX(float centerX) {
+			this.centerX = centerX;
+		}
+
+		public float getCenterY() {
+			return centerY;
+		}
+
+		public void setCenterY(float centerY) {
+			this.centerY = centerY;
+		}
+
+		public String getShieldResIcon() {
+			return shieldResIcon;
+		}
+
+		public void setShieldResIcon(String shieldResIcon) {
+			this.shieldResIcon = shieldResIcon;
 		}
 	}
 
@@ -236,7 +265,7 @@ public class TextRenderer {
 			TextDrawInfo text = rc.textToDraw.get(i);
 			if (text.text != null && text.text.length() > 0) {
 				if (preferredLocale.length() > 0) {
-					text.text = Junidecode.unidecode(text.text);
+					text.text = TransliterationHelper.transliterate(text.text);
 				}
 
 				// sest text size before finding intersection (it is used there)
@@ -285,27 +314,28 @@ public class TextRenderer {
 		}
 	}
 
-	private void drawShieldIcon(RenderingContext rc, Canvas cv, TextDrawInfo text, String sr) {
+	public void drawShieldIcon(RenderingContext rc, Canvas cv, TextDrawInfo text, String sr) {
 		if (sr != null) {
 			float coef = rc.getDensityValue(rc.screenDensityRatio * rc.textScale);
-			Bitmap ico = RenderingIcons.getIcon(context, sr, true);
+			Drawable ico = RenderingIcons.getDrawableIcon(context, sr, true);
 			if (ico != null) {
-				float left = text.centerX - ico.getWidth() / 2 * coef - 0.5f;
-				float top = text.centerY - ico.getHeight() / 2 * coef -  paintText.descent() - 0.5f;
-				if(rc.screenDensityRatio != 1f){
-					RectF rf = new RectF(left, top, left + ico.getWidth() * coef, 
-							top + ico.getHeight() * coef);
-					Rect src = new Rect(0, 0, ico.getWidth(), ico
-							.getHeight());
-					cv.drawBitmap(ico, src, rf, paintIcon);
+				float left = text.centerX - ico.getIntrinsicWidth() / 2f * coef - 0.5f;
+				float top = text.centerY - ico.getIntrinsicHeight() / 2f * coef -  paintText.descent() * 1.5f;
+				cv.save();
+				cv.translate(left, top);
+				if (rc.screenDensityRatio != 1f) {
+					ico.setBounds(0, 0, (int) (ico.getIntrinsicWidth() * coef), (int) (ico.getIntrinsicHeight() * coef));
+					ico.draw(cv);
 				} else {
-					cv.drawBitmap(ico, left, top, paintIcon);
+					ico.setBounds(0, 0, ico.getIntrinsicWidth(), ico.getIntrinsicHeight());
+					ico.draw(cv);
 				}
+				cv.restore();
 			}
 		}
 	}
 
-	private void drawWrappedText(Canvas cv, TextDrawInfo text, float textSize) {
+	public void drawWrappedText(Canvas cv, TextDrawInfo text, float textSize) {
 		if (text.textWrap == 0) {
 			// set maximum for all text
 			text.textWrap = 40;
@@ -408,7 +438,7 @@ public class TextRenderer {
 						String nameTag = isName ? "" : obj.getMapIndex().decodeType(tag).tag;
 						boolean skip = false;
 						// not completely correct we should check "name"+rc.preferredLocale
-						if (isName && !rc.preferredLocale.equals("") && 
+						if (isName && !rc.preferredLocale.isEmpty() &&
 								map.containsKey(obj.getMapIndex().nameEnEncodingType)) {
 							skip = true;
 						} 

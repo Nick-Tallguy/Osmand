@@ -1,6 +1,5 @@
 package net.osmand.plus.render;
 
-
 import gnu.trove.iterator.TIntObjectIterator;
 import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TIntArrayList;
@@ -13,7 +12,9 @@ import java.io.File;
 import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.TreeSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -38,10 +39,11 @@ import net.osmand.data.QuadPointDouble;
 import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
 import net.osmand.map.MapTileDownloader;
+import net.osmand.plus.settings.backend.OsmAndAppCustomization.OsmAndAppCustomizationListener;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.CommonPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.CommonPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.development.OsmandDevelopmentPlugin;
 import net.osmand.plus.render.OsmandRenderer.RenderingContext;
@@ -54,6 +56,7 @@ import net.osmand.util.Algorithms;
 import net.osmand.util.MapAlgorithms;
 import net.osmand.util.MapUtils;
 
+import net.osmand.util.TransliterationHelper;
 import org.apache.commons.logging.Log;
 
 import android.content.Context;
@@ -64,13 +67,16 @@ import android.os.Looper;
 import android.widget.Toast;
 
 public class MapRenderRepositories {
-
 	// It is needed to not draw object twice if user have map index that intersects by boundaries
 	public static boolean checkForDuplicateObjectIds = true;
 	
 	private final static Log log = PlatformUtil.getLog(MapRenderRepositories.class);
 	private final OsmandApplication context;
 	private final static int zoomOnlyForBasemaps = 11;
+	private final static int zoomToOverviewLocalNames = 6;
+	private final static Set<String> languagesNotTransliterateOnBasemap = new TreeSet<>(
+			Arrays.asList("ru", "uk", "be", "bg", "mk", "sr")
+	);
 
 	static int zoomForBaseRouteRendering  = 14;
 	private Handler handler;
@@ -116,6 +122,15 @@ public class MapRenderRepositories {
 		this.renderer = new OsmandRenderer(context);
 		handler = new Handler(Looper.getMainLooper());
 		prefs = context.getSettings();
+
+		OsmAndAppCustomizationListener customizationListener = new OsmAndAppCustomizationListener() {
+			@Override
+			public void onOsmAndSettingsCustomized() {
+				prefs = MapRenderRepositories.this.context.getSettings();
+				clearCache();
+			}
+		};
+		context.getAppCustomization().addListener(customizationListener);
 	}
 
 	public Context getContext() {
@@ -294,10 +309,12 @@ public class MapRenderRepositories {
 		if(library == null) {
 			return;
 		}
+		boolean containsJapanMapData = false;
 		boolean useLive = context.getSettings().USE_OSM_LIVE_FOR_ROUTING.get();
-		for (String mapName : files.keySet()) {
-			BinaryMapIndexReader fr = files.get(mapName);
-			if (fr != null && (fr.containsMapData(leftX, topY, rightX, bottomY, zoom) || 
+		for (Map.Entry<String, BinaryMapIndexReader> entry : files.entrySet()) {
+			String mapName = entry.getKey();
+			BinaryMapIndexReader fr = entry.getValue();
+			if (fr != null && (fr.containsMapData(leftX, topY, rightX, bottomY, zoom) ||
 					fr.containsRouteData(leftX, topY, rightX, bottomY, zoom))) {
 				if (!nativeFiles.contains(mapName)) {
 					long time = System.currentTimeMillis();
@@ -307,8 +324,12 @@ public class MapRenderRepositories {
 					}
 					log.debug("Native resource " + mapName + " initialized " + (System.currentTimeMillis() - time) + " ms"); //$NON-NLS-1$ //$NON-NLS-2$
 				}
+				if (fr.getCountryName().equals("Japan")) {
+					containsJapanMapData = true;
+				}
 			}
 		}
+		TransliterationHelper.setJapanese(containsJapanMapData);
 	}
 	
 	private void readRouteDataAsMapObjects(SearchRequest<BinaryMapDataObject> sr, BinaryMapIndexReader c, 
@@ -346,7 +367,7 @@ public class MapRenderRepositories {
 							coordinantes[2 * k + 1] = r.getPoint31YTile(k);
 						}
 						BinaryMapDataObject mo = new BinaryMapDataObject( r.getId(), coordinantes, new int[0][],
-								RenderingRulesStorage.LINE_RULES, true, roTypes, null);
+								RenderingRulesStorage.LINE_RULES, true, roTypes, null, 0,0);
 						TIntObjectHashMap<String> names = r.getNames();
 						if(names != null) {
 							TIntObjectIterator<String> it = names.iterator();
@@ -452,7 +473,7 @@ public class MapRenderRepositories {
 					topY};
 			BinaryMapDataObject o = new BinaryMapDataObject(-1, coordinates, new int[0][],  
 					RenderingRulesStorage.POLYGON_RULES, true,
-					new int[]{ocean[0] && !land[0] ? mi.coastlineEncodingType : (mi.landEncodingType)}, null);
+					new int[]{ocean[0] && !land[0] ? mi.coastlineEncodingType : (mi.landEncodingType)}, null, 0, 0);
 			o.setMapIndex(mi);
 			tempResult.add(o);
 		}
@@ -524,6 +545,7 @@ public class MapRenderRepositories {
 		}
 		MapIndex mi = null;
 		searchRequest = BinaryMapIndexReader.buildSearchRequest(leftX, rightX, topY, bottomY, zoom, searchFilter);
+		boolean containsJapanMapData = false;
 		for (BinaryMapIndexReader c : files.values()) {
 			boolean basemap = c.isBasemap();
 			searchRequest.clearSearchResults();
@@ -534,11 +556,14 @@ public class MapRenderRepositories {
 				res = new ArrayList<BinaryMapDataObject>();
 				log.debug("Search failed " + c.getRegionNames(), e); //$NON-NLS-1$
 			}
-			if(res.size() > 0) {
+			if (res.size() > 0) {
 				if(basemap) {
 					renderedState |= 1;
 				} else {
 					renderedState |= 2;
+				}
+				if (c.getCountryName().equals("Japan")) {
+					containsJapanMapData = true;
 				}
 			}
 			for (BinaryMapDataObject r : res) {
@@ -579,6 +604,7 @@ public class MapRenderRepositories {
 				land[0] = true;
 			}
 		}
+		TransliterationHelper.setJapanese(containsJapanMapData);
 		return mi;
 	}
 
@@ -623,46 +649,17 @@ public class MapRenderRepositories {
 			// find selected rendering type
 			OsmandApplication app = ((OsmandApplication) context.getApplicationContext());
 			boolean nightMode = app.getDaynightHelper().isNightMode();
+
 			// boolean moreDetail = prefs.SHOW_MORE_MAP_DETAIL.get();
 			RenderingRulesStorage storage = app.getRendererRegistry().getCurrentSelectedRenderer();
-			RenderingRuleSearchRequest renderingReq = new RenderingRuleSearchRequest(storage);
-			renderingReq.setBooleanFilter(renderingReq.ALL.R_NIGHT_MODE, nightMode);
-			for (RenderingRuleProperty customProp : storage.PROPS.getCustomRules()) {
-				if (customProp.isBoolean()) {
-					if(customProp.getAttrName().equals(RenderingRuleStorageProperties.A_ENGINE_V1)) {
-						renderingReq.setBooleanFilter(customProp, true);
-					} else if (RenderingRuleStorageProperties.UI_CATEGORY_HIDDEN.equals(customProp.getCategory())) {
-						renderingReq.setBooleanFilter(customProp, false);
-					} else {
-						CommonPreference<Boolean> pref = prefs.getCustomRenderBooleanProperty(customProp.getAttrName());
-						renderingReq.setBooleanFilter(customProp, pref.get());
-					}
-				} else if (RenderingRuleStorageProperties.UI_CATEGORY_HIDDEN.equals(customProp.getCategory())) {
-					if (customProp.isString()) {
-						renderingReq.setStringFilter(customProp, "");
-					} else {
-						renderingReq.setIntFilter(customProp, 0);
-					}
-				} else {
-					CommonPreference<String> settings = prefs.getCustomRenderProperty(customProp.getAttrName());
-					String res = settings.get();
-					if (!Algorithms.isEmpty(res)) {
-						if (customProp.isString()) {
-							renderingReq.setStringFilter(customProp, res);
-						} else {
-							try {
-								renderingReq.setIntFilter(customProp, Integer.parseInt(res));
-							} catch (NumberFormatException e) {
-								e.printStackTrace();
-							}
-						}
-					} else {
-						if (customProp.isString()) {
-							renderingReq.setStringFilter(customProp, "");
-						}
-					}
-				}
-			}
+			prefs.getCustomRenderProperty("appMode").setModeValue(prefs.APPLICATION_MODE.get(),
+					app.getSettings().APPLICATION_MODE.get().getStringKey());
+			prefs.getCustomRenderProperty("baseAppMode").setModeValue(prefs.APPLICATION_MODE.get(),
+					app.getSettings().APPLICATION_MODE.get().getParent() != null
+							? prefs.APPLICATION_MODE.get().getParent().getStringKey()
+							: prefs.APPLICATION_MODE.get().getStringKey());
+			RenderingRuleSearchRequest renderingReq = getSearchRequestWithAppliedCustomRules(storage, nightMode);
+
 			renderingReq.saveState();
 			NativeOsmandLibrary nativeLib = !prefs.SAFE_MODE.get() ? NativeOsmandLibrary.getLibrary(storage, context) : null;
 
@@ -730,17 +727,14 @@ public class MapRenderRepositories {
 			currentRenderingContext.width = requestedBox.getPixWidth();
 			currentRenderingContext.height = requestedBox.getPixHeight();
 			currentRenderingContext.nightMode = nightMode;
-			if(requestedBox.getZoom() <= zoomOnlyForBasemaps && 
-					"".equals(prefs.MAP_PREFERRED_LOCALE.get())) {
+			if(requestedBox.getZoom() <= zoomToOverviewLocalNames &&
+					prefs.MAP_PREFERRED_LOCALE.get() != null && prefs.MAP_PREFERRED_LOCALE.get().isEmpty()) {
 				currentRenderingContext.preferredLocale = app.getLanguage();
-				currentRenderingContext.transliterate = !"ru".equals(app.getLanguage()) && !"uk".equals(app.getLanguage()) && !"be".equals(app.getLanguage())
-					&& !"bg".equals(app.getLanguage()) && !"mk".equals(app.getLanguage()) && !"sr".equals(app.getLanguage());
+				currentRenderingContext.transliterate =
+						!languagesNotTransliterateOnBasemap.contains(app.getLanguage());
 			} else {
 				currentRenderingContext.preferredLocale = prefs.MAP_PREFERRED_LOCALE.get();
 				currentRenderingContext.transliterate = prefs.MAP_TRANSLITERATE_NAMES.get();
-				if(currentRenderingContext.preferredLocale.equals("en")) {
-					currentRenderingContext.transliterate = true;
-				}
 			}
 			final float mapDensity = (float) requestedBox.getMapDensity();
 			currentRenderingContext.setDensityValue(mapDensity);
@@ -770,7 +764,7 @@ public class MapRenderRepositories {
 			this.prevBmp = this.bmp;
 			this.prevBmpLocation = this.bmpLocation;
 			// necessary for transparent, otherwise 2 times smaller 
-			Config cfg = transparent ?  Config.ARGB_8888 : Config.RGB_565;
+			Config cfg = true ?  Config.ARGB_8888 : Config.RGB_565;
 			if (reuse != null && reuse.getWidth() == currentRenderingContext.width && reuse.getHeight() == currentRenderingContext.height &&
 					cfg == reuse.getConfig()) {
 				bmp = reuse;
@@ -867,6 +861,49 @@ public class MapRenderRepositories {
 
 	}
 
+	public RenderingRuleSearchRequest getSearchRequestWithAppliedCustomRules(RenderingRulesStorage storage, boolean nightMode) {
+		// boolean moreDetail = prefs.SHOW_MORE_MAP_DETAIL.get();
+		RenderingRuleSearchRequest renderingReq = new RenderingRuleSearchRequest(storage);
+		renderingReq.setBooleanFilter(renderingReq.ALL.R_NIGHT_MODE, nightMode);
+		for (RenderingRuleProperty customProp : storage.PROPS.getCustomRules()) {
+			if (customProp.isBoolean()) {
+				if(customProp.getAttrName().equals(RenderingRuleStorageProperties.A_ENGINE_V1)) {
+					renderingReq.setBooleanFilter(customProp, true);
+				} else if (RenderingRuleStorageProperties.UI_CATEGORY_HIDDEN.equals(customProp.getCategory())) {
+					renderingReq.setBooleanFilter(customProp, false);
+				} else {
+					CommonPreference<Boolean> pref = prefs.getCustomRenderBooleanProperty(customProp.getAttrName());
+					renderingReq.setBooleanFilter(customProp, pref.get());
+				}
+			} else if (RenderingRuleStorageProperties.UI_CATEGORY_HIDDEN.equals(customProp.getCategory())) {
+				if (customProp.isString()) {
+					renderingReq.setStringFilter(customProp, "");
+				} else {
+					renderingReq.setIntFilter(customProp, 0);
+				}
+			} else {
+				CommonPreference<String> settings = prefs.getCustomRenderProperty(customProp.getAttrName());
+				String res = settings.get();
+				if (!Algorithms.isEmpty(res)) {
+					if (customProp.isString()) {
+						renderingReq.setStringFilter(customProp, res);
+					} else {
+						try {
+							renderingReq.setIntFilter(customProp, Integer.parseInt(res));
+						} catch (NumberFormatException e) {
+							e.printStackTrace();
+						}
+					}
+				} else {
+					if (customProp.isString()) {
+						renderingReq.setStringFilter(customProp, "");
+					}
+				}
+			}
+		}
+		return renderingReq;
+	}
+
 	public Bitmap getBitmap() {
 		return bmp;
 	}
@@ -946,7 +983,7 @@ public class MapRenderRepositories {
 				coordinates[j * 2 + 1] = (int) (ring.get(j) & mask);
 			}
 			BinaryMapDataObject o = new BinaryMapDataObject(dbId, coordinates,  
-					new int[0][], RenderingRulesStorage.POLYGON_RULES, true, new int[] { mapIndex.coastlineBrokenEncodingType }, null);
+					new int[0][], RenderingRulesStorage.POLYGON_RULES, true, new int[] { mapIndex.coastlineBrokenEncodingType }, null, 0,0);
 			o.setMapIndex(mapIndex);
 			result.add(o);
 		}
@@ -966,7 +1003,7 @@ public class MapRenderRepositories {
 			clockwiseFound = clockwiseFound || clockwise;
 			BinaryMapDataObject o = new BinaryMapDataObject(dbId, coordinates, 
 					new int[0][], RenderingRulesStorage.POLYGON_RULES, true,  new int[] { clockwise ? mapIndex.coastlineEncodingType
-					: mapIndex.landEncodingType }, null);
+					: mapIndex.landEncodingType }, null, 0,0);
 			o.setMapIndex(mapIndex);
 			o.setArea(true);
 			result.add(o);
@@ -976,7 +1013,7 @@ public class MapRenderRepositories {
 			// add complete water tile
 			BinaryMapDataObject o = new BinaryMapDataObject(dbId,
 					new int[] { leftX, topY, rightX, topY, rightX, bottomY, leftX, bottomY, leftX, topY }, 
-					new int[0][], RenderingRulesStorage.POLYGON_RULES, true, new int[] { mapIndex.coastlineEncodingType }, null);
+					new int[0][], RenderingRulesStorage.POLYGON_RULES, true, new int[] { mapIndex.coastlineEncodingType }, null, 0,0);
 			o.setMapIndex(mapIndex);
 			log.info("!!! Isolated islands !!!"); //$NON-NLS-1$
 			result.add(o);

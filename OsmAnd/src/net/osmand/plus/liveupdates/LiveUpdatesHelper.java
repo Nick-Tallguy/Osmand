@@ -5,9 +5,11 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
 
-import net.osmand.plus.OsmandSettings;
+import androidx.annotation.NonNull;
+
+import net.osmand.plus.settings.backend.CommonPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.OsmandActionBarActivity;
 import net.osmand.plus.helpers.FileNameTranslationHelper;
@@ -31,40 +33,52 @@ public class LiveUpdatesHelper {
 
 	public static final int DEFAULT_LAST_CHECK = -1;
 
-	public static OsmandSettings.CommonPreference<Boolean> preferenceForLocalIndex(
+	private static <T> CommonPreference<T> checkPref(CommonPreference<T> p) {
+		if (p.isSet()) {
+			T vl = p.get();
+			p = p.makeGlobal();
+			if (!p.isSet()) {
+				p.set(vl);
+			}
+		} else {
+			p = p.makeGlobal();
+		}
+		return p;
+	}
+	public static CommonPreference<Boolean> preferenceForLocalIndex(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + LIVE_UPDATES_ON_POSTFIX;
-		return settings.registerBooleanPreference(settingId, false);
+		return checkPref(settings.registerBooleanPreference(settingId, false));
 	}
 
-	public static OsmandSettings.CommonPreference<Boolean> preferenceLiveUpdatesOn(
+	public static CommonPreference<Boolean> preferenceLiveUpdatesOn(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + LIVE_UPDATES_ON_POSTFIX;
-		return settings.registerBooleanPreference(settingId, false);
+		return checkPref(settings.registerBooleanPreference(settingId, false));
 	}
 
-	public static OsmandSettings.CommonPreference<Boolean> preferenceDownloadViaWiFi(
+	public static CommonPreference<Boolean> preferenceDownloadViaWiFi(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + DOWNLOAD_VIA_WIFI_POSTFIX;
-		return settings.registerBooleanPreference(settingId, false);
+		return checkPref(settings.registerBooleanPreference(settingId, false));
 	}
 
-	public static OsmandSettings.CommonPreference<Integer> preferenceUpdateFrequency(
+	public static CommonPreference<Integer> preferenceUpdateFrequency(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + UPDATE_TIMES_POSTFIX;
-		return settings.registerIntPreference(settingId, UpdateFrequency.HOURLY.ordinal());
+		return checkPref(settings.registerIntPreference(settingId, UpdateFrequency.HOURLY.ordinal()));
 	}
 
-	public static OsmandSettings.CommonPreference<Integer> preferenceTimeOfDayToUpdate(
+	public static CommonPreference<Integer> preferenceTimeOfDayToUpdate(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + TIME_OF_DAY_TO_UPDATE_POSTFIX;
-		return settings.registerIntPreference(settingId, TimeOfDay.NIGHT.ordinal());
+		return checkPref(settings.registerIntPreference(settingId, TimeOfDay.NIGHT.ordinal()));
 	}
 
-	public static OsmandSettings.CommonPreference<Long> preferenceLastCheck(
+	public static CommonPreference<Long> preferenceLastCheck(
 			String fileName, OsmandSettings settings) {
 		final String settingId = fileName + LAST_UPDATE_ATTEMPT_ON_POSTFIX;
-		return settings.registerLongPreference(settingId, DEFAULT_LAST_CHECK);
+		return checkPref(settings.registerLongPreference(settingId, DEFAULT_LAST_CHECK));
 	}
 
 	public static String getNameToDisplay(String fileName, OsmandActionBarActivity activity) {
@@ -159,8 +173,8 @@ public class LiveUpdatesHelper {
 		}
 	}
 
-	public static void runLiveUpdate(Context context, final String fileName, boolean forceUpdate) {
+	public static void runLiveUpdate(Context context, final String fileName, boolean userRequested) {
 		final String fnExt = Algorithms.getFileNameWithoutExtension(new File(fileName));
-		new PerformLiveUpdateAsyncTask(context, fileName, forceUpdate).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fnExt);
+		new PerformLiveUpdateAsyncTask(context, fileName, userRequested).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fnExt);
 	}
 }

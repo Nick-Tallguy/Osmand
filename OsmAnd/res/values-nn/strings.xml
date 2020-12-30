@@ -17,8 +17,6 @@
     <string name="lang_he">Hebraisk</string>
     <string name="forward">Fram</string>
     <string name="home">Heim</string>
-    <string name="gpx_monitoring_start">Start GPS-opptak</string>
-	<string name="gpx_monitoring_stop">Stopp GPS-opptak</string>
     <string name="rendering_attr_hideBuildings_name">Gøym bygningar</string>
     <string name="rendering_attr_hideNonVehicleHighways_name">Gøym vegar som ikkje er for køyretøy</string>
     <string name="rendering_attr_hideText_name">Gøym tekst</string>
@@ -42,7 +40,7 @@
     <string name="save_as_favorites_points">Lagra som favorittgruppe</string>
     <string name="loading_smth">Lastar %1$s …</string>
     <string name="map_widget_plain_time">Gjeldande klokkeslett</string>
-    <string name="gpx_wpt">Vegpunkt</string>
+    <string name="shared_string_waypoint">Vegpunkt</string>
     <string name="selected_gpx_info_show">\n\nHald inne for å sjå på kartet</string>
     <string name="shared_string_selected_lowercase">valt</string>
     <string name="local_index_gpx_info_show">\n\nHald inne for å sjå val</string>
@@ -57,7 +55,7 @@
     <string name="gpx_selection_number_of_points">%1$s punkt</string>
     <string name="gpx_selection_point">Punkt %1$s</string>
     <string name="gpx_file_is_empty">GPS-sporet er tomt</string>
-    <string name="shared_string_my_tracks">Alle spor</string>
+    <string name="shared_string_tracks">Spor</string>
     <string name="shared_string_my_favorites">Mine favorittar</string>
     <string name="shared_string_my_places">Mine stadar</string>
     
@@ -82,7 +80,7 @@
     
 	<string name="int_days">dagar</string>
     <string name="osmo_connect_menu">Kopla til</string>
-    <string name="osmo_group_description">Skildring</string>
+    <string name="shared_string_description">Skildring</string>
     
     <string name="lang_zh">Kinesisk</string>
     <string name="lang_pt_br">Portugisisk (Brasil)</string>
@@ -266,7 +264,6 @@
 	
 	
 	<string name="map_widget_max_speed">Fartsgrense</string>
-    <string name="monitoring_control_start">GPX</string>
     <string name="no_buildings_found">Fann ingen bygningar.</string>
     <string name="rendering_attr_showRoadMaps_name">Kart med berre vegar</string>
     <string name="safe_mode">Sikkermodus</string>

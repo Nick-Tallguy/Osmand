@@ -2,6 +2,7 @@ package net.osmand.plus.activities.actions;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -9,10 +10,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.v7.app.AlertDialog;
-import android.text.ClipboardManager;
 import android.text.Html;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -216,7 +217,7 @@ public class ShareDialog {
 	public static void sendToClipboard(Activity activity, String text) {
 		ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(Activity.CLIPBOARD_SERVICE);
 		clipboard.setText(text);
-		Toast.makeText(activity, R.string.copied_to_clipboard, Toast.LENGTH_LONG)
+		Toast.makeText(activity, activity.getString(R.string.copied_to_clipboard) + "\n" + text, Toast.LENGTH_LONG)
 				.show();
 	}
 }

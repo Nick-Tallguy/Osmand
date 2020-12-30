@@ -2,31 +2,30 @@ package net.osmand.plus.mapmarkers;
 
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.helper.ItemTouchHelper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+import androidx.annotation.Nullable;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.Location;
 import net.osmand.data.Amenity;
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.GPXUtilities.WptPt;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
+import net.osmand.data.WptLocationPoint;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndCompassListener;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.base.MapViewTrackingUtilities;
-import net.osmand.plus.dashboard.DashLocationFragment;
 import net.osmand.plus.mapmarkers.adapters.MapMarkersActiveAdapter;
 import net.osmand.plus.mapmarkers.adapters.MapMarkersActiveAdapter.MapMarkersActiveAdapterListener;
 import net.osmand.plus.mapmarkers.adapters.MapMarkersItemTouchHelperCallback;
@@ -74,7 +73,7 @@ public class MapMarkersActiveFragment extends Fragment implements OsmAndCompassL
 							? app.getFavorites().getVisibleFavByLatLon(marker.point)
 							: marker.favouritePoint;
 					if (fav != null) {
-						showMap(marker.point, fav.getPointDescription(), fav);
+						showMap(marker.point, fav.getPointDescription(mapActivity), fav);
 						return;
 					}
 
@@ -82,7 +81,7 @@ public class MapMarkersActiveFragment extends Fragment implements OsmAndCompassL
 							? app.getSelectedGpxHelper().getVisibleWayPointByLatLon(marker.point)
 							: marker.wptPt;
 					if (pt != null) {
-						showMap(marker.point, pt.getPointDescription(mapActivity), pt);
+						showMap(marker.point, new WptLocationPoint(pt).getPointDescription(mapActivity), pt);
 						return;
 					}
 
@@ -147,7 +146,6 @@ public class MapMarkersActiveFragment extends Fragment implements OsmAndCompassL
 	@Override
 	public void onResume() {
 		super.onResume();
-		adapter.setScreenOrientation(DashLocationFragment.getScreenOrientation(getActivity()));
 		startLocationUpdate();
 	}
 
@@ -159,11 +157,7 @@ public class MapMarkersActiveFragment extends Fragment implements OsmAndCompassL
 
 	@Override
 	public void updateLocation(Location location) {
-		boolean newLocation = this.location == null && location != null;
-		boolean locationChanged = this.location != null && location != null
-				&& this.location.getLatitude() != location.getLatitude()
-				&& this.location.getLongitude() != location.getLongitude();
-		if (newLocation || locationChanged) {
+		if (!MapUtils.areLatLonEqual(this.location, location)) {
 			this.location = location;
 			updateLocationUi();
 		}
@@ -220,12 +214,6 @@ public class MapMarkersActiveFragment extends Fragment implements OsmAndCompassL
 					if (location == null) {
 						location = mapActivity.getMyApplication().getLocationProvider().getLastKnownLocation();
 					}
-					MapViewTrackingUtilities utilities = mapActivity.getMapViewTrackingUtilities();
-					boolean useCenter = !(utilities.isMapLinkedToLocation() && location != null);
-
-					adapter.setUseCenter(useCenter);
-					adapter.setLocation(useCenter ? mapActivity.getMapLocation() : new LatLon(location.getLatitude(), location.getLongitude()));
-					adapter.setHeading(useCenter ? -mapActivity.getMapRotate() : heading != null ? heading : 99);
 					adapter.notifyDataSetChanged();
 				}
 			});

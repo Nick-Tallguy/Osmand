@@ -1,9 +1,9 @@
 package net.osmand.plus.mapcontextmenu.other;
 
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v4.app.FragmentActivity;
-import android.support.v4.app.FragmentManager;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,31 +12,75 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+
 import net.osmand.AndroidUtils;
+import net.osmand.Location;
+import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.BaseOsmAndFragment;
 import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.mapcontextmenu.MapContextMenu;
+import net.osmand.util.MapUtils;
 
-public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
+public class TrackDetailsMenuFragment extends BaseOsmAndFragment implements OsmAndLocationListener {
+
 	public static final String TAG = "TrackDetailsMenuFragment";
 
 	private TrackDetailsMenu menu;
 	private View mainView;
+	private boolean nightMode;
 
+	private boolean locationUpdateStarted;
+
+	@Nullable
 	private MapActivity getMapActivity() {
 		return (MapActivity) getActivity();
 	}
 
-	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container,
-							 Bundle savedInstanceState) {
-		MapActivity mapActivity = getMapActivity();
+	@NonNull
+	private MapActivity requireMapActivity() {
+		return (MapActivity) requireMyActivity();
+	}
 
-		menu = mapActivity.getMapLayers().getMapControlsLayer().getTrackDetailsMenu();
-		View view = inflater.inflate(R.layout.track_details, container, false);
-		if (!AndroidUiHelper.isOrientationPortrait(getActivity())) {
-			AndroidUtils.addStatusBarPadding21v(getActivity(), view);
+	@Override
+	public void onCreate(@Nullable Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		final MapActivity mapActivity = requireMapActivity();
+		menu = mapActivity.getTrackDetailsMenu();
+
+		mapActivity.getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+			public void handleOnBackPressed() {
+				if (menu.isVisible()) {
+					menu.hide(true);
+
+					MapContextMenu contextMenu = mapActivity.getContextMenu();
+					if (contextMenu.isActive() && contextMenu.getPointDescription() != null
+							&& contextMenu.getPointDescription().isGpxPoint()) {
+						contextMenu.show();
+					} else {
+						mapActivity.launchPrevActivityIntent();
+					}
+				}
+			}
+		});
+	}
+
+	@Override
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
+							 Bundle savedInstanceState) {
+		MapActivity mapActivity = requireMapActivity();
+		nightMode = mapActivity.getMyApplication().getDaynightHelper().isNightModeForMapControls();
+		View view = UiUtilities.getInflater(mapActivity, nightMode).inflate(R.layout.track_details, container, false);
+		if (!AndroidUiHelper.isOrientationPortrait(mapActivity)) {
+			AndroidUtils.addStatusBarPadding21v(mapActivity, view);
 		}
 		if (menu == null || menu.getGpxItem() == null) {
 			return view;
@@ -49,7 +93,7 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 			if (menu.getGpxItem().group != null) {
 				topBarTitle.setText(menu.getGpxItem().group.getGpxName());
 			} else {
-				topBarTitle.setText(mapActivity.getString(R.string.rendering_category_details));
+				topBarTitle.setText(R.string.rendering_category_details);
 			}
 		}
 
@@ -59,7 +103,10 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 			backButton.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					getActivity().onBackPressed();
+					FragmentActivity activity = getActivity();
+					if (activity != null) {
+						activity.onBackPressed();
+					}
 				}
 			});
 		}
@@ -67,19 +114,25 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 			closeButton.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					dismiss();
+					menu.hide(false);
 				}
 			});
 		}
 
-		updateInfo();
+		MapContextMenu contextMenu = mapActivity.getContextMenu();
+		final boolean forceFitTrackOnMap;
+		if (contextMenu.isActive()) {
+			forceFitTrackOnMap = !(contextMenu.getPointDescription() != null && contextMenu.getPointDescription().isGpxPoint());
+		} else {
+			forceFitTrackOnMap = true;
+		}
+		updateInfo(forceFitTrackOnMap);
 
 		ViewTreeObserver vto = mainView.getViewTreeObserver();
 		vto.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
 
 			@Override
 			public void onGlobalLayout() {
-
 				ViewTreeObserver obs = mainView.getViewTreeObserver();
 				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
 					obs.removeOnGlobalLayoutListener(this);
@@ -87,7 +140,7 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 					obs.removeGlobalOnLayoutListener(this);
 				}
 				if (getMapActivity() != null) {
-					updateInfo();
+					updateInfo(forceFitTrackOnMap);
 				}
 			}
 		});
@@ -99,7 +152,55 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 	public void onResume() {
 		super.onResume();
 		if (menu == null || menu.getGpxItem() == null) {
-			dismiss();
+			dismiss(false);
+		} else {
+			menu.onShow();
+		}
+		startLocationUpdate();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			mapActivity.getMapViewTrackingUtilities().setDetailsMenu(menu);
+		}
+	}
+
+	@Override
+	public void onPause() {
+		super.onPause();
+		stopLocationUpdate();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			mapActivity.getMapViewTrackingUtilities().setDetailsMenu(menu);
+		}
+	}
+
+	private void startLocationUpdate() {
+		OsmandApplication app = getMyApplication();
+		if (app != null && !locationUpdateStarted) {
+			locationUpdateStarted = true;
+			app.getLocationProvider().addLocationListener(this);
+		}
+	}
+
+	private void stopLocationUpdate() {
+		OsmandApplication app = getMyApplication();
+		if (app != null && locationUpdateStarted) {
+			locationUpdateStarted = false;
+			app.getLocationProvider().removeLocationListener(this);
+		}
+	}
+
+	@Override
+	public void updateLocation(final Location location) {
+		if (location != null && !MapUtils.areLatLonEqual(menu.getMyLocation(), location)) {
+			MapActivity mapActivity = getMapActivity();
+			if (mapActivity != null && mapActivity.getMapViewTrackingUtilities().isMapLinkedToLocation()) {
+				mapActivity.getMyApplication().runInUIThread(new Runnable() {
+					@Override
+					public void run() {
+						menu.updateMyLocation(mainView, location);
+					}
+				});
+			}
 		}
 	}
 
@@ -133,7 +234,11 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 	}
 
 	public void updateInfo() {
-		menu.updateInfo(mainView);
+		updateInfo(true);
+	}
+
+	public void updateInfo(boolean forceFitTrackOnMap) {
+		menu.updateInfo(mainView, forceFitTrackOnMap);
 		applyDayNightMode();
 	}
 
@@ -144,11 +249,12 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 				.commitAllowingStateLoss();
 	}
 
-	public void dismiss() {
-		FragmentActivity activity = getActivity();
-		if (activity != null) {
+	public void dismiss(boolean backPressed) {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
 			try {
-				activity.getSupportFragmentManager().popBackStackImmediate(TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+				mapActivity.getSupportFragmentManager().popBackStackImmediate(TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+				mapActivity.getMapRouteInfoMenu().onDismiss(this, 0, null, backPressed);
 			} catch (Exception e) {
 				// ignore
 			}
@@ -157,28 +263,32 @@ public class TrackDetailsMenuFragment extends BaseOsmAndFragment {
 
 	public void applyDayNightMode() {
 		MapActivity ctx = getMapActivity();
-		boolean portraitMode = AndroidUiHelper.isOrientationPortrait(ctx);
-		boolean landscapeLayout = !portraitMode;
-		boolean nightMode = ctx.getMyApplication().getDaynightHelper().isNightModeForMapControls();
-		if (!landscapeLayout) {
-			AndroidUtils.setBackground(ctx, mainView, nightMode, R.drawable.bg_bottom_menu_light, R.drawable.bg_bottom_menu_dark);
-		} else {
-			AndroidUtils.setBackground(ctx, mainView, nightMode, R.drawable.bg_left_menu_light, R.drawable.bg_left_menu_dark);
+		if (ctx != null) {
+			boolean portraitMode = AndroidUiHelper.isOrientationPortrait(ctx);
+			boolean landscapeLayout = !portraitMode;
+			if (!landscapeLayout) {
+				AndroidUtils.setBackground(ctx, mainView, nightMode, R.drawable.bg_bottom_menu_light, R.drawable.bg_bottom_menu_dark);
+			} else {
+				final TypedValue typedValueAttr = new TypedValue();
+				int bgAttrId = AndroidUtils.isLayoutRtl(ctx) ? R.attr.right_menu_view_bg : R.attr.left_menu_view_bg;
+				ctx.getTheme().resolveAttribute(bgAttrId, typedValueAttr, true);
+				mainView.setBackgroundResource(typedValueAttr.resourceId);
+			}
+
+			AndroidUtils.setTextPrimaryColor(ctx, (TextView) mainView.findViewById(R.id.y_axis_title), nightMode);
+			AndroidUtils.setTextPrimaryColor(ctx, (TextView) mainView.findViewById(R.id.x_axis_title), nightMode);
+
+			ImageView yAxisArrow = (ImageView) mainView.findViewById(R.id.y_axis_arrow);
+			ImageView xAxisArrow = (ImageView) mainView.findViewById(R.id.x_axis_arrow);
+			yAxisArrow.setImageDrawable(getContentIcon(R.drawable.ic_action_arrow_drop_down));
+			xAxisArrow.setImageDrawable(getContentIcon(R.drawable.ic_action_arrow_drop_down));
+
+			ImageButton backButton = (ImageButton) mainView.findViewById(R.id.top_bar_back_button);
+			if (backButton != null) {
+				Drawable icBack = getIcon(AndroidUtils.getNavigationIconResId(ctx), R.color.color_white);
+				backButton.setImageDrawable(icBack);
+			}
 		}
-
-		AndroidUtils.setTextPrimaryColor(ctx, (TextView) mainView.findViewById(R.id.y_axis_title), nightMode);
-		AndroidUtils.setTextPrimaryColor(ctx, (TextView) mainView.findViewById(R.id.x_axis_title), nightMode);
-
-		ImageView yAxisArrow = (ImageView) mainView.findViewById(R.id.y_axis_arrow);
-		ImageView xAxisArrow = (ImageView) mainView.findViewById(R.id.x_axis_arrow);
-		yAxisArrow.setImageDrawable(getContentIcon(R.drawable.ic_action_arrow_drop_down));
-		xAxisArrow.setImageDrawable(getContentIcon(R.drawable.ic_action_arrow_drop_down));
-
-		ImageButton backButton = (ImageButton) mainView.findViewById(R.id.top_bar_back_button);
-		if (backButton != null) {
-			backButton.setImageDrawable(getIcon(R.drawable.ic_arrow_back, R.color.color_white));
-		}
-
 	}
 
 	public static boolean showInstance(final MapActivity mapActivity) {

@@ -3,16 +3,11 @@ package net.osmand.plus.audionotes;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.content.FileProvider;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.view.ActionMode;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -27,16 +22,25 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.view.ActionMode;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+
+import net.osmand.AndroidUtils;
+import net.osmand.GPXUtilities;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.PlatformUtil;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.GPXUtilities;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.GPXUtilities.WptPt;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings.NotesSortByMode;
 import net.osmand.plus.R;
+import net.osmand.plus.Version;
 import net.osmand.plus.activities.ActionBarProgressActivity;
-import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.OsmandActionBarActivity;
 import net.osmand.plus.audionotes.AudioVideoNotesPlugin.Recording;
 import net.osmand.plus.audionotes.ItemMenuBottomSheetDialogFragment.ItemMenuFragmentListener;
@@ -46,6 +50,7 @@ import net.osmand.plus.audionotes.adapters.NotesAdapter.NotesAdapterListener;
 import net.osmand.plus.base.OsmAndListFragment;
 import net.osmand.plus.helpers.AndroidUiHelper;
 import net.osmand.plus.myplaces.FavoritesActivity;
+import net.osmand.plus.myplaces.FavoritesFragmentStateHolder;
 
 import org.apache.commons.logging.Log;
 
@@ -59,7 +64,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-public class NotesFragment extends OsmAndListFragment {
+import static net.osmand.plus.audionotes.AudioVideoNotesPlugin.NOTES_TAB;
+import static net.osmand.plus.myplaces.FavoritesActivity.TAB_ID;
+
+public class NotesFragment extends OsmAndListFragment implements FavoritesFragmentStateHolder {
 
 	public static final Recording SHARE_LOCATION_FILE = new Recording(new File("."));
 
@@ -75,6 +83,7 @@ public class NotesFragment extends OsmAndListFragment {
 	private View emptyView;
 
 	private boolean selectionMode;
+	private int selectedItemPosition = -1;
 
 	private ActionMode actionMode;
 
@@ -100,7 +109,7 @@ public class NotesFragment extends OsmAndListFragment {
 		emptyStub.setLayoutResource(R.layout.empty_state_av_notes);
 		emptyView = emptyStub.inflate();
 		emptyView.setBackgroundColor(getResources().getColor(getMyApplication().getSettings()
-				.isLightContent() ? R.color.ctx_menu_info_view_bg_light : R.color.ctx_menu_info_view_bg_dark));
+				.isLightContent() ? R.color.activity_background_color_light : R.color.activity_background_color_dark));
 		ImageView emptyImageView = (ImageView) emptyView.findViewById(R.id.empty_state_image_view);
 
 		if (Build.VERSION.SDK_INT >= 18) {
@@ -117,7 +126,7 @@ public class NotesFragment extends OsmAndListFragment {
 	public void onActivityCreated(Bundle savedInstanceState) {
 		super.onActivityCreated(savedInstanceState);
 		getListView().setBackgroundColor(getResources().getColor(getMyApplication().getSettings()
-				.isLightContent() ? R.color.ctx_menu_info_view_bg_light : R.color.ctx_menu_info_view_bg_dark));
+				.isLightContent() ? R.color.activity_background_color_light : R.color.activity_background_color_dark));
 	}
 
 	@Override
@@ -140,6 +149,7 @@ public class NotesFragment extends OsmAndListFragment {
 		listAdapter.setListener(createAdapterListener());
 		listAdapter.setPortrait(portrait);
 		listView.setAdapter(listAdapter);
+		restoreState(getArguments());
 	}
 
 	@Override
@@ -156,14 +166,18 @@ public class NotesFragment extends OsmAndListFragment {
 	}
 
 	@Override
-	public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-		menu.clear();
-		if (AndroidUiHelper.isOrientationPortrait(getActivity())) {
-			menu = ((ActionBarProgressActivity) getActivity()).getClearToolbar(true).getMenu();
-		} else {
-			((ActionBarProgressActivity) getActivity()).getClearToolbar(false);
+	public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+		FragmentActivity activity = getActivity();
+		if (activity == null) {
+			return;
 		}
-		((ActionBarProgressActivity) getActivity()).updateListViewFooter(footerView);
+		menu.clear();
+		if (AndroidUiHelper.isOrientationPortrait(activity)) {
+			menu = ((ActionBarProgressActivity) activity).getClearToolbar(true).getMenu();
+		} else {
+			((ActionBarProgressActivity) activity).getClearToolbar(false);
+		}
+		((ActionBarProgressActivity) activity).updateListViewFooter(footerView);
 
 		MenuItem item = menu.add(R.string.shared_string_sort).setIcon(R.drawable.ic_action_list_sort);
 		item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
@@ -175,7 +189,9 @@ public class NotesFragment extends OsmAndListFragment {
 		});
 		item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 
-		item = menu.add(R.string.shared_string_share).setIcon(R.drawable.ic_action_gshare_dark);
+		Drawable shareIcon = AndroidUtils.getDrawableForDirection(activity,
+				getMyApplication().getUIUtilities().getIcon(R.drawable.ic_action_gshare_dark));
+		item = menu.add(R.string.shared_string_share).setIcon(shareIcon);
 		item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 			@Override
 			public boolean onMenuItemClick(MenuItem item) {
@@ -265,8 +281,8 @@ public class NotesFragment extends OsmAndListFragment {
 			}
 
 			@Override
-			public void onItemClick(Recording rec) {
-				showOnMap(rec);
+			public void onItemClick(Recording rec, int position) {
+				showOnMap(rec, position);
 			}
 
 			@Override
@@ -370,13 +386,16 @@ public class NotesFragment extends OsmAndListFragment {
 			@Override
 			public boolean onCreateActionMode(final ActionMode mode, Menu menu) {
 				LOG.debug("onCreateActionMode");
+				OsmandApplication app = getMyApplication();
 				if (type == MODE_SHARE) {
 					listAdapter.insert(SHARE_LOCATION_FILE, 0);
 				}
 				switchSelectionMode(true);
 				int titleRes = type == MODE_DELETE ? R.string.shared_string_delete_all : R.string.shared_string_share;
 				int iconRes = type == MODE_DELETE ? R.drawable.ic_action_delete_dark : R.drawable.ic_action_gshare_dark;
-				MenuItem item = menu.add(titleRes).setIcon(iconRes);
+				Drawable icon = AndroidUtils.getDrawableForDirection(app,
+						app.getUIUtilities().getIcon(iconRes));
+				MenuItem item = menu.add(titleRes).setIcon(icon);
 				item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 					@Override
 					public boolean onMenuItemClick(MenuItem item) {
@@ -463,7 +482,7 @@ public class NotesFragment extends OsmAndListFragment {
 		for (Recording rec : selected) {
 			File file = rec == SHARE_LOCATION_FILE ? generateGPXForRecordings(selected) : rec.getFile();
 			if (file != null) {
-				uris.add(FileProvider.getUriForFile(getContext(), getActivity().getPackageName() + ".fileprovider", file));
+				uris.add(AndroidUtils.getUriForFile(getMyApplication(), file));
 			}
 		}
 
@@ -487,7 +506,7 @@ public class NotesFragment extends OsmAndListFragment {
 	private File generateGPXForRecordings(Set<Recording> selected) {
 		File tmpFile = new File(getActivity().getCacheDir(), "share/noteLocations.gpx");
 		tmpFile.getParentFile().mkdirs();
-		GPXFile file = new GPXFile();
+		GPXFile file = new GPXFile(Version.getFullVersion(getMyApplication()));
 		for (Recording r : getRecordingsForGpx(selected)) {
 			if (r != SHARE_LOCATION_FILE) {
 				String desc = r.getDescriptionName(r.getFileName());
@@ -505,7 +524,7 @@ public class NotesFragment extends OsmAndListFragment {
 				getMyApplication().getSelectedGpxHelper().addPoint(wpt, file);
 			}
 		}
-		GPXUtilities.writeGpxFile(tmpFile, file, getMyApplication());
+		GPXUtilities.writeGpxFile(tmpFile, file);
 		return tmpFile;
 	}
 
@@ -561,10 +580,14 @@ public class NotesFragment extends OsmAndListFragment {
 	}
 
 	private void showOnMap(Recording recording) {
-		getMyApplication().getSettings().setMapLocationToShow(recording.getLatitude(), recording.getLongitude(), 15,
+		showOnMap(recording, -1);
+	}
+
+	private void showOnMap(Recording recording, int itemPosition) {
+		selectedItemPosition = itemPosition;
+		FavoritesActivity.showOnMap(requireActivity(), this, recording.getLatitude(), recording.getLongitude(), 15,
 				new PointDescription(recording.getSearchHistoryType(), recording.getName(getActivity(), true)),
 				true, recording);
-		MapActivity.launchMapActivityMoveToTop(getActivity());
 	}
 
 	private void editNote(final Recording recording) {
@@ -602,5 +625,32 @@ public class NotesFragment extends OsmAndListFragment {
 				})
 				.setNegativeButton(R.string.shared_string_cancel, null)
 				.show();
+	}
+
+	@Override
+	public Bundle storeState() {
+		Bundle bundle = new Bundle();
+		bundle.putInt(TAB_ID, NOTES_TAB);
+		bundle.putInt(ITEM_POSITION, selectedItemPosition);
+		return bundle;
+	}
+	
+	@Override
+	public void restoreState(Bundle bundle) {
+		if (bundle != null && bundle.containsKey(TAB_ID) && bundle.containsKey(ITEM_POSITION)) {
+			if (bundle.getInt(TAB_ID) == NOTES_TAB) {
+				selectedItemPosition = bundle.getInt(ITEM_POSITION, -1);
+				if (selectedItemPosition != -1) {
+					int itemsCount = getListView().getAdapter().getCount();
+					if (itemsCount > 0 && itemsCount > selectedItemPosition) {
+						if (selectedItemPosition == 1) {
+							getListView().setSelection(0);
+						} else {
+							getListView().setSelection(selectedItemPosition);
+						}
+					}
+				}
+			}
+		}
 	}
 }

@@ -1,14 +1,15 @@
 package net.osmand.plus.mapmarkers.adapters;
 
 import android.content.Context;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import net.osmand.plus.IconsCache;
+import androidx.recyclerview.widget.RecyclerView;
+
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 
 public abstract class GroupsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -17,11 +18,11 @@ public abstract class GroupsAdapter extends RecyclerView.Adapter<RecyclerView.Vi
 
 	private GroupsAdapterListener listener;
 	protected OsmandApplication app;
-	protected IconsCache iconsCache;
+	protected UiUtilities iconsCache;
 
 	public GroupsAdapter(Context context) {
 		this.app = (OsmandApplication) context.getApplicationContext();
-		this.iconsCache = app.getIconsCache();
+		this.iconsCache = app.getUIUtilities();
 	}
 
 	public void setAdapterListener(GroupsAdapterListener listener) {

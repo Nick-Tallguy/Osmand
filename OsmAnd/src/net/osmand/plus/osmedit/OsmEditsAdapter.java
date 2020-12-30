@@ -1,12 +1,7 @@
 package net.osmand.plus.osmedit;
 
-import android.graphics.Typeface;
+import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
-import android.text.SpannableString;
-import android.text.TextUtils;
-import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,11 +13,15 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.osm.PoiType;
+import net.osmand.osm.edit.Entity;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.render.RenderingIcons;
-import net.osmand.util.Algorithms;
 
 import java.util.List;
 import java.util.Map;
@@ -71,14 +70,16 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 	@NonNull
 	@Override
 	public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+		boolean nightMode = !app.getSettings().isLightContent();
+		Context themedCtx = UiUtilities.getThemedContext(getContext(), nightMode);
 		if (portrait) {
 			if (convertView == null) {
 				if (position == 0) {
-					convertView = LayoutInflater.from(getContext()).inflate(R.layout.list_item_header, parent, false);
+					convertView = LayoutInflater.from(themedCtx).inflate(R.layout.list_item_header, parent, false);
 					HeaderViewHolder holder = new HeaderViewHolder(convertView);
 					convertView.setTag(holder);
 				} else {
-					convertView = LayoutInflater.from(getContext()).inflate(R.layout.note_list_item, parent, false);
+					convertView = LayoutInflater.from(themedCtx).inflate(R.layout.note_list_item, parent, false);
 					OsmEditViewHolder holder = new OsmEditViewHolder(convertView);
 					convertView.setTag(holder);
 				}
@@ -98,21 +99,21 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 			int margin = app.getResources().getDimensionPixelSize(R.dimen.content_padding);
 			int sideMargin = app.getResources().getDisplayMetrics().widthPixels / 10;
 
-			FrameLayout fl = new FrameLayout(getContext());
-			LinearLayout ll = new LinearLayout(getContext());
+			FrameLayout fl = new FrameLayout(themedCtx);
+			LinearLayout ll = new LinearLayout(themedCtx);
 			ll.setOrientation(LinearLayout.VERTICAL);
 			ll.setBackgroundResource(app.getSettings().isLightContent() ? R.drawable.bg_card_light : R.drawable.bg_card_dark);
 			fl.addView(ll);
 			((FrameLayout.LayoutParams) ll.getLayoutParams()).setMargins(sideMargin, margin, sideMargin, margin);
 
-			HeaderViewHolder headerViewHolder = new HeaderViewHolder(LayoutInflater.from(getContext()).inflate(R.layout.list_item_header, parent, false));
+			HeaderViewHolder headerViewHolder = new HeaderViewHolder(LayoutInflater.from(themedCtx).inflate(R.layout.list_item_header, parent, false));
 			bindHeaderViewHolder(headerViewHolder);
 			ll.addView(headerViewHolder.mainView);
 
 			for (int i = 0; i < items.size(); i++) {
 				Object item = getItem(i);
 				if (item instanceof OsmPoint) {
-					OsmEditViewHolder viewHolder = new OsmEditViewHolder(LayoutInflater.from(getContext()).inflate(R.layout.note_list_item, parent, false));
+					OsmEditViewHolder viewHolder = new OsmEditViewHolder(LayoutInflater.from(themedCtx).inflate(R.layout.note_list_item, parent, false));
 					bindOsmEditViewHolder(viewHolder, (OsmPoint) item, i);
 					ll.addView(viewHolder.mainView);
 				}
@@ -176,9 +177,9 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 		}
 	}
 
-	private void bindOsmEditViewHolder(final OsmEditViewHolder holder, final OsmPoint osmEdit, int position) {
+	private void bindOsmEditViewHolder(final OsmEditViewHolder holder, final OsmPoint osmEdit, final int position) {
 		setupBackground(holder.mainView);
-		holder.titleTextView.setText(getTitle(osmEdit));
+		holder.titleTextView.setText(OsmEditingPlugin.getTitle(osmEdit, getContext()));
 		holder.descriptionTextView.setText(getDescription(osmEdit));
 		Drawable icon = getIcon(osmEdit);
 		if (icon != null) {
@@ -203,7 +204,7 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 			holder.selectCheckBox.setVisibility(View.GONE);
 		}
 
-		holder.optionsImageButton.setImageDrawable(app.getIconsCache().getThemedIcon(R.drawable.ic_overflow_menu_white));
+		holder.optionsImageButton.setImageDrawable(app.getUIUtilities().getThemedIcon(R.drawable.ic_overflow_menu_white));
 		holder.optionsImageButton.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -219,7 +220,7 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 					holder.selectCheckBox.performClick();
 				} else {
 					if (listener != null) {
-						listener.onItemShowMap(osmEdit);
+						listener.onItemShowMap(osmEdit, position);
 					}
 				}
 
@@ -239,20 +240,12 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 		return items.size();
 	}
 
-	private SpannableString getTitle(OsmPoint osmPoint) {
-		SpannableString title = new SpannableString(OsmEditingPlugin.getName(osmPoint));
-		if (TextUtils.isEmpty(title)) {
-			title = SpannableString.valueOf(getCategory(osmPoint));
-			title.setSpan(new StyleSpan(Typeface.ITALIC), 0, title.length(), 0);
-		}
-		return title;
-	}
 
 	private Drawable getIcon(OsmPoint point) {
 		if (point.getGroup() == OsmPoint.Group.POI) {
 			OpenstreetmapPoint osmPoint = (OpenstreetmapPoint) point;
 			int iconResId = 0;
-			String poiTranslation = osmPoint.getEntity().getTag(EditPoiData.POI_TYPE_TAG);
+			String poiTranslation = osmPoint.getEntity().getTag(Entity.POI_TYPE_TAG);
 			if (poiTranslation != null) {
 				Map<String, PoiType> poiTypeMap = app.getPoiTypes().getAllTranslatedNames(false);
 				PoiType poiType = poiTypeMap.get(poiTranslation.toLowerCase());
@@ -269,7 +262,7 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 				}
 			}
 			if (iconResId == 0) {
-				iconResId = R.drawable.ic_type_info;
+				iconResId = R.drawable.ic_action_info_dark;
 			}
 			int colorResId = R.color.color_distance;
 			if (point.getAction() == OsmPoint.Action.CREATE) {
@@ -281,9 +274,9 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 			} else if (point.getAction() == OsmPoint.Action.REOPEN) {
 				colorResId = R.color.color_osm_edit_modify;
 			}
-			return app.getIconsCache().getIcon(iconResId, colorResId);
+			return app.getUIUtilities().getIcon(iconResId, colorResId);
 		} else if (point.getGroup() == OsmPoint.Group.BUG) {
-			return app.getIconsCache().getIcon(R.drawable.ic_type_bug, R.color.color_distance);
+			return app.getUIUtilities().getIcon(R.drawable.ic_action_osm_note_add, R.color.color_distance);
 		}
 		return null;
 	}
@@ -300,36 +293,8 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 		return true;
 	}
 
-	private String getCategory(OsmPoint point) {
-		return OsmEditingPlugin.getCategory(point, getContext());
-	}
-
 	private String getDescription(OsmPoint point) {
-		String action = "";
-		if (point.getAction() == OsmPoint.Action.CREATE) {
-			action = getContext().getString(R.string.shared_string_added);
-		} else if (point.getAction() == OsmPoint.Action.MODIFY) {
-			action = getContext().getString(R.string.shared_string_edited);
-		} else if (point.getAction() == OsmPoint.Action.DELETE) {
-			action = getContext().getString(R.string.shared_string_deleted);
-		} else if (point.getAction() == OsmPoint.Action.REOPEN) {
-			action = getContext().getString(R.string.shared_string_edited);
-		}
-
-		String category = getCategory(point);
-
-		String prefix = OsmEditingPlugin.getPrefix(point);
-
-		String description = "";
-		if (!Algorithms.isEmpty(action)) {
-			description += action + " • ";
-		}
-		if (!Algorithms.isEmpty(category)) {
-			description += category + " • ";
-		}
-		description += prefix;
-
-		return description;
+		return OsmEditingPlugin.getDescription(point, getContext(), true);
 	}
 
 	private class HeaderViewHolder {
@@ -374,7 +339,7 @@ public class OsmEditsAdapter extends ArrayAdapter<Object> {
 
 		void onItemSelect(OsmPoint point, boolean checked);
 
-		void onItemShowMap(OsmPoint point);
+		void onItemShowMap(OsmPoint point, int position);
 
 		void onOptionsClick(OsmPoint note);
 	}

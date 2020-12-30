@@ -1,8 +1,6 @@
 package net.osmand.plus.dashboard;
 
-import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,12 +8,12 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import net.osmand.data.LatLon;
-import net.osmand.plus.OsmAndAppCustomization;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
-import net.osmand.plus.activities.search.SearchActivity;
 import net.osmand.plus.activities.search.SearchHistoryFragment;
 import net.osmand.plus.dashboard.tools.DashFragmentData;
 import net.osmand.plus.dialogs.DirectionsDialogs;
@@ -69,7 +67,7 @@ public class DashRecentsFragment extends DashLocationFragment {
 		View mainView = getView();
 		SearchHistoryHelper helper = SearchHistoryHelper.getInstance((OsmandApplication) getActivity()
 				.getApplicationContext());
-		points = helper.getHistoryEntries();
+		points = helper.getHistoryEntries(true);
 		arrows.clear();
 		if (points.size() == 0) {
 			(mainView.findViewById(R.id.main_fav)).setVisibility(View.GONE);
@@ -89,7 +87,7 @@ public class DashRecentsFragment extends DashLocationFragment {
 			SearchHistoryFragment.udpateHistoryItem(historyEntry, view, loc, getActivity(), getMyApplication());
 			view.findViewById(R.id.divider).setVisibility(View.VISIBLE);
 			view.findViewById(R.id.navigate_to).setVisibility(View.VISIBLE);
-			((ImageView) view.findViewById(R.id.navigate_to)).setImageDrawable(getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_gdirections_dark));
+			((ImageView) view.findViewById(R.id.navigate_to)).setImageDrawable(getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_gdirections_dark));
 			view.findViewById(R.id.navigate_to).setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View view) {

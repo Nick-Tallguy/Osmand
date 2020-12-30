@@ -1,20 +1,16 @@
 package net.osmand.plus.mapmarkers;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
-import net.osmand.plus.MapMarkersHelper.MapMarkersGroup;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.api.SQLiteAPI.SQLiteConnection;
 import net.osmand.plus.api.SQLiteAPI.SQLiteCursor;
 import net.osmand.plus.helpers.SearchHistoryHelper;
 import net.osmand.util.Algorithms;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -112,13 +108,15 @@ public class MapMarkersDbHelper {
 
 	private SQLiteConnection openConnection(boolean readonly) {
 		SQLiteConnection conn = context.getSQLiteAPI().getOrCreateDatabase(DB_NAME, readonly);
-		int version = conn.getVersion();
-		if (version == 0 || DB_VERSION != version) {
+		if (conn == null) {
+			return null;
+		}
+		if (conn.getVersion() < DB_VERSION) {
 			if (readonly) {
 				conn.close();
 				conn = context.getSQLiteAPI().getOrCreateDatabase(DB_NAME, false);
 			}
-			version = conn.getVersion();
+			int version = conn.getVersion();
 			conn.setVersion(DB_VERSION);
 			if (version == 0) {
 				onCreate(conn);
@@ -132,7 +130,6 @@ public class MapMarkersDbHelper {
 	private void onCreate(SQLiteConnection db) {
 		db.execSQL(MARKERS_TABLE_CREATE);
 		db.execSQL(GROUPS_TABLE_CREATE);
-		saveExistingMarkersToDb();
 	}
 
 	private void onUpgrade(SQLiteConnection db, int oldVersion, int newVersion) {
@@ -164,37 +161,6 @@ public class MapMarkersDbHelper {
 		}
 	}
 
-	private void saveExistingMarkersToDb() {
-		OsmandSettings settings = context.getSettings();
-
-		List<LatLon> ips = settings.getMapMarkersPoints();
-		List<String> desc = settings.getMapMarkersPointDescriptions(ips.size());
-		List<Integer> colors = settings.getMapMarkersColors(ips.size());
-		int colorIndex = 0;
-		for (int i = 0; i < ips.size(); i++) {
-			if (colors.size() > i) {
-				colorIndex = colors.get(i);
-			}
-			MapMarker marker = new MapMarker(ips.get(i), PointDescription.deserializeFromString(desc.get(i), ips.get(i)),
-					colorIndex, false, i);
-			marker.history = false;
-			addMarker(marker, true);
-		}
-
-		ips = settings.getMapMarkersHistoryPoints();
-		desc = settings.getMapMarkersHistoryPointDescriptions(ips.size());
-		colors = settings.getMapMarkersHistoryColors(ips.size());
-		for (int i = 0; i < ips.size(); i++) {
-			if (colors.size() > i) {
-				colorIndex = colors.get(i);
-			}
-			MapMarker marker = new MapMarker(ips.get(i), PointDescription.deserializeFromString(desc.get(i), ips.get(i)),
-					colorIndex, false, i);
-			marker.history = true;
-			addMarker(marker, true);
-		}
-	}
-
 	public void addGroup(MapMarkersGroup group) {
 		SQLiteConnection db = openConnection(false);
 		if (db != null) {
@@ -213,13 +179,15 @@ public class MapMarkersDbHelper {
 		if (db != null) {
 			try {
 				SQLiteCursor query = db.rawQuery(GROUPS_TABLE_SELECT, null);
-				if (query.moveToFirst()) {
+				if (query != null && query.moveToFirst()) {
 					do {
 						MapMarkersGroup group = readGroup(query);
 						res.put(group.getId(), group);
 					} while (query.moveToNext());
 				}
-				query.close();
+				if(query != null) {
+					query.close();
+				}
 			} finally {
 				db.close();
 			}
@@ -242,7 +210,7 @@ public class MapMarkersDbHelper {
 	}
 
 	public void removeMarkersGroup(String id) {
-		SQLiteConnection db = openConnection(true);
+		SQLiteConnection db = openConnection(false);
 		if (db != null) {
 			try {
 				db.execSQL("DELETE FROM " + GROUPS_TABLE_NAME + " WHERE " + GROUPS_COL_ID + " = ?", new Object[]{id});
@@ -253,7 +221,7 @@ public class MapMarkersDbHelper {
 	}
 
 	public void removeActiveMarkersFromGroup(String groupId) {
-		SQLiteConnection db = openConnection(true);
+		SQLiteConnection db = openConnection(false);
 		if (db != null) {
 			try {
 				db.execSQL("DELETE FROM " + MARKERS_TABLE_NAME +
@@ -313,7 +281,7 @@ public class MapMarkersDbHelper {
 		if (db != null) {
 			try {
 				for (MapMarker marker : markers) {
-					insertLast(db, marker, false);
+					insertLast(db, marker);
 				}
 			} finally {
 				db.close();
@@ -322,36 +290,24 @@ public class MapMarkersDbHelper {
 	}
 
 	public void addMarker(MapMarker marker) {
-		addMarker(marker, false);
-	}
-
-	private void addMarker(MapMarker marker, boolean saveExisting) {
 		SQLiteConnection db = openConnection(false);
 		if (db != null) {
 			try {
-				insertLast(db, marker, saveExisting);
+				insertLast(db, marker);
 			} finally {
 				db.close();
 			}
 		}
 	}
 
-	private void insertLast(SQLiteConnection db, MapMarker marker, boolean saveExisting) {
-		long currentTime;
-		if (saveExisting) {
-			Calendar cal = Calendar.getInstance();
-			cal.add(Calendar.MONTH, -1);
-			currentTime = cal.getTimeInMillis();
-		} else {
-			currentTime = System.currentTimeMillis();
-		}
+	private void insertLast(SQLiteConnection db, MapMarker marker) {
+		long currentTime = System.currentTimeMillis();
 		if (marker.id == null) {
 			marker.id = String.valueOf(currentTime) + String.valueOf(new Random().nextInt(900) + 100);
 		}
 		marker.creationDate = currentTime;
 		String descr = PointDescription.serializeToString(marker.getOriginalPointDescription());
 		int active = marker.history ? 0 : 1;
-		long visited = saveExisting ? currentTime : 0;
 
 		PointDescription pointDescription = marker.getOriginalPointDescription();
 		if (pointDescription != null && !pointDescription.isSearchingAddress(context)) {
@@ -381,7 +337,7 @@ public class MapMarkersDbHelper {
 						MARKERS_COL_MAP_OBJECT_NAME + ") " +
 						"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				new Object[]{marker.id, marker.getLatitude(), marker.getLongitude(), descr, active,
-						currentTime, visited, marker.groupName, marker.groupKey, marker.colorIndex,
+						currentTime, marker.visitedDate, marker.groupName, marker.groupKey, marker.colorIndex,
 						marker.history ? HISTORY_NEXT_VALUE : TAIL_NEXT_VALUE, 0, 0, marker.mapObjectName});
 	}
 
@@ -392,10 +348,12 @@ public class MapMarkersDbHelper {
 		if (db != null) {
 			try {
 				SQLiteCursor query = db.rawQuery(MARKERS_TABLE_SELECT + " WHERE " + MARKERS_COL_ID + " = ?", new String[]{id});
-				if (query.moveToFirst()) {
+				if (query != null && query.moveToFirst()) {
 					res = readItem(query);
 				}
-				query.close();
+				if(query != null) {
+					query.close();
+				}
 			} finally {
 				db.close();
 			}
@@ -411,14 +369,16 @@ public class MapMarkersDbHelper {
 			try {
 				SQLiteCursor query = db.rawQuery(MARKERS_TABLE_SELECT + " WHERE " + MARKERS_COL_ACTIVE + " = ?",
 						new String[]{String.valueOf(1)});
-				if (query.moveToFirst()) {
+				if (query != null && query.moveToFirst()) {
 					do {
 						MapMarker marker = readItem(query);
 						markers.put(marker.id, marker);
 						nextKeys.add(marker.nextKey);
 					} while (query.moveToNext());
 				}
-				query.close();
+				if(query != null) {
+					query.close();
+				}
 			} finally {
 				db.close();
 			}
@@ -570,12 +530,14 @@ public class MapMarkersDbHelper {
 			try {
 				SQLiteCursor query = db.rawQuery(MARKERS_TABLE_SELECT + " WHERE " + MARKERS_COL_ACTIVE + " = ?",
 						new String[]{String.valueOf(0)});
-				if (query.moveToFirst()) {
+				if (query != null && query.moveToFirst()) {
 					do {
 						markers.add(readItem(query));
 					} while (query.moveToNext());
 				}
-				query.close();
+				if(query != null) {
+					query.close();
+				}
 			} finally {
 				db.close();
 			}
@@ -584,7 +546,7 @@ public class MapMarkersDbHelper {
 	}
 
 	public void removeMarker(MapMarker marker) {
-		SQLiteConnection db = openConnection(true);
+		SQLiteConnection db = openConnection(false);
 		if (db != null) {
 			try {
 				db.execSQL("DELETE FROM " + MARKERS_TABLE_NAME +

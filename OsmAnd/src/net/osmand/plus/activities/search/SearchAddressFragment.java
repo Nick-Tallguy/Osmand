@@ -4,8 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
-import android.support.v4.view.MenuItemCompat;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -18,10 +16,12 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.fragment.app.Fragment;
+
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.helpers.FileNameTranslationHelper;
@@ -81,7 +81,7 @@ public class SearchAddressFragment extends Fragment {
 		}
 		if(getActivity() instanceof SearchAddressActivity) {
 			MenuItem menuItem = menu.add(0, SELECT_POINT, 0, "");
-			MenuItemCompat.setShowAsAction(menuItem, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
+			menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 			if (getApplication().accessibilityEnabled())
 				menuItem.setTitle(R.string.shared_string_ok);
 			menuItem = menuItem.setIcon(R.drawable.ic_action_done);
@@ -94,7 +94,7 @@ public class SearchAddressFragment extends Fragment {
 			});
 		} else {
 			MenuItem menuItem = menu.add(0, SHOW_ON_MAP, 0, R.string.shared_string_show_on_map);
-			MenuItemCompat.setShowAsAction(menuItem, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
+			menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 			menuItem = menuItem.setIcon(R.drawable.ic_action_marker_dark);
 
 			menuItem.setOnMenuItemClickListener(new OnMenuItemClickListener() {
@@ -106,7 +106,7 @@ public class SearchAddressFragment extends Fragment {
 			});
 			if (ENABLE_ONLINE_ADDRESS) {
 				menuItem = menu.add(0, ONLINE_SEARCH, 0, R.string.search_online_address);
-				MenuItemCompat.setShowAsAction(menuItem, MenuItemCompat.SHOW_AS_ACTION_ALWAYS);
+				menuItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 				menuItem = menuItem.setIcon(R.drawable.ic_world_globe_dark);
 				menuItem.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 					@Override
@@ -179,7 +179,7 @@ public class SearchAddressFragment extends Fragment {
 			}
 		});
 		OsmandApplication app = getApplication();
-		Drawable icon = getApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_remove_dark);
+		Drawable icon = getApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_remove_dark);
 		((ImageView)findViewById(R.id.ResetBuilding)).setBackgroundDrawable(icon);
 		findViewById(R.id.ResetBuilding).setOnClickListener(new View.OnClickListener(){
 			@Override

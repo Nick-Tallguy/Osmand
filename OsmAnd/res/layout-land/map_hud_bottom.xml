@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              xmlns:tools="http://schemas.android.com/tools"
-              android:layout_width="match_parent"
-              android:layout_height="wrap_content"
-              android:layout_gravity="bottom"
-              android:orientation="vertical">
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:osmand="http://schemas.android.com/apk/res-auto"
+    android:layout_gravity="bottom"
+    android:orientation="vertical">
 
     <LinearLayout
         android:id="@+id/bottom_controls_container"
@@ -15,7 +16,7 @@
         <FrameLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|left">
+            android:layout_gravity="bottom|start">
 
             <!-- ALARM -->
 
@@ -23,16 +24,17 @@
                 android:id="@+id/map_alarm_warning"
                 android:layout_width="@dimen/map_alarm_size"
                 android:layout_height="@dimen/map_alarm_size"
-                android:layout_gravity="bottom|left"
+                android:layout_gravity="bottom|start"
                 android:layout_marginBottom="@dimen/map_alarm_bottom_margin_land"
-                android:layout_marginLeft="@dimen/map_button_shadow_margin">
+                android:layout_marginLeft="@dimen/map_button_shadow_margin"
+                android:layout_marginStart="@dimen/map_button_shadow_margin">
 
-                <ImageView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/map_alarm_warning_icon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:src="@drawable/warnings_limit"/>
+                    osmand:srcCompat="@drawable/warnings_limit"/>
 
                 <TextView
                     android:id="@+id/map_alarm_warning_text"
@@ -63,6 +65,7 @@
                 android:layout_gravity="bottom"
                 android:layout_marginBottom="130dp"
                 android:layout_marginLeft="@dimen/map_button_margin"
+                android:layout_marginStart="@dimen/map_button_margin"
                 android:gravity="center_horizontal"
                 android:textSize="@dimen/map_button_text_size"
                 tools:text="13.88"/>
@@ -70,7 +73,7 @@
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="bottom|left">
+                android:layout_gravity="bottom|start">
 
                 <!-- PREPARATION SCREEN -->
 
@@ -78,15 +81,17 @@
                     layout="@layout/recording_note_fragment"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|left"/>
+                    android:layout_gravity="bottom|start"/>
 
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|left"
+                    android:layout_gravity="bottom|start"
                     android:layout_marginBottom="@dimen/map_button_margin"
                     android:layout_marginLeft="@dimen/map_button_margin"
+                    android:layout_marginStart="@dimen/map_button_margin"
                     android:layout_marginRight="@dimen/map_button_spacing_land"
+                    android:layout_marginEnd="@dimen/map_button_spacing_land"
                     android:orientation="horizontal">
 
                     <ImageButton
@@ -95,25 +100,41 @@
                         android:layout_height="@dimen/map_button_size"
                         android:background="@drawable/btn_round"
                         android:contentDescription="@string/backToMenu"
-                        tools:src="@drawable/ic_action_test_light"/>
+                        tools:src="@drawable/ic_action_remove_dark"/>
 
                     <ImageButton
                         android:id="@+id/map_route_info_button"
                         android:layout_width="@dimen/map_button_size"
                         android:layout_height="@dimen/map_button_size"
                         android:layout_marginLeft="@dimen/map_button_spacing_land"
+                        android:layout_marginStart="@dimen/map_button_spacing_land"
                         android:background="@drawable/btn_round"
                         android:contentDescription="@string/layer_route"
-                        tools:src="@drawable/ic_action_test_light"/>
+                        tools:src="@drawable/ic_action_remove_dark" />
 
-                    <ImageButton
-                        android:id="@+id/snap_to_road_image_button"
-                        android:layout_width="@dimen/map_button_size"
-                        android:layout_height="@dimen/map_button_size"
-                        android:layout_gravity="bottom"
-                        android:background="@drawable/btn_circle"
-                        android:visibility="gone"
-                        tools:src="@drawable/ic_action_test_light"/>
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content">
+
+                        <ImageButton
+                            android:id="@+id/snap_to_road_image_button"
+                            android:layout_width="@dimen/map_button_size"
+                            android:layout_height="@dimen/map_button_size"
+                            android:layout_gravity="bottom"
+                            android:background="@drawable/btn_circle"
+                            android:visibility="gone"
+                            tools:src="@drawable/ic_action_remove_dark"
+                            android:contentDescription="@string/snap_to_road" />
+
+                        <include
+                            android:id="@+id/profile_with_config_btn"
+                            android:layout_width="wrap_content"
+                            android:layout_height="@dimen/map_button_size"
+                            android:layout_gravity="bottom"
+                            layout="@layout/profile_with_config_btn_layout"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
                 </LinearLayout>
             </LinearLayout>
         </FrameLayout>
@@ -127,45 +148,7 @@
 
             <!-- RULER -->
 
-            <FrameLayout
-                android:id="@+id/map_ruler_layout"
-                android:layout_width="@dimen/map_ruler_width"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom">
-
-                <FrameLayout
-                    android:layout_width="fill_parent"
-                    android:layout_height="fill_parent"
-                    android:layout_marginBottom="@dimen/map_ruler_bottom_margin">
-
-                    <TextView
-                        android:id="@+id/map_ruler_text_shadow"
-                        android:layout_width="fill_parent"
-                        android:layout_height="fill_parent"
-                        android:layout_gravity="bottom"
-                        android:gravity="center_horizontal"
-                        android:lineSpacingMultiplier="0.9"
-                        android:textSize="@dimen/map_widget_text_size_small"
-                        tools:text="100 m"/>
-
-                    <TextView
-                        android:id="@+id/map_ruler_text"
-                        android:layout_width="fill_parent"
-                        android:layout_height="fill_parent"
-                        android:layout_gravity="bottom"
-                        android:gravity="center_horizontal"
-                        android:lineSpacingMultiplier="0.9"
-                        android:textSize="@dimen/map_widget_text_size_small"
-                        tools:text="100 m"/>
-                </FrameLayout>
-
-                <ImageView
-                    android:id="@+id/map_ruler_image"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
-                    android:background="@drawable/ruler"/>
-            </FrameLayout>
+            <include layout="@layout/map_ruler" />
 
             <!-- TRANSPARENCY -->
 
@@ -177,54 +160,28 @@
                 android:layout_marginBottom="@dimen/map_button_size"
                 android:orientation="horizontal">
 
-                <SeekBar
-                    android:id="@+id/map_transparency_seekbar"
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/map_transparency_slider"
                     android:layout_width="@dimen/map_trans_seek_size"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"/>
 
-                <ImageButton
-                    android:id="@+id/map_transparency_hide"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:background="@drawable/btn_circle_transparent"
-                    android:contentDescription="@string/shared_string_hide"
-                    android:src="@drawable/headliner_close"/>
             </LinearLayout>
 
-            <!-- CONTEXT MENU -->
-
-            <LinearLayout
-                android:id="@+id/map_context_menu_layout"
+            <me.zhanghai.android.materialprogressbar.MaterialProgressBar
+                android:id="@+id/map_horizontal_progress"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="4dp"
                 android:layout_gravity="bottom"
-                android:background="@drawable/btn_flat"
-                android:visibility="gone">
+                android:max="100"
+                android:visibility="gone"
+                osmand:mpb_progressStyle="horizontal"
+                osmand:mpb_useIntrinsicPadding="false"
+                osmand:mpb_setBothDrawables="true"
+                style="@style/Widget.MaterialProgressBar.ProgressBar.Horizontal"
+                tools:progress="60"
+                tools:visibility="visible" />
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="fill_parent"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:gravity="center">
-                </TextView>
-
-                <ImageButton
-                    android:layout_width="@dimen/map_address_height"
-                    android:layout_height="@dimen/map_address_height"
-                    android:layout_gravity="center_vertical"
-                    android:background="@drawable/btn_circle_transparent"
-                    tools:src="@drawable/ic_action_test_light"/>
-
-                <ImageButton
-                    android:layout_width="@dimen/map_address_height"
-                    android:layout_height="@dimen/map_address_height"
-                    android:layout_gravity="center_vertical"
-                    android:background="@drawable/btn_circle_transparent"
-                    tools:src="@drawable/ic_action_test_light"/>
-            </LinearLayout>
         </FrameLayout>
 
         <!-- RIGHT BUTTONS -->
@@ -235,6 +192,8 @@
             android:layout_gravity="bottom"
             android:layout_marginBottom="@dimen/map_button_margin"
             android:layout_marginLeft="@dimen/map_button_spacing_land"
+            android:layout_marginStart="@dimen/map_button_spacing_land"
+            android:layout_marginEnd="@dimen/map_button_margin"
             android:layout_marginRight="@dimen/map_button_margin">
 
             <ImageButton
@@ -244,13 +203,14 @@
                 android:layout_gravity="bottom"
                 android:background="@drawable/btn_circle"
                 android:contentDescription="@string/shared_string_my_location"
-                tools:src="@drawable/ic_action_test_light"/>
+                tools:src="@drawable/ic_action_remove_dark"/>
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
                 android:layout_marginLeft="@dimen/map_button_spacing_land"
+                android:layout_marginStart="@dimen/map_button_spacing_land"
                 android:orientation="vertical">
 
                 <ImageButton
@@ -259,7 +219,7 @@
                     android:layout_height="@dimen/map_button_size"
                     android:background="@drawable/btn_circle"
                     android:contentDescription="@string/zoomIn"
-                    tools:src="@drawable/ic_action_test_light"/>
+                    tools:src="@drawable/ic_action_remove_dark"/>
 
                 <ImageButton
                     android:id="@+id/map_zoom_out_button"
@@ -268,24 +228,25 @@
                     android:layout_marginTop="@dimen/map_button_spacing_land"
                     android:background="@drawable/btn_circle"
                     android:contentDescription="@string/zoomOut"
-                    tools:src="@drawable/ic_action_test_light"/>
+                    tools:src="@drawable/ic_action_remove_dark"/>
             </LinearLayout>
         </LinearLayout>
 
     </LinearLayout>
 
+
     <include
         layout="@layout/move_marker_bottom_sheet"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|left"
+        android:layout_gravity="bottom|start"
         tools:visibility="visible"/>
 
     <include
         layout="@layout/add_gpx_point_bottom_sheet"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|left"
+        android:layout_gravity="bottom|start"
         tools:visibility="visible"/>
 
     <FrameLayout

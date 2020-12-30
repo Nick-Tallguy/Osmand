@@ -2,12 +2,13 @@ package net.osmand.plus.quickaction.actions;
 
 import android.app.Dialog;
 import android.app.ProgressDialog;
-import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
+
+import androidx.appcompat.widget.SwitchCompat;
 
 import net.osmand.data.LatLon;
 import net.osmand.plus.GeocodingLookupService;
@@ -16,11 +17,15 @@ import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.editors.EditCategoryDialogFragment;
 import net.osmand.plus.mapcontextmenu.editors.SelectCategoryDialogFragment;
 import net.osmand.plus.quickaction.QuickAction;
+import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.widgets.AutoCompleteTextViewEx;
 
 public class GPXAction extends QuickAction {
 
-	public static final int TYPE = 6;
+	public static final QuickActionType TYPE = new QuickActionType(6,
+			"gpx.add", GPXAction.class).
+			nameRes(R.string.quick_action_add_gpx).iconRes(R.drawable.ic_action_flag).
+			category(QuickActionType.CREATE_CATEGORY);
 
 	public static final String KEY_NAME = "name";
 	public static final String KEY_DIALOG = "dialog";
@@ -98,13 +103,13 @@ public class GPXAction extends QuickAction {
 			if (getParams().get(KEY_NAME).isEmpty() && Integer.valueOf(getParams().get(KEY_CATEGORY_COLOR)) == 0) {
 
 				categoryEdit.setText("");
-				categoryImage.setColorFilter(activity.getResources().getColor(R.color.icon_color));
+				categoryImage.setColorFilter(activity.getResources().getColor(R.color.icon_color_default_light));
 			}
 
 		} else {
 
 			categoryEdit.setText("");
-			categoryImage.setColorFilter(activity.getResources().getColor(R.color.icon_color));
+			categoryImage.setColorFilter(activity.getResources().getColor(R.color.icon_color_default_light));
 
 			getParams().put(KEY_CATEGORY_NAME, "");
 			getParams().put(KEY_CATEGORY_COLOR, "0");
@@ -172,7 +177,7 @@ public class GPXAction extends QuickAction {
 
 	private void fillGroupParams(View root, String name, int color) {
 
-		if (color == 0) color = root.getContext().getResources().getColor(R.color.icon_color);
+		if (color == 0) color = root.getContext().getResources().getColor(R.color.icon_color_default_light);
 
 		((AutoCompleteTextViewEx) root.findViewById(R.id.category_edit)).setText(name);
 		((ImageView) root.findViewById(R.id.category_image)).setColorFilter(color);

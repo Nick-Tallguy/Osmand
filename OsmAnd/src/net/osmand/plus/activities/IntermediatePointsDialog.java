@@ -6,7 +6,6 @@ import android.content.DialogInterface;
 import android.content.DialogInterface.OnShowListener;
 import android.graphics.Color;
 import android.os.AsyncTask;
-import android.support.v7.app.AlertDialog;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -20,6 +19,8 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.Location;
 import net.osmand.TspAnt;
@@ -252,7 +253,7 @@ public class IntermediatePointsDialog {
 				} else {
 					int icon = position == intermediates.size() - 1? R.drawable.ic_action_target:
 						R.drawable.ic_action_intermediate;
-					tv.setCompoundDrawablesWithIntrinsicBounds(app.getIconsCache().getThemedIcon(icon), null, null, null);
+					tv.setCompoundDrawablesWithIntrinsicBounds(app.getUIUtilities().getThemedIcon(icon), null, null, null);
 					tv.setCompoundDrawablePadding(padding);
 					final CheckBox ch = ((CheckBox) v.findViewById(R.id.toggle_item));
 					ch.setVisibility(View.VISIBLE);

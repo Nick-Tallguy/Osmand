@@ -1,5 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<resources>    
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><resources>    
 	
     <string name="local_indexes_cat_av">Daneya Deng/Vîdyoyê</string>
     <string name="stop_routing_confirm">Tu dixwazî navîgasyonê bisekinînî?</string>
@@ -46,10 +45,9 @@
     <string name="features_menu_group">Taybetmendî</string>
     <string name="enter_country_name">Navê welatê binivîsin</string>
     <string name="are_you_sure">Te biryar da?</string>
-    <string name="show_gpx">GPXê nîşan bide</string>
     <string name="working_days">Rojên Karê</string>
     <string name="poi_dialog_poi_type">Cureya POIyê</string>
-    <string name="description">Danasîn</string>
+    <string name="shared_string_description">Danasîn</string>
     <string name="next_proceed">Dû re</string>
     <string name="shared_string_sound">Deng</string>
     <string name="osb_author_dialog_password">Şîfreya OSMê (ne mecbûrî ye)</string>
@@ -83,7 +81,6 @@
     <string name="shared_string_undo">Betal bike</string>
     <string name="error_message_pattern">Xeta: {0}</string>
     <string name="do_you_like_osmand">Ma we ji OsmAndê hez kir?</string>
-    <string name="plugin_description_title">Daxuyanî</string>
     <string name="email">e-peyam</string>
     <string name="edit_filter_save_as_menu_item">Bi awayekî cuda qeyd bike</string>
     <string name="shared_string_remove">Helîne</string>
@@ -126,10 +123,9 @@
     <string name="make_round_trip_descr">Cihê destpêkê bike cihê amanc.</string>
     
     <string name="shared_string_sort">Tesnîf bike</string>
-    <string name="is_saved">hat tomarkirin</string>
     <string name="enter_new_name">Navê nû binivîse</string>
 	<string name="shared_string_back">Paşve</string>
-	<string name="view">Dîtin</string>
+	<string name="shared_string_view">Dîtin</string>
 	<string name="dd_mm_ss_format">DD°MM′SS″</string>
 	<string name="dd_dddddd_format">DD.DDDDDD°</string>
 	<string name="dd_ddddd_format">DD.DDDDD°</string>
@@ -141,9 +137,6 @@
 	<string name="north_abbreviation">Bk</string>
 	<string name="all_data">Hemû daneyan</string>
     <string name="context_menu_read_article">"Gotarê bixwîne "</string>
-    <string name="release_3_0">\\022 
-\n
-\n</string>
     <string name="shared_string_deleted">Jêbirî</string>
     <string name="shared_string_edited">"Guhertî "</string>
     <string name="shared_string_more_without_dots">Bêhtir</string>
@@ -186,7 +179,7 @@
     <string name="shared_string_added">Zêdekirî</string>
     <string name="gpx_file_desc">GPX - ji bo eksportkirina JOSM an jî edîtorên din yên OSMê minasîb e.</string>
     <string name="osc_file_desc">OSC - ji bo eksportkirina OpenStreetMapê minasîb e.</string>
-    <string name="gpx_file">Dosyeya GPXê</string>
+    <string name="shared_string_gpx_file">Dosyeya GPXê</string>
     <string name="osc_file">Dosyeya OSCê</string>
     <string name="choose_file_type">Cureya dosyeyê bibijêre</string>
     <string name="osm_edits_export_desc">Cureya eksportkirinê bibijêre: Notên OSMê, POI an jî her du.</string>

@@ -3,15 +3,20 @@ package net.osmand.plus.mapcontextmenu.other;
 import android.app.Activity;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.view.ContextThemeWrapper;
 import android.view.View;
+
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import net.osmand.AndroidUtils;
 import net.osmand.Location;
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
+import net.osmand.plus.FavouritesDbHelper;
+import net.osmand.plus.FavouritesDbHelper.FavoritesListener;
 import net.osmand.plus.OsmAndLocationProvider;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -20,10 +25,12 @@ import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
 import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemTitleWithDescrAndButton;
-import net.osmand.plus.dashboard.DashLocationFragment;
+import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu;
+import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu.PointType;
 import net.osmand.util.MapUtils;
 
 import java.text.Collator;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -31,61 +38,78 @@ import java.util.List;
 public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFragment
 		implements OsmAndLocationProvider.OsmAndCompassListener, OsmAndLocationProvider.OsmAndLocationListener {
 
-	public static final String TARGET = "target";
-	public static final String INTERMEDIATE = "intermediate";
+	public static final String POINT_TYPE_KEY = "point_type";
 	public static final String TAG = "FavouritesBottomSheetMenuFragment";
 	private static final String IS_SORTED = "sorted";
 	private static final String SORTED_BY_TYPE = "sortedByType";
+	private static final int SORT_TYPE_DIST = 1;
+	private static final int SORT_TYPE_NAME = 2;
+	private static final int SORT_TYPE_CATEGORY = 3;
+	private static int getNextType(int type) {
+		return type % SORT_TYPE_CATEGORY + 1;
+	}
 
-	private Location location;
-	private LatLon latLon;
-	private Float heading;
-	private List<FavouritePoint> favouritePoints;
+	private List<FavouritePoint> favouritePoints = new ArrayList<>();
 	private FavouritesAdapter adapter;
 	private RecyclerView recyclerView;
-	private boolean sortByDist = true;
+	private int sortByDist = SORT_TYPE_DIST;
 	private boolean isSorted = false;
 	private boolean locationUpdateStarted;
 	private boolean compassUpdateAllowed = true;
-	private boolean target;
-	private boolean intermediate;
+	private PointType pointType;
+	private Location location;
+	private float lastHeading;
+
+	private FavoritesListener favoritesListener;
 
 	@Override
 	public void createMenuItems(final Bundle savedInstanceState) {
 		Bundle args = getArguments();
 		if (args != null) {
-			target = args.getBoolean(TARGET);
-			intermediate = args.getBoolean(INTERMEDIATE);
+			pointType = PointType.valueOf(args.getString(POINT_TYPE_KEY));
 		}
 		if (savedInstanceState != null && savedInstanceState.getBoolean(IS_SORTED)) {
-			sortByDist = savedInstanceState.getBoolean(SORTED_BY_TYPE);
+			sortByDist = savedInstanceState.getInt(SORTED_BY_TYPE);
 		}
-		favouritePoints = getMyApplication().getFavorites().getVisibleFavouritePoints();
+		adapter = new FavouritesAdapter(getMyApplication(), favouritePoints);
+		FavouritesDbHelper helper = getMyApplication().getFavorites();
+		if (helper.isFavoritesLoaded()) {
+			loadFavorites();
+		} else {
+			helper.addListener(favoritesListener = new FavoritesListener() {
+				@Override
+				public void onFavoritesLoaded() {
+					loadFavorites();
+					adapter.notifyDataSetChanged();
+				}
+
+				@Override
+				public void onFavoriteDataUpdated(@NonNull FavouritePoint favouritePoint) {
+				}
+			});
+		}
 		recyclerView = new RecyclerView(getContext());
 		final int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
 		recyclerView = (RecyclerView) View.inflate(new ContextThemeWrapper(getContext(), themeRes),
 				R.layout.recyclerview, null);
 		recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-		location = getMyApplication().getLocationProvider().getLastKnownLocation();
-		if (location != null) {
-			latLon = new LatLon(location.getLatitude(), location.getLongitude());
-		}
-		adapter = new FavouritesAdapter(getContext(), favouritePoints);
 		sortFavourites();
 		final BottomSheetItemTitleWithDescrAndButton[] title = new BottomSheetItemTitleWithDescrAndButton[1];
 		title[0] = (BottomSheetItemTitleWithDescrAndButton) new BottomSheetItemTitleWithDescrAndButton.Builder()
-				.setButtonIcons(null, getIconForButton())
-				.setButtonTitle(getTextForButton(sortByDist))
-				.setonButtonClickListener(new View.OnClickListener() {
+				.setButtonIcons(null, getIconForButton(getNextType(sortByDist)))
+				.setButtonTitle(getTextForButton(getNextType(sortByDist)))
+				.setOnButtonClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
+						sortByDist = getNextType(sortByDist);
 						sortFavourites();
-						title[0].setButtonIcons(null, getIconForButton());
-						title[0].setButtonText(getTextForButton(sortByDist));
-						title[0].setDescription(getTextForButton(!sortByDist));
+						int next = getNextType(sortByDist);
+						title[0].setButtonIcons(null, getIconForButton(next));
+						title[0].setButtonText(getTextForButton(next));
+						title[0].setDescription(getTextForButton(sortByDist));
 					}
 				})
-				.setDescription(getTextForButton(!sortByDist))
+				.setDescription(getTextForButton(sortByDist))
 				.setTitle(getString(R.string.favourites))
 				.setLayoutId(R.layout.bottom_sheet_item_title_with_descr_and_button)
 				.create();
@@ -114,41 +138,74 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 				.create());
 	}
 
-	private Drawable getIconForButton() {
-		return getIcon(sortByDist ? R.drawable.ic_action_list_sort : R.drawable.ic_action_sort_by_name,
+	private void loadFavorites() {
+		favouritePoints.clear();
+		favouritePoints.addAll(getMyApplication().getFavorites().getVisibleFavouritePoints());
+		if (favouritePoints.isEmpty()) {
+			favouritePoints.addAll(getMyApplication().getFavorites().getFavouritePoints());
+		}
+	}
+
+	private Drawable getIconForButton(int type) {
+		return getIcon(type == SORT_TYPE_DIST ? R.drawable.ic_action_list_sort : R.drawable.ic_action_sort_by_name,
 				nightMode ? R.color.multi_selection_menu_close_btn_dark : R.color.multi_selection_menu_close_btn_light);
 	}
 
-	private String getTextForButton(boolean sortByDist) {
-		return getString(sortByDist ? R.string.sort_by_distance : R.string.sort_by_name);
+	private String getTextForButton(int sortByDist) {
+		int r = R.string.sort_by_distance;
+		if(sortByDist == SORT_TYPE_CATEGORY) {
+			r = R.string.sort_by_category;
+		} else if(sortByDist == SORT_TYPE_NAME) {
+			r = R.string.sort_by_name;
+		}
+		return getString(r);
 	}
 
 	private void selectFavorite(FavouritePoint point) {
-		TargetPointsHelper targetPointsHelper = getMyApplication().getTargetPointsHelper();
+		OsmandApplication app = getMyApplication();
+		TargetPointsHelper targetPointsHelper = app.getTargetPointsHelper();
+		FavouritesDbHelper favorites = app.getFavorites();
 		LatLon ll = new LatLon(point.getLatitude(), point.getLongitude());
-		if (intermediate) {
-			targetPointsHelper.navigateToPoint(ll, true, targetPointsHelper.getIntermediatePoints().size(), point.getPointDescription());
-		} else if (target) {
-			targetPointsHelper.navigateToPoint(ll, true, -1, point.getPointDescription());
-		} else {
-			targetPointsHelper.setStartPoint(ll, true, point.getPointDescription());
+		switch (pointType) {
+			case START:
+				targetPointsHelper.setStartPoint(ll, true, point.getPointDescription(app));
+				break;
+			case TARGET:
+				if (getActivity() != null) {
+					targetPointsHelper.navigateToPoint(ll, true, -1, point.getPointDescription(app));
+					OsmAndLocationProvider.requestFineLocationPermissionIfNeeded(getActivity());
+				}
+				break;
+			case INTERMEDIATE:
+				targetPointsHelper.navigateToPoint(ll, true, targetPointsHelper.getIntermediatePoints().size(), point.getPointDescription(app));
+				break;
+			case HOME:
+				favorites.setSpecialPoint(ll, FavouritePoint.SpecialPointType.HOME, null);
+				break;
+			case WORK:
+				favorites.setSpecialPoint(ll, FavouritePoint.SpecialPointType.WORK, null);
+				break;
 		}
 		MapRouteInfoMenu routeMenu = getMapRouteInfoMenu();
 		if (routeMenu != null) {
 			setupMapRouteInfoMenuSpinners(routeMenu);
 			updateMapRouteInfoMenuFromIcon(routeMenu);
 		}
+		Fragment fragment = getTargetFragment();
+		if (fragment != null) {
+			fragment.onActivityResult(getTargetRequestCode(), 0, null);
+		}
 		dismiss();
 	}
 
 	private void setupMapRouteInfoMenuSpinners(MapRouteInfoMenu routeMenu) {
 		if (routeMenu != null) {
-			routeMenu.setupSpinners(target, intermediate);
+			routeMenu.setupFields(pointType);
 		}
 	}
 
 	private void updateMapRouteInfoMenuFromIcon(MapRouteInfoMenu routeMenu) {
-		if (!intermediate) {
+		if (pointType == PointType.START) {
 			routeMenu.updateFromIcon();
 		}
 	}
@@ -157,7 +214,7 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 		Activity activity = getActivity();
 		if (activity instanceof MapActivity) {
 			MapActivity map = ((MapActivity) activity);
-			return map.getMapLayers().getMapControlsLayer().getMapRouteInfoMenu();
+			return map.getMapRouteInfoMenu();
 		} else {
 			return null;
 		}
@@ -166,7 +223,6 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 	@Override
 	public void onResume() {
 		super.onResume();
-		adapter.setScreenOrientation(DashLocationFragment.getScreenOrientation(getActivity()));
 		startLocationUpdate();
 	}
 
@@ -175,15 +231,15 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 		super.onPause();
 		stopLocationUpdate();
 		setupMapRouteInfoMenuSpinners(getMapRouteInfoMenu());
+		if (favoritesListener != null) {
+			getMyApplication().getFavorites().removeListener(favoritesListener);
+			favoritesListener = null;
+		}
 	}
 
 	@Override
 	public void updateLocation(Location location) {
-		boolean newLocation = this.location == null && location != null;
-		boolean locationChanged = this.location != null && location != null
-				&& this.location.getLatitude() != location.getLatitude()
-				&& this.location.getLongitude() != location.getLongitude();
-		if (newLocation || locationChanged) {
+		if (!MapUtils.areLatLonEqual(this.location, location)) {
 			this.location = location;
 			updateLocationUi();
 		}
@@ -191,14 +247,9 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 
 	@Override
 	public void updateCompassValue(float value) {
-		// 99 in next line used to one-time initialize arrows (with reference vs. fixed-north direction)
-		// on non-compass devices
-		float lastHeading = heading != null ? heading : 99;
-		heading = value;
-		if (Math.abs(MapUtils.degreesDiff(lastHeading, heading)) > 5) {
+		if (Math.abs(MapUtils.degreesDiff(lastHeading, value)) > 5) {
+			lastHeading = value;
 			updateLocationUi();
-		} else {
-			heading = lastHeading;
 		}
 	}
 
@@ -211,15 +262,6 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 			mapActivity.getMyApplication().runInUIThread(new Runnable() {
 				@Override
 				public void run() {
-					if (location == null) {
-						location = getMyApplication().getLocationProvider().getLastKnownLocation();
-					}
-					if (location == null) {
-						return;
-					}
-					adapter.setUseCenter(false);
-					adapter.setLocation(new LatLon(location.getLatitude(), location.getLongitude()));
-					adapter.setHeading(heading != null ? heading : 99);
 					adapter.notifyDataSetChanged();
 				}
 			});
@@ -251,7 +293,7 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 	public void onSaveInstanceState(Bundle outState) {
 		super.onSaveInstanceState(outState);
 		outState.putBoolean(IS_SORTED, isSorted);
-		outState.putBoolean(SORTED_BY_TYPE, !sortByDist);
+		outState.putInt(SORTED_BY_TYPE, sortByDist);
 	}
 
 	@Override
@@ -260,26 +302,33 @@ public class FavouritesBottomSheetMenuFragment extends MenuBottomSheetDialogFrag
 	}
 
 	private void sortFavourites() {
-		if (location != null) {
-			latLon = new LatLon(location.getLatitude(), location.getLongitude());
-		} else if (sortByDist) {
-			return;
-		}
 		final Collator inst = Collator.getInstance();
+		Location stale = getMyApplication().getLocationProvider().getLastStaleKnownLocation();
+		final LatLon latLon = stale != null ? new LatLon(stale.getLatitude(), stale.getLongitude()) : 
+			getMyApplication().getMapViewTrackingUtilities().getMapLocation();
+
 		Collections.sort(favouritePoints, new Comparator<FavouritePoint>() {
 			@Override
 			public int compare(FavouritePoint lhs, FavouritePoint rhs) {
-				if (sortByDist) {
+				if (sortByDist == SORT_TYPE_DIST && latLon != null) {
 					double ld = MapUtils.getDistance(latLon, lhs.getLatitude(),
 							lhs.getLongitude());
 					double rd = MapUtils.getDistance(latLon, rhs.getLatitude(),
 							rhs.getLongitude());
 					return Double.compare(ld, rd);
 				}
-				return inst.compare(lhs.getName(), rhs.getName());
+
+				if(sortByDist == SORT_TYPE_CATEGORY) {
+					int cat = inst.compare(lhs.getCategoryDisplayName(getMyApplication()), rhs.getCategoryDisplayName(getMyApplication()));
+					if(cat != 0) {
+						return cat;
+					}
+				}
+				int name = inst.compare(lhs.getDisplayName(getMyApplication()), rhs.getDisplayName(getMyApplication()));
+				return name;
 			}
 		});
-		sortByDist = !sortByDist;
+
 		isSorted = true;
 		adapter.notifyDataSetChanged();
 		recyclerView.getLayoutManager().scrollToPosition(0);

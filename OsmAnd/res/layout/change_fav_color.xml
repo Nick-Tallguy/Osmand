@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:osmand="http://schemas.android.com/apk/res-auto"
     android:id="@+id/change_color_view"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -8,16 +9,18 @@
     android:minHeight="@dimen/list_item_height"
     android:orientation="horizontal"
     android:paddingLeft="@dimen/list_content_padding"
-    android:paddingRight="@dimen/list_content_padding">
+    android:paddingRight="@dimen/list_content_padding"
+	android:paddingStart="@dimen/list_content_padding"
+	android:paddingEnd="@dimen/list_content_padding">
 
-    <ImageView
+    <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/change_color_icon"
         android:layout_width="@dimen/standard_icon_size"
         android:layout_height="@dimen/standard_icon_size"
         android:layout_gravity="center_vertical"
         android:layout_marginEnd="@dimen/bottom_sheet_icon_margin"
         android:layout_marginRight="@dimen/bottom_sheet_icon_margin"
-        android:src="@drawable/ic_action_appearance" />
+        osmand:srcCompat="@drawable/ic_action_appearance" />
 
     <TextView
         android:id="@+id/title"
@@ -30,10 +33,10 @@
         android:text="@string/change_color"
         android:textAppearance="@style/TextAppearance.ListItemTitle" />
 
-    <android.support.v7.widget.AppCompatImageView
+    <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/colorImage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:src="@drawable/ic_action_circle" />
+        osmand:srcCompat="@drawable/ic_action_circle" />
 
 </LinearLayout>

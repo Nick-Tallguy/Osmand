@@ -1,8 +1,9 @@
 package net.osmand.plus.render;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import net.osmand.IProgress;
 import net.osmand.IndexConstants;
@@ -24,10 +25,10 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 
 
 public class RendererRegistry {
@@ -44,10 +45,12 @@ public class RendererRegistry {
 	public final static String OFFROAD_RENDER = "Offroad";  //$NON-NLS-1$
 	public final static String LIGHTRS_RENDER = "LightRS";  //$NON-NLS-1$
 	public final static String UNIRS_RENDER = "UniRS";  //$NON-NLS-1$
+	public final static String DESERT_RENDER = "Desert";  //$NON-NLS-1$
+	public final static String SNOWMOBILE_RENDER = "Snowmobile";  //$NON-NLS-1$
 
 	private RenderingRulesStorage defaultRender = null;
 	private RenderingRulesStorage currentSelectedRender = null;
-	
+
 	private Map<String, File> externalRenderers = new LinkedHashMap<String, File>();
 	private Map<String, String> internalRenderers = new LinkedHashMap<String, String>();
 	
@@ -72,6 +75,8 @@ public class RendererRegistry {
 		internalRenderers.put(NAUTICAL_RENDER, "nautical" + ".render.xml");
 		internalRenderers.put(WINTER_SKI_RENDER, "skimap" + ".render.xml");
 		internalRenderers.put(OFFROAD_RENDER, "offroad" + ".render.xml");
+		internalRenderers.put(DESERT_RENDER, "desert" + ".render.xml");
+		internalRenderers.put(SNOWMOBILE_RENDER, "snowmobile" + ".render.xml");
 	}
 	
 	public RenderingRulesStorage defaultRender() {
@@ -101,7 +106,23 @@ public class RendererRegistry {
 	}
 
 	private boolean hasRender(String name) {
-		return externalRenderers.containsKey(name) || internalRenderers.containsKey(name);
+		return externalRenderers.containsKey(name) || getInternalRender(name) != null;
+	}
+	
+	private String getInternalRender(String name) {
+		// check by key and by value
+		Iterator<Entry<String, String>> mapIt = internalRenderers.entrySet().iterator();
+		while(mapIt.hasNext()) {
+			Entry<String, String> e = mapIt.next();
+			if(e.getKey().equalsIgnoreCase(name)) {
+				return e.getValue();
+			}
+			String simpleFileName = e.getValue().substring(0, e.getValue().indexOf('.'));
+			if(simpleFileName.equalsIgnoreCase(name)) {
+				return e.getValue();
+			}
+		}
+		return null;
 	}
 	
 //	private static boolean USE_PRECOMPILED_STYLE = false;
@@ -179,16 +200,18 @@ public class RendererRegistry {
 		} 
 		if(externalRenderers.containsKey(name)){
 			is = new FileInputStream(externalRenderers.get(name));
-		} else if(internalRenderers.containsKey(name)){
+		} else {
+			if (getInternalRender(name) == null) {
+				log.error("Rendering style not found: " + name);
+				name = DEFAULT_RENDER;
+			}
 			File fl = getFileForInternalStyle(name);
-			if(fl.exists()) {
+			if (fl.exists()) {
 				is = new FileInputStream(fl);
 			} else {
 				copyFileForInternalStyle(name);
-				is = RenderingRulesStorage.class.getResourceAsStream(internalRenderers.get(name));
+				is = RenderingRulesStorage.class.getResourceAsStream(getInternalRender(name));
 			}
-		} else {
-			throw new IllegalArgumentException("Not found " + name); //$NON-NLS-1$
 		}
 		return is;
 	}
@@ -196,7 +219,7 @@ public class RendererRegistry {
 	public void copyFileForInternalStyle(String name) {
 		try {
 			FileOutputStream fout = new FileOutputStream(getFileForInternalStyle(name));
-			Algorithms.streamCopy(RenderingRulesStorage.class.getResourceAsStream(internalRenderers.get(name)),
+			Algorithms.streamCopy(RenderingRulesStorage.class.getResourceAsStream(getInternalRender(name)),
 					fout);
 			fout.close();
 		} catch (IOException e) {
@@ -209,31 +232,16 @@ public class RendererRegistry {
 	}
 
 	public File getFileForInternalStyle(String name) {
-		if(!internalRenderers.containsKey(name)) {
-			return new File(app.getAppPath(IndexConstants.RENDERERS_DIR), "style.render.xml");
+		String file = getInternalRender(name);
+		if(file == null) {
+			return new File(app.getAppPath(IndexConstants.RENDERERS_DIR), "default.render.xml");
 		}
-		File fl = new File(app.getAppPath(IndexConstants.RENDERERS_DIR), internalRenderers.get(name));
+		File fl = new File(app.getAppPath(IndexConstants.RENDERERS_DIR), file);
 		return fl;
 	}
 	
 	public void initRenderers(IProgress progress) {
-		File file = app.getAppPath(IndexConstants.RENDERERS_DIR);
-		file.mkdirs();
-		Map<String, File> externalRenderers = new LinkedHashMap<String, File>(); 
-		if (file.exists() && file.canRead()) {
-			File[] lf = file.listFiles();
-			if (lf != null) {
-				for (File f : lf) {
-					if (f != null && f.getName().endsWith(IndexConstants.RENDERER_INDEX_EXT)) {
-						if(!internalRenderers.containsValue(f.getName())) {
-							String name = f.getName().substring(0, f.getName().length() - IndexConstants.RENDERER_INDEX_EXT.length());
-							externalRenderers.put(name.replace('_', ' ').replace('-', ' '), f);
-						}
-					}
-				}
-			}
-		}
-		this.externalRenderers = externalRenderers;
+		updateExternalRenderers();
 		String r = app.getSettings().RENDERER.get();
 		if(r != null){
 			RenderingRulesStorage obj = getRenderer(r);
@@ -242,13 +250,43 @@ public class RendererRegistry {
 			}
 		}
 	}
-	
-	public Collection<String> getRendererNames(){
-		LinkedHashSet<String> names = new LinkedHashSet<String>();
-		names.add(DEFAULT_RENDER);
-		names.addAll(internalRenderers.keySet());
-		names.addAll(externalRenderers.keySet());
-		return names;
+
+	public void updateExternalRenderers() {
+		File file = app.getAppPath(IndexConstants.RENDERERS_DIR);
+		file.mkdirs();
+		Map<String, File> externalRenderers = new LinkedHashMap<String, File>();
+		if (file.exists() && file.canRead()) {
+			File[] lf = file.listFiles();
+			if (lf != null) {
+				for (File f : lf) {
+					if (f != null && f.getName().endsWith(IndexConstants.RENDERER_INDEX_EXT)) {
+						if (!internalRenderers.containsValue(f.getName())) {
+							String name = formatRendererFileName(f.getName());
+							externalRenderers.put(name, f);
+						}
+					}
+				}
+			}
+		}
+		this.externalRenderers = externalRenderers;
+	}
+
+	public static String formatRendererFileName(String fileName) {
+		String name = fileName.substring(0, fileName.length() - IndexConstants.RENDERER_INDEX_EXT.length());
+		name = name.replace('_', ' ').replace('-', ' ');
+		return Algorithms.capitalizeFirstLetter(name);
+	}
+
+	@NonNull
+	public Map<String, String> getRenderers() {
+		Map<String, String> renderers = new LinkedHashMap<String, String>();
+		renderers.put(DEFAULT_RENDER, DEFAULT_RENDER_FILE_PATH);
+		renderers.putAll(internalRenderers);
+
+		for (Map.Entry<String, File> entry : externalRenderers.entrySet()) {
+			renderers.put(entry.getKey(), entry.getValue().getName());
+		}
+		return renderers;
 	}
 
 	@Nullable
@@ -262,6 +300,35 @@ public class RendererRegistry {
 				return ctx.getString(R.string.nautical_renderer);
 		}
 		return null;
+	}
+
+	@NonNull
+	public static String getRendererDescription(@NonNull Context ctx, @NonNull String key) {
+		switch (key) {
+			case DEFAULT_RENDER:
+				return ctx.getString(R.string.default_render_descr);
+			case TOURING_VIEW:
+				return ctx.getString(R.string.touring_view_render_descr);
+			case MAPNIK_RENDER:
+				return ctx.getString(R.string.mapnik_render_descr);
+			case TOPO_RENDER:
+				return ctx.getString(R.string.topo_render_descr);
+			case LIGHTRS_RENDER:
+				return ctx.getString(R.string.light_rs_render_descr);
+			case UNIRS_RENDER:
+				return ctx.getString(R.string.unirs_render_descr);
+			case WINTER_SKI_RENDER:
+				return ctx.getString(R.string.ski_map_render_descr);
+			case NAUTICAL_RENDER:
+				return ctx.getString(R.string.nautical_render_descr);
+			case OFFROAD_RENDER:
+				return ctx.getString(R.string.off_road_render_descr);
+			case DESERT_RENDER:
+				return ctx.getString(R.string.desert_render_descr);
+			case SNOWMOBILE_RENDER:
+			return ctx.getString(R.string.snowmobile_render_descr);
+		}
+		return ""; 
 	}
 
 	public RenderingRulesStorage getCurrentSelectedRenderer() {
@@ -293,5 +360,9 @@ public class RendererRegistry {
 			}
 		}
 		return null;
+	}
+
+	public Map<String, File> getExternalRenderers() {
+		return externalRenderers;
 	}
 }

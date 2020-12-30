@@ -1,6 +1,10 @@
 package net.osmand.plus.mapcontextmenu.editors;
 
-import android.support.v4.app.Fragment;
+import android.app.Activity;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -10,6 +14,7 @@ import net.osmand.plus.helpers.AndroidUiHelper;
 public abstract class PointEditor {
 
 	protected OsmandApplication app;
+	@Nullable
 	protected MapActivity mapActivity;
 
 	protected boolean isNew;
@@ -17,15 +22,20 @@ public abstract class PointEditor {
 	private boolean portraitMode;
 	private boolean nightMode;
 
-	public PointEditor(MapActivity mapActivity) {
+	public PointEditor(@NonNull MapActivity mapActivity) {
 		this.app = mapActivity.getMyApplication();
 		this.mapActivity = mapActivity;
-		updateLandscapePortrait();
+		updateLandscapePortrait(mapActivity);
 		updateNightMode();
 	}
 
-	public void setMapActivity(MapActivity mapActivity) {
+	public void setMapActivity(@Nullable MapActivity mapActivity) {
 		this.mapActivity = mapActivity;
+	}
+
+	@Nullable
+	public MapActivity getMapActivity() {
+		return mapActivity;
 	}
 
 	public boolean isNew() {
@@ -40,12 +50,12 @@ public abstract class PointEditor {
 		return !nightMode;
 	}
 
-	public void updateLandscapePortrait() {
-		portraitMode = AndroidUiHelper.isOrientationPortrait(mapActivity);
+	public void updateLandscapePortrait(@NonNull Activity activity) {
+		portraitMode = AndroidUiHelper.isOrientationPortrait(activity);
 	}
 
 	public void updateNightMode() {
-		nightMode = mapActivity.getMyApplication().getDaynightHelper().isNightModeForMapControls();
+		nightMode = app.getDaynightHelper().isNightModeForMapControls();
 	}
 
 	public int getSlideInAnimation() {
@@ -67,16 +77,27 @@ public abstract class PointEditor {
 	public abstract String getFragmentTag();
 
 	public void hide() {
-		Fragment fragment = mapActivity.getSupportFragmentManager().findFragmentByTag(getFragmentTag());
-		if (fragment != null)
-			((PointEditorFragment)fragment).dismiss();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			Fragment fragment = mapActivity.getSupportFragmentManager().findFragmentByTag(getFragmentTag());
+			if (fragment != null)
+				((PointEditorFragment) fragment).dismiss();
+		}
 	}
 
-	public void setCategory(String name) {
-		Fragment fragment = mapActivity.getSupportFragmentManager().findFragmentByTag(getFragmentTag());
-		if (fragment != null) {
-			PointEditorFragment editorFragment = (PointEditorFragment) fragment;
-			editorFragment.setCategory(name);
+	public void setCategory(String name, int color) {
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			Fragment fragment = mapActivity.getSupportFragmentManager().findFragmentByTag(getFragmentTag());
+			if (fragment != null) {
+				if (fragment instanceof PointEditorFragment) {
+					PointEditorFragment editorFragment = (PointEditorFragment) fragment;
+					editorFragment.setCategory(name, color);
+				} else if (fragment instanceof PointEditorFragmentNew) {
+					PointEditorFragmentNew editorFragment = (PointEditorFragmentNew) fragment;
+					editorFragment.setCategory(name, color);
+				}
+			}
 		}
 	}
 }

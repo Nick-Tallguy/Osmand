@@ -10,12 +10,15 @@
         android:layout_height="wrap_content"
         android:minHeight="@dimen/list_item_height"
         android:layout_gravity="center_vertical"
-        android:drawablePadding="24dp"
+        android:drawablePadding="@dimen/bottom_sheet_icon_margin"
         android:gravity="center_vertical"
-        android:paddingLeft="16dp"
+        android:paddingStart="@dimen/content_padding"
+        android:paddingEnd="@dimen/content_padding"
+        android:paddingLeft="@dimen/content_padding"
+        android:paddingRight = "@dimen/content_padding"
         android:textAppearance="@style/TextAppearance.ListItemTitle"
         android:textStyle="normal"
-        tools:drawableLeft="@drawable/ic_action_search_dark"
+        tools:drawableStart="@drawable/ic_action_search_dark"
         tools:text="@string/layer_poi"/>
 
 </LinearLayout>

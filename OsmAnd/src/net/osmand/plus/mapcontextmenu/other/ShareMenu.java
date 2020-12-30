@@ -3,11 +3,16 @@ package net.osmand.plus.mapcontextmenu.other;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.v4.text.TextUtilsCompat;
-import android.support.v4.view.ViewCompat;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.core.text.TextUtilsCompat;
+import androidx.core.view.ViewCompat;
+
 import net.osmand.data.LatLon;
+import net.osmand.plus.OsmAndFormatter;
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.actions.ShareDialog;
@@ -32,6 +37,7 @@ public class ShareMenu extends BaseMenuController {
 		MESSAGE(R.drawable.ic_action_message, R.string.shared_string_send),
 		CLIPBOARD(R.drawable.ic_action_copy, R.string.shared_string_copy),
 		NAME(R.drawable.ic_action_copy, R.string.copy_location_name),
+		COORDINATES(R.drawable.ic_action_copy, R.string.copy_coordinates),
 		GEO(R.drawable.ic_world_globe_dark, R.string.share_geo),
 		QR_CODE(R.drawable.ic_action_qrcode, R.string.shared_string_qr_code);
 
@@ -61,6 +67,7 @@ public class ShareMenu extends BaseMenuController {
 		list.add(ShareItem.MESSAGE);
 		list.add(ShareItem.CLIPBOARD);
 		list.add(ShareItem.NAME);
+		list.add(ShareItem.COORDINATES);
 		list.add(ShareItem.GEO);
 		list.add(ShareItem.QR_CODE);
 		return list;
@@ -74,7 +81,7 @@ public class ShareMenu extends BaseMenuController {
 		return title;
 	}
 
-	public static void show(LatLon latLon, String title, String address, MapActivity mapActivity) {
+	public static void show(LatLon latLon, String title, String address, @NonNull MapActivity mapActivity) {
 
 		ShareMenu menu = new ShareMenu(mapActivity);
 
@@ -86,7 +93,11 @@ public class ShareMenu extends BaseMenuController {
 	}
 
 	public void share(ShareItem item) {
-		final int zoom = getMapActivity().getMapView().getZoom();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity == null) {
+			return;
+		}
+		final int zoom = mapActivity.getMapView().getZoom();
 		final String geoUrl = MapUtils.buildGeoUrl(latLon.getLatitude(), latLon.getLongitude(), zoom);
 		final String httpUrl = "https://osmand.net/go?lat=" + ((float) latLon.getLatitude())
 				+ "&lon=" + ((float) latLon.getLongitude()) + "&z=" + zoom;
@@ -94,10 +105,10 @@ public class ShareMenu extends BaseMenuController {
 		if (!Algorithms.isEmpty(title)) {
 			sb.append(title).append("\n");
 		}
-		if (!Algorithms.isEmpty(address) && !address.equals(title) && !address.equals(getMapActivity().getString(R.string.no_address_found))) {
+		if (!Algorithms.isEmpty(address) && !address.equals(title) && !address.equals(mapActivity.getString(R.string.no_address_found))) {
 			sb.append(address).append("\n");
 		}
-		sb.append(getMapActivity().getString(R.string.shared_string_location)).append(": ");
+		sb.append(mapActivity.getString(R.string.shared_string_location)).append(": ");
 		if (TextUtilsCompat.getLayoutDirectionFromLocale(Locale.getDefault()) == ViewCompat.LAYOUT_DIRECTION_RTL) {
 			sb.append("\n");
 		}
@@ -105,29 +116,35 @@ public class ShareMenu extends BaseMenuController {
 		String sms = sb.toString();
 		switch (item) {
 			case MESSAGE:
-				ShareDialog.sendMessage(getMapActivity(), sms);
+				ShareDialog.sendMessage(mapActivity, sms);
 				break;
 			case CLIPBOARD:
-				ShareDialog.sendToClipboard(getMapActivity(), sms);
+				ShareDialog.sendToClipboard(mapActivity, sms);
 				break;
 			case NAME:
 				if (!Algorithms.isEmpty(title)) {
-					ShareDialog.sendToClipboard(getMapActivity(), title);
+					ShareDialog.sendToClipboard(mapActivity, title);
 				} else {
-					Toast.makeText(getMapActivity(),
+					Toast.makeText(mapActivity,
 							R.string.toast_empty_name_error,
 							Toast.LENGTH_LONG).show();
 				}
 				break;
+			case COORDINATES:
+				OsmandSettings st = ((OsmandApplication) mapActivity.getApplicationContext()).getSettings();
+				int f = st.COORDINATES_FORMAT.get();
+				ShareDialog.sendToClipboard(mapActivity,
+						OsmAndFormatter.getFormattedCoordinates(latLon.getLatitude(), latLon.getLongitude(), f));
+				break;
 			case GEO:
 				Intent mapIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUrl));
-				getMapActivity().startActivity(mapIntent);
+				mapActivity.startActivity(mapIntent);
 				break;
 			case QR_CODE:
 				Bundle bundle = new Bundle();
 				bundle.putFloat("LAT", (float) latLon.getLatitude());
 				bundle.putFloat("LONG", (float) latLon.getLongitude());
-				ShareDialog.sendQRCode(getMapActivity(), "LOCATION_TYPE", bundle, null);
+				ShareDialog.sendQRCode(mapActivity, "LOCATION_TYPE", bundle, null);
 				break;
 		}
 	}

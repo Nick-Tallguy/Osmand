@@ -144,7 +144,7 @@ public abstract class TilesCache<T> {
 				}
 			}
 			TileLoadDownloadRequest req = new TileLoadDownloadRequest(dirWithTiles, url, toSave,
-					tileId, map, x, y, zoom, map.getReferer());
+					tileId, map, x, y, zoom, map.getReferer(), map.getUserAgent());
 			if (sync) {
 				return getRequestedTile(req);
 			} else {
@@ -205,7 +205,7 @@ public abstract class TilesCache<T> {
 
 	protected boolean isExpired(TileLoadDownloadRequest req, long lastModified) {
 		long time = System.currentTimeMillis();
-		int ts = req.tileSource.getExpirationTimeMillis();
+		long ts = req.tileSource.getExpirationTimeMillis();
 		return ts != -1 && req.url != null && time - lastModified > ts;
 	}
 

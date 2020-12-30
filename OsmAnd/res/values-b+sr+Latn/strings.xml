@@ -33,7 +33,7 @@
 	<string name="local_index_tile_data_minzoom">Minimalni zum: %1$s</string>
     
     
-    <string name="announce_gpx_waypoints">Najavi GPX waypoints</string>
+    
     <string name="speak_title">Najavi…</string>
 	<string name="speak_descr">Podešavanje najave naziva ulica, saobraćajnih upozorenja, ograničenja brzine</string>
 	<string name="speak_street_names">Obaveštenje - naziv ulice</string>
@@ -103,7 +103,6 @@
     <string name="rendering_attr_noAdminboundaries_name">Sakrij granice</string>
 	
 	<string name="map_widget_max_speed">Ograničenje brzine</string>
-    <string name="monitoring_control_start">GPX</string>
     <string name="no_buildings_found">Nema pronađenih objekata.</string>
     <string name="incremental_search_city">Traži grad inkrementalno</string>
     <string name="search_villages_and_postcodes">Pretraga sela/Poštanski kod</string>
@@ -123,7 +122,6 @@
 	<string name="animate_route">Započni simulaciju</string>
 	<string name="file_can_not_be_renamed">Fajl ne može biti preimenovan .</string>
 	<string name="file_with_name_already_exists">Fajl sa tim imenom već postoji.</string>
-	<string name="gpx_navigation">GPX ruta</string>
 	<string name="poi_filter_by_name">Pretraga po imenu</string>
 	<string name="update_poi_file_not_found">Mesna datoteka za održavanje promene POI-a nije pronađena i ne može da se napravi .</string>
 	<string name="button_upgrade_osmandplus">Nadogradite Osmand+</string>
@@ -132,7 +130,7 @@
 	
 	<string name="poi_filter_nominatim">Online Nominatim</string>
 	<string name="search_position_address">Adresa …</string>
-	<string name="search_position_undefined">Neodređeno</string>
+	<string name="shared_string_undefined">Neodređeno</string>
 	
 	<string name="layer_map_appearance">Konfiguracija ekrana</string>
 	<string name="show_lanes">Prikaži trake</string>
@@ -174,7 +172,6 @@
 	<string name="rotate_map_none_opt">Bez rotacije (sever je gore)</string>
 	<string name="rotate_map_to_bearing">Orjentacija mape</string>
 	
-	<string name="avoid_in_routing_descr">Izbegavaj naplatne rampe, ne asfaltirane puteve, trajekte</string>
 	<string name="map_widget_show_ruler">Lenjir</string>
 	
 	<string name="shared_string_import">Uvezi</string>
@@ -283,7 +280,7 @@
 	<string name="local_index_mi_backup">Isključi</string>
 	
 	
-	<string name="local_index_mi_reload">Učitaj ponovo sa SD kartice</string>
+	
 	<string name="shared_string_download">Preuzmi</string>
 	<string name="local_index_poi_data">Podaci POI-a</string>
 	<string name="local_index_address_data">Podaci adresa</string>
@@ -385,7 +382,7 @@
     <string name="gps_status">Stanje GPS-a</string>
     <string name="version_settings_descr">Preuzmi noćne izgradnje</string>
     <string name="version_settings">Izgradnje</string>
-    <string name="points">Tačke</string>
+    <string name="shared_string_gpx_points">Tačke</string>
     
     <string name="shared_string_my_location">Moj položaj</string>
     

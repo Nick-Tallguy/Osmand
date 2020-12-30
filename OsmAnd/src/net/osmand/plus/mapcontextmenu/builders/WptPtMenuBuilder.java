@@ -2,26 +2,28 @@ package net.osmand.plus.mapcontextmenu.builders;
 
 import android.content.Context;
 import android.content.Intent;
-import android.support.annotation.ColorInt;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
+import net.osmand.GPXUtilities;
+import net.osmand.GPXUtilities.WptPt;
+import net.osmand.IndexConstants;
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
-import net.osmand.plus.GPXUtilities;
-import net.osmand.plus.GPXUtilities.WptPt;
 import net.osmand.plus.GpxSelectionHelper;
 import net.osmand.plus.GpxSelectionHelper.SelectedGpxFile;
-import net.osmand.plus.OsmAndAppCustomization;
+import net.osmand.plus.settings.backend.OsmAndAppCustomization;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.TrackActivity;
 import net.osmand.plus.mapcontextmenu.MenuBuilder;
-import net.osmand.plus.mapillary.MapillaryPlugin;
-import net.osmand.plus.views.POIMapLayer;
+import net.osmand.plus.mapcontextmenu.CollapsableView;
+import net.osmand.plus.views.layers.POIMapLayer;
 import net.osmand.plus.widgets.TextViewEx;
 import net.osmand.util.Algorithms;
 
@@ -34,7 +36,7 @@ public class WptPtMenuBuilder extends MenuBuilder {
 
 	private final WptPt wpt;
 
-	public WptPtMenuBuilder(MapActivity mapActivity, final WptPt wpt) {
+	public WptPtMenuBuilder(@NonNull MapActivity mapActivity, final @NonNull WptPt wpt) {
 		super(mapActivity);
 		this.wpt = wpt;
 		setShowNearestWiki(true);
@@ -49,6 +51,13 @@ public class WptPtMenuBuilder extends MenuBuilder {
 	protected void buildTopInternal(View view) {
 		super.buildTopInternal(view);
 		buildWaypointsView(view);
+	}
+
+	@Override
+	protected void buildDescription(View view) {
+		if (!Algorithms.isEmpty(wpt.desc)) {
+			buildDescriptionRow(view, app.getString(R.string.shared_string_description), wpt.desc, 0, 10, true);
+		}
 	}
 
 	@Override
@@ -73,16 +82,11 @@ public class WptPtMenuBuilder extends MenuBuilder {
 					null, Algorithms.capitalizeFirstLetterAndLowercase(app.getString(R.string.plugin_distance_point_hdop)) + ": " + (int)wpt.hdop, 0,
 					false, null, false, 0, false, null, false);
 		}
+		
 		if (!Algorithms.isEmpty(wpt.desc)) {
-			final View row = buildRow(view, R.drawable.ic_action_note_dark, null, wpt.desc, 0, false, null, true, 10, false, null, false);
-			row.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					POIMapLayer.showDescriptionDialog(row.getContext(), app, wpt.desc,
-							row.getResources().getString(R.string.description));
-				}
-			});
+			prepareDescription(wpt, view);
 		}
+		
 		if (!Algorithms.isEmpty(wpt.comment)) {
 			final View rowc = buildRow(view, R.drawable.ic_action_note_dark, null, wpt.comment, 0,
 					false, null, true, 10, false, null, false);
@@ -97,6 +101,10 @@ public class WptPtMenuBuilder extends MenuBuilder {
 
 		buildPlainMenuItems(view);
 	}
+	
+	protected void prepareDescription(final WptPt wpt, View view) {
+
+	}
 
 	private void buildWaypointsView(View view) {
 		GpxSelectionHelper gpxSelectionHelper = app.getSelectedGpxHelper();
@@ -107,9 +115,9 @@ public class WptPtMenuBuilder extends MenuBuilder {
 			if (points.size() > 0) {
 				String title = view.getContext().getString(R.string.context_menu_points_of_group);
 				File file = new File(gpx.path);
-				String gpxName = file.getName().replace(".gpx", "").replace("/", " ").replace("_", " ");
+				String gpxName = file.getName().replace(IndexConstants.GPX_FILE_EXT, "").replace("/", " ").replace("_", " ");
 				int color = getPointColor(wpt, getFileColor(selectedGpxFile));
-				buildRow(view, app.getIconsCache().getPaintedIcon(R.drawable.ic_type_waypoints_group, color), null, title, 0, gpxName,
+				buildRow(view, app.getUIUtilities().getPaintedIcon(R.drawable.ic_type_waypoints_group, color), null, title, 0, gpxName,
 						true, getCollapsableWaypointsView(view.getContext(), true, gpx, wpt),
 						false, 0, false, null, false);
 			}
@@ -139,23 +147,32 @@ public class WptPtMenuBuilder extends MenuBuilder {
 		LinearLayout view = (LinearLayout) buildCollapsableContentView(context, collapsed, true);
 
 		List<WptPt> points = gpxFile.getPoints();
-		for (int i = 0; i < points.size() && i < 10; i++) {
-			final WptPt point = points.get(i);
-			boolean selected = selectedPoint != null && selectedPoint.equals(point);
-			TextViewEx button = buildButtonInCollapsableView(context, selected, false);
-			button.setText(point.name);
+		String selectedCategory = selectedPoint != null && selectedPoint.category != null ? selectedPoint.category : "";
+		int showCount = 0;
+		for (final WptPt point : points) {
+			String currentCategory = point != null ? point.category : null;
+			if (selectedCategory.equals(currentCategory)) {
+				showCount++;
+				boolean selected = selectedPoint != null && selectedPoint.equals(point);
+				TextViewEx button = buildButtonInCollapsableView(context, selected, false);
+				button.setText(point.name);
 
-			if (!selected) {
-				button.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						LatLon latLon = new LatLon(point.getLatitude(), point.getLongitude());
-						PointDescription pointDescription = new PointDescription(PointDescription.POINT_TYPE_WPT, point.name);
-						mapActivity.getContextMenu().show(latLon, pointDescription, point);
-					}
-				});
+				if (!selected) {
+					button.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							LatLon latLon = new LatLon(point.getLatitude(), point.getLongitude());
+							PointDescription pointDescription = new PointDescription(PointDescription.POINT_TYPE_WPT, point.name);
+							mapActivity.getContextMenu().setCenterMarker(true);
+							mapActivity.getContextMenu().show(latLon, pointDescription, point);
+						}
+					});
+				}
+				view.addView(button);
 			}
-			view.addView(button);
+			if (showCount >= 10) {
+				break;
+			}
 		}
 
 		if (points.size() > 10) {

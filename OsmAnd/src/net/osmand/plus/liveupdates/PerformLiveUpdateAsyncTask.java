@@ -4,11 +4,14 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import net.osmand.PlatformUtil;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.CommonPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.R;
 import net.osmand.plus.download.AbstractDownloadActivity;
 import net.osmand.plus.download.DownloadActivityType;
 import net.osmand.plus.download.DownloadIndexesThread;
@@ -30,14 +33,14 @@ public class PerformLiveUpdateAsyncTask
 	private final Context context;
 	@NonNull
 	private final String localIndexFileName;
-	private final boolean forceUpdate;
+	private final boolean userRequested;
 
 	public PerformLiveUpdateAsyncTask(@NonNull Context context,
 									  @NonNull String localIndexFileName,
-									  boolean forceUpdate) {
+									  boolean userRequested) {
 		this.context = context;
 		this.localIndexFileName = localIndexFileName;
-		this.forceUpdate = forceUpdate;
+		this.userRequested = userRequested;
 	}
 
 	@Override
@@ -48,7 +51,7 @@ public class PerformLiveUpdateAsyncTask
 			activity.setSupportProgressBarIndeterminateVisibility(true);
 		}
 		final OsmandApplication myApplication = getMyApplication();
-		OsmandSettings.CommonPreference<Long> lastCheckPreference =
+		CommonPreference<Long> lastCheckPreference =
 				LiveUpdatesHelper.preferenceLastCheck(localIndexFileName, myApplication.getSettings());
 		lastCheckPreference.set(System.currentTimeMillis());
 	}
@@ -67,7 +70,6 @@ public class PerformLiveUpdateAsyncTask
 
 	@Override
 	protected void onPostExecute(IncrementalChangesManager.IncrementalUpdateList result) {
-		LOG.debug("onPostExecute");
 		if (context instanceof AbstractDownloadActivity) {
 			AbstractDownloadActivity activity = (AbstractDownloadActivity) context;
 			activity.setSupportProgressBarIndeterminateVisibility(false);
@@ -75,11 +77,15 @@ public class PerformLiveUpdateAsyncTask
 		final OsmandApplication application = getMyApplication();
 		final OsmandSettings settings = application.getSettings();
 		if (result.errorMessage != null) {
-			LOG.info(result.errorMessage);
+			LOG.info("Error message: " + result.errorMessage);
+			if (userRequested) {
+				application.showShortToastMessage(result.errorMessage);
+			}
 			tryRescheduleDownload(context, settings, localIndexFileName);
 		} else {
 			settings.LIVE_UPDATES_RETRIES.resetToDefault();
 			List<IncrementalChangesManager.IncrementalUpdate> ll = result.getItemsForUpdate();
+			LOG.debug("Updates quantity: " + (ll == null ? "null" : ll.size()));
 			if (ll != null && !ll.isEmpty()) {
 				ArrayList<IndexItem> itemsToDownload = new ArrayList<>(ll.size());
 				for (IncrementalChangesManager.IncrementalUpdate iu : ll) {
@@ -88,14 +94,19 @@ public class PerformLiveUpdateAsyncTask
 							iu.containerSize, DownloadActivityType.LIVE_UPDATES_FILE);
 					itemsToDownload.add(indexItem);
 				}
+				LOG.debug("Items to download size: " + itemsToDownload.size());
 				DownloadIndexesThread downloadThread = application.getDownloadThread();
 				if (context instanceof DownloadIndexesThread.DownloadEvents) {
 					downloadThread.setUiActivity((DownloadIndexesThread.DownloadEvents) context);
 				}
 				boolean downloadViaWiFi =
 						LiveUpdatesHelper.preferenceDownloadViaWiFi(localIndexFileName, settings).get();
+
+				LOG.debug("Internet connection available: " + getMyApplication().getSettings().isInternetConnectionAvailable());
+				LOG.debug("Download via Wifi: " + downloadViaWiFi);
+				LOG.debug("Is wifi available: " + getMyApplication().getSettings().isWifiConnected());
 				if (getMyApplication().getSettings().isInternetConnectionAvailable()) {
-					if (forceUpdate || settings.isWifiConnected() || !downloadViaWiFi) {
+					if (userRequested || settings.isWifiConnected() || !downloadViaWiFi) {
 						long szLong = 0;
 						int i = 0;
 						for (IndexItem es : downloadThread.getCurrentDownloadingItems()) {
@@ -109,6 +120,8 @@ public class PerformLiveUpdateAsyncTask
 						double sz = ((double) szLong) / (1 << 20);
 						// get availabile space
 						double asz = downloadThread.getAvailableSpace();
+
+						LOG.debug("Download size: " + sz + ", available space: " + asz);
 						if (asz == -1 || asz <= 0 || sz / asz <= 0.4) {
 							IndexItem[] itemsArray = new IndexItem[itemsToDownload.size()];
 							itemsArray = itemsToDownload.toArray(itemsArray);
@@ -116,12 +129,18 @@ public class PerformLiveUpdateAsyncTask
 							if (context instanceof DownloadIndexesThread.DownloadEvents) {
 								((DownloadIndexesThread.DownloadEvents) context).downloadInProgress();
 							}
+						} else {
+							LOG.debug("onPostExecute: Not enough space for updates");
 						}
-					}
+					} 
+					LOG.debug("onPostExecute: No internet connection");
 				}
 			} else {
 				if (context instanceof DownloadIndexesThread.DownloadEvents) {
 					((DownloadIndexesThread.DownloadEvents) context).downloadInProgress();
+					if (userRequested && context instanceof OsmLiveActivity) {
+						application.showShortToastMessage(R.string.no_updates_available);
+					}
 				}
 			}
 		}
@@ -130,7 +149,7 @@ public class PerformLiveUpdateAsyncTask
 	public static void tryRescheduleDownload(@NonNull Context context,
 											 @NonNull OsmandSettings settings,
 											 @NonNull String localIndexFileName) {
-		final OsmandSettings.CommonPreference<Integer> updateFrequencyPreference =
+		final CommonPreference<Integer> updateFrequencyPreference =
 				preferenceUpdateFrequency(localIndexFileName, settings);
 		final Integer frequencyOrdinal = updateFrequencyPreference.get();
 		if (LiveUpdatesHelper.UpdateFrequency.values()[frequencyOrdinal]

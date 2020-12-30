@@ -7,10 +7,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.Toolbar;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -18,6 +14,11 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -76,7 +77,7 @@ public abstract class AbstractCard {
 
 		final Toolbar topBar = new Toolbar(ctx);
 		topBar.setClickable(true);
-		Drawable back = app.getIconsCache().getIcon(R.drawable.ic_action_remove_dark);
+		Drawable back = app.getUIUtilities().getIcon(R.drawable.ic_action_remove_dark);
 		topBar.setNavigationIcon(back);
 		topBar.setNavigationContentDescription(R.string.shared_string_close);
 		topBar.setTitle(title);
@@ -105,30 +106,12 @@ public abstract class AbstractCard {
 			settings.setDisplayZoomControls(false);
 			settings.setSupportZoom(true);
 		}
-		/*
-		//Scale web view font size with system font size
-		float scale = ctx.getResources().getConfiguration().fontScale;
-		if (android.os.Build.VERSION.SDK_INT >= 14) {
-			settings.setTextZoom((int) (scale * 100f));
-		} else {
-			if (scale <= 0.7f) {
-				settings.setTextSize(WebSettings.TextSize.SMALLEST);
-			} else if (scale <= 0.85f) {
-				settings.setTextSize(WebSettings.TextSize.SMALLER);
-			} else if (scale <= 1.0f) {
-				settings.setTextSize(WebSettings.TextSize.NORMAL);
-			} else if (scale <= 1.15f) {
-				settings.setTextSize(WebSettings.TextSize.LARGER);
-			} else {
-				settings.setTextSize(WebSettings.TextSize.LARGEST);
-			}
-		}
-*/
+
 		wv.setBackgroundColor(Color.argb(1, 0, 0, 0));
-		//wv.setScrollContainer(false);
 		wv.getSettings().setJavaScriptEnabled(true);
 		if (hasImageUrl) {
-			wv.loadData("<html><body style='margin:0;padding:0'><img style='max-width:100%;max-height:100%;' src='" + url + "'/></body></html>", "text/html", "UTF-8");
+			String data = "<html><body style='margin:0;padding:0'><img style='max-width:100%;max-height:100%;' src='" + url + "'/></body></html>";
+			wv.loadDataWithBaseURL(null, data, "text/html", "UTF-8", null);
 		} else {
 			wv.loadUrl(url);
 		}
@@ -138,26 +121,6 @@ public abstract class AbstractCard {
 		lp.weight = 1;
 		ll.addView(wv, lp);
 		dialog.setContentView(ll);
-
-		/*
-		wv.setFocusable(true);
-		wv.setFocusableInTouchMode(true);
-		wv.requestFocus(View.FOCUS_DOWN);
-		wv.setOnTouchListener(new View.OnTouchListener() {
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				switch (event.getAction()) {
-					case MotionEvent.ACTION_DOWN:
-					case MotionEvent.ACTION_UP:
-						if (!v.hasFocus()) {
-							v.requestFocus();
-						}
-						break;
-				}
-				return false;
-			}
-		});
-		*/
 
 		dialog.setCancelable(true);
 		dialog.show();

@@ -4,20 +4,22 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.ColorRes;
 import android.view.View;
 
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.CommonPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
 import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithCompoundButton;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithDescription;
+import net.osmand.plus.base.bottomsheetmenu.SimpleBottomSheetItem;
+import net.osmand.plus.base.bottomsheetmenu.simpleitems.DividerHalfItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.SubtitleDividerItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.SubtitleItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
 import net.osmand.plus.helpers.AndroidUiHelper;
-import net.osmand.plus.mapmarkers.CoordinateInputFormats.CoordinateInputFormatDef;
+import net.osmand.plus.mapmarkers.CoordinateInputFormats.Format;
 
 public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDialogFragment {
 
@@ -35,6 +37,24 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 		final OsmandSettings settings = getMyApplication().getSettings();
 
 		items.add(new TitleItem(getString(R.string.shared_string_options)));
+		BaseBottomSheetItem editItem = new SimpleBottomSheetItem.Builder()
+				.setIcon(getContentIcon(R.drawable.ic_action_save_to_file))
+				.setTitle(getString(R.string.coord_input_save_as_track))
+				.setLayoutId(R.layout.bottom_sheet_item_simple)
+				.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						if (listener != null) {
+							listener.saveAsTrack();
+						}
+						dismiss();
+					}
+				})
+				.create();
+		items.add(editItem);
+
+		items.add(new DividerHalfItem(context));
+		
 		boolean useOsmandKeyboard = settings.COORDS_INPUT_USE_OSMAND_KEYBOARD.get();
 
 		BaseBottomSheetItem useSystemKeyboardItem = new BottomSheetItemWithCompoundButton.Builder()
@@ -64,7 +84,7 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 					@Override
 					public void onClick(View v) {
 						if (listener != null) {
-							OsmandSettings.CommonPreference<Boolean> pref = settings.COORDS_INPUT_TWO_DIGITS_LONGTITUDE;
+							CommonPreference<Boolean> pref = settings.COORDS_INPUT_TWO_DIGITS_LONGTITUDE;
 							pref.set(!pref.get());
 							listener.onInputSettingsChanged();
 						}
@@ -89,7 +109,7 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 						@Override
 						public void onClick(View v) {
 							if (listener != null) {
-								OsmandSettings.CommonPreference<Boolean> pref = settings.COORDS_INPUT_USE_RIGHT_SIDE;
+								CommonPreference<Boolean> pref = settings.COORDS_INPUT_USE_RIGHT_SIDE;
 								pref.set(!pref.get());
 								listener.onHandChanged();
 							}
@@ -104,12 +124,12 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 
 		items.add(new SubtitleItem(getString(R.string.coordinates_format)));
 
-		int selectedFormat = settings.COORDS_INPUT_FORMAT.get();
+		Format selectedFormat = settings.COORDS_INPUT_FORMAT.get();
 		Drawable formatIcon = getContentIcon(R.drawable.ic_action_coordinates_latitude);
 		View.OnClickListener formatsOnClickListener = new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				int format = (int) v.getTag();
+				Format format = (Format) v.getTag();
 				settings.COORDS_INPUT_FORMAT.set(format);
 				if (listener != null) {
 					listener.onInputSettingsChanged();
@@ -118,7 +138,7 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 			}
 		};
 
-		for (@CoordinateInputFormatDef int format : CoordinateInputFormats.VALUES) {
+		for (Format format : Format.values()) {
 			boolean selectedItem = format == selectedFormat;
 
 			BaseBottomSheetItem formatItem = new BottomSheetItemWithCompoundButton.Builder()
@@ -127,7 +147,7 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 							? ColorStateList.valueOf(getResolvedColor(getActiveColorId()))
 							: null)
 					.setIcon(selectedItem ? getActiveIcon(R.drawable.ic_action_coordinates_latitude) : formatIcon)
-					.setTitle(CoordinateInputFormats.formatToHumanString(context, format))
+					.setTitle(format.toHumanString(context))
 					.setTitleColorId(selectedItem ? getActiveColorId() : BaseBottomSheetItem.INVALID_ID)
 					.setLayoutId(R.layout.bottom_sheet_item_with_radio_btn)
 					.setOnClickListener(formatsOnClickListener)
@@ -142,11 +162,6 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 		return R.string.shared_string_close;
 	}
 
-	@ColorRes
-	private int getActiveColorId() {
-		return nightMode ? R.color.osmand_orange : R.color.color_myloc_distance;
-	}
-
 	interface CoordinateInputFormatChangeListener {
 
 		void onKeyboardChanged();
@@ -154,5 +169,7 @@ public class CoordinateInputBottomSheetDialogFragment extends MenuBottomSheetDia
 		void onHandChanged();
 
 		void onInputSettingsChanged();
+		
+		void saveAsTrack();
 	}
 }

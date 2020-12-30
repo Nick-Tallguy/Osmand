@@ -4,13 +4,14 @@ import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.support.annotation.NonNull;
-import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.SwitchCompat;
 
 import net.osmand.data.LatLon;
 import net.osmand.plus.FavouritesDbHelper;
@@ -19,14 +20,19 @@ import net.osmand.plus.GeocodingLookupService.OnAddressLookupResult;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.editors.EditCategoryDialogFragment;
+import net.osmand.plus.mapcontextmenu.editors.FavoritePointEditor;
 import net.osmand.plus.mapcontextmenu.editors.SelectCategoryDialogFragment;
 import net.osmand.plus.quickaction.QuickAction;
+import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.widgets.AutoCompleteTextViewEx;
 
 public class FavoriteAction extends QuickAction {
 
-	public static final int TYPE = 3;
 
+	public static final QuickActionType TYPE = new QuickActionType(3,
+			"fav.add", FavoriteAction.class).
+			nameRes(R.string.quick_action_add_favorite).iconRes(R.drawable.ic_action_favorite).
+			category(QuickActionType.CREATE_CATEGORY);
 	public static final String KEY_NAME = "name";
 	public static final String KEY_DIALOG = "dialog";
 	public static final String KEY_CATEGORY_NAME = "category_name";
@@ -110,8 +116,11 @@ public class FavoriteAction extends QuickAction {
 	}
 
 	private void addFavorite(MapActivity mapActivity, LatLon latLon, String title, boolean autoFill) {
-		mapActivity.getContextMenu().getFavoritePointEditor().add(latLon, title, "",
-				getParams().get(KEY_CATEGORY_NAME), Integer.valueOf(getParams().get(KEY_CATEGORY_COLOR)), autoFill);
+		FavoritePointEditor favoritePointEditor = mapActivity.getContextMenu().getFavoritePointEditor();
+		if (favoritePointEditor != null) {
+			favoritePointEditor.add(latLon, title, "", getParams().get(KEY_CATEGORY_NAME),
+					Integer.valueOf(getParams().get(KEY_CATEGORY_COLOR)), autoFill);
+		}
 	}
 
 	@Override
@@ -146,21 +155,12 @@ public class FavoriteAction extends QuickAction {
 
 			FavouritesDbHelper.FavoriteGroup group = helper.getFavoriteGroups().get(0);
 
-			if (group.name.isEmpty() && group.color == 0) {
+			int color = group.getColor() == 0 ? activity.getResources().getColor(R.color.color_favorite) : group.getColor();
+			categoryEdit.setText(group.getDisplayName(activity));
+			categoryImage.setColorFilter(color);
 
-				group.name = activity.getString(R.string.shared_string_favorites);
-
-				categoryEdit.setText(activity.getString(R.string.shared_string_favorites));
-				categoryImage.setColorFilter(activity.getResources().getColor(R.color.color_favorite));
-
-			} else {
-
-				categoryEdit.setText(group.name);
-				categoryImage.setColorFilter(group.color);
-			}
-
-			getParams().put(KEY_CATEGORY_NAME, group.name);
-			getParams().put(KEY_CATEGORY_COLOR, String.valueOf(group.color));
+			getParams().put(KEY_CATEGORY_NAME, group.getName());
+			getParams().put(KEY_CATEGORY_COLOR, String.valueOf(group.getColor()));
 
 		} else {
 

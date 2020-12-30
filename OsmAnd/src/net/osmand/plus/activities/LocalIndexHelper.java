@@ -2,9 +2,9 @@ package net.osmand.plus.activities;
 
 
 import android.content.Context;
-import android.os.Build;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.StringRes;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.StringRes;
 
 import net.osmand.IndexConstants;
 import net.osmand.map.ITileSource;
@@ -12,7 +12,10 @@ import net.osmand.map.TileSourceManager;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.SQLiteTileSource;
+import net.osmand.plus.Version;
 import net.osmand.plus.download.ui.AbstractLoadLocalIndexTask;
+import net.osmand.plus.voice.JSMediaCommandPlayerImpl;
+import net.osmand.plus.voice.JSTTSCommandPlayerImpl;
 import net.osmand.plus.voice.MediaCommandPlayerImpl;
 import net.osmand.plus.voice.TTSCommandPlayerImpl;
 import net.osmand.util.Algorithms;
@@ -73,9 +76,8 @@ public class LocalIndexHelper {
 				return;
 			}
 			String descr = "";
-			descr += app.getString(R.string.local_index_tile_data_name, template.getName());
 			if (template.getExpirationTimeMinutes() >= 0) {
-				descr += "\n" + app.getString(R.string.local_index_tile_data_expire, template.getExpirationTimeMinutes());
+				descr += app.getString(R.string.local_index_tile_data_expire, String.valueOf(template.getExpirationTimeMinutes()));
 			}
 			info.setAttachedObject(template);
 			info.setDescription(descr);
@@ -199,6 +201,12 @@ public class LocalIndexHelper {
 		return result;
 	}
 
+	public List<LocalIndexInfo> getLocalTravelFiles(AbstractLoadLocalIndexTask loadTask) {
+		List<LocalIndexInfo> result = new ArrayList<>();
+		loadTravelData(app.getAppPath(IndexConstants.WIKIVOYAGE_INDEX_DIR), result, loadTask);
+		return result;
+	}
+
 	public List<LocalIndexInfo> getLocalFullMaps(AbstractLoadLocalIndexTask loadTask) {
 		Map<String, String> loadedMaps = app.getResourceManager().getIndexFileNames();
 		List<LocalIndexInfo> result = new ArrayList<>();
@@ -211,29 +219,24 @@ public class LocalIndexHelper {
 		if (voiceDir.canRead()) {
 			//First list TTS files, they are preferred
 			for (File voiceF : listFilesSorted(voiceDir)) {
-				if (voiceF.isDirectory() && !MediaCommandPlayerImpl.isMyData(voiceF) && (Build.VERSION.SDK_INT >= 4)) {
-					LocalIndexInfo info = null;
-					if (TTSCommandPlayerImpl.isMyData(voiceF)) {
-						info = new LocalIndexInfo(LocalIndexType.TTS_VOICE_DATA, voiceF, backup, app);
-					}
-					if (info != null) {
-						updateDescription(info);
-						result.add(info);
-						loadTask.loadFile(info);
-					}
+				if (voiceF.isDirectory() && (JSTTSCommandPlayerImpl.isMyData(voiceF)
+						|| TTSCommandPlayerImpl.isMyData(voiceF))) {
+					LocalIndexInfo info = new LocalIndexInfo(LocalIndexType.TTS_VOICE_DATA, voiceF, backup, app);
+					updateDescription(info);
+					result.add(info);
+					loadTask.loadFile(info);
+
 				}
 			}
 
 			//Now list recorded voices
 			for (File voiceF : listFilesSorted(voiceDir)) {
-				if (voiceF.isDirectory() && MediaCommandPlayerImpl.isMyData(voiceF)) {
-					LocalIndexInfo info = null;
-					info = new LocalIndexInfo(LocalIndexType.VOICE_DATA, voiceF, backup, app);
-					if (info != null) {
-						updateDescription(info);
-						result.add(info);
-						loadTask.loadFile(info);
-					}
+				if (voiceF.isDirectory() && (JSMediaCommandPlayerImpl.isMyData(voiceF)
+						|| MediaCommandPlayerImpl.isMyData(voiceF))) {
+					LocalIndexInfo info = new LocalIndexInfo(LocalIndexType.VOICE_DATA, voiceF, backup, app);
+					updateDescription(info);
+					result.add(info);
+					loadTask.loadFile(info);
 				}
 			}
 		}
@@ -314,7 +317,9 @@ public class LocalIndexHelper {
 	private void loadTravelData(File mapPath, List<LocalIndexInfo> result, AbstractLoadLocalIndexTask loadTask) {
 		if (mapPath.canRead()) {
 			for (File mapFile : listFilesSorted(mapPath)) {
-				if (mapFile.isFile() && mapFile.getName().endsWith(IndexConstants.BINARY_WIKIVOYAGE_MAP_INDEX_EXT)) {
+				if (mapFile.isFile() && mapFile.getName().endsWith(IndexConstants.BINARY_WIKIVOYAGE_MAP_INDEX_EXT)
+						|| (mapFile.isFile() && mapFile.getName().endsWith(IndexConstants.BINARY_TRAVEL_GUIDE_MAP_INDEX_EXT)
+						&& Version.isDeveloperVersion(app))) { //todo remove when .travel.obf will be used in production
 					LocalIndexInfo info = new LocalIndexInfo(LocalIndexType.TRAVEL_DATA, mapFile, false, app);
 					updateDescription(info);
 					result.add(info);

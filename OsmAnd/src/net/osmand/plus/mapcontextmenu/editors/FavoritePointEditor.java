@@ -1,5 +1,7 @@
 package net.osmand.plus.mapcontextmenu.editors;
 
+import androidx.annotation.NonNull;
+
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
 import net.osmand.plus.FavouritesDbHelper;
@@ -12,7 +14,7 @@ public class FavoritePointEditor extends PointEditor {
 
 	public static final String TAG = "FavoritePointEditorFragment";
 
-	public FavoritePointEditor(MapActivity mapActivity) {
+	public FavoritePointEditor(@NonNull MapActivity mapActivity) {
 		super(mapActivity);
 	}
 
@@ -25,8 +27,9 @@ public class FavoritePointEditor extends PointEditor {
 		return favorite;
 	}
 
-	public void add(LatLon latLon, String title, String originObjectName) {
-		if (latLon == null) {
+	public void add(LatLon latLon, String title, String address, String originObjectName) {
+		MapActivity mapActivity = getMapActivity();
+		if (latLon == null || mapActivity == null) {
 			return;
 		}
 		isNew = true;
@@ -36,38 +39,42 @@ public class FavoritePointEditor extends PointEditor {
 		}
 		favorite = new FavouritePoint(latLon.getLatitude(), latLon.getLongitude(), title, lastCategory);
 		favorite.setDescription("");
+		favorite.setAddress(address.isEmpty() ? title : address);
 		favorite.setOriginObjectName(originObjectName);
-		FavoritePointEditorFragment.showInstance(mapActivity);
+		FavoritePointEditorFragmentNew.showInstance(mapActivity);
 	}
 
 	public void add(LatLon latLon, String title, String originObjectName, String categoryName, int categoryColor, boolean autoFill) {
-
-		if (latLon == null) return;
-
+		MapActivity mapActivity = getMapActivity();
+		if (latLon == null || mapActivity == null) {
+			return;
+		}
 		isNew = true;
-
 		if (categoryName != null && !categoryName.isEmpty()) {
-
-			FavouritesDbHelper.FavoriteGroup category = mapActivity.getMyApplication().getFavorites().getGroup(categoryName);
-
-			if (category == null)
+			FavouritesDbHelper.FavoriteGroup category = mapActivity.getMyApplication().getFavorites()
+					.getGroup(categoryName);
+			if (category == null) {
 				mapActivity.getMyApplication().getFavorites().addEmptyCategory(categoryName, categoryColor);
-
-		} else categoryName = "";
+			}
+		} else {
+			categoryName = "";
+		}
 
 		favorite = new FavouritePoint(latLon.getLatitude(), latLon.getLongitude(), title, categoryName);
 		favorite.setDescription("");
+		favorite.setAddress("");
 		favorite.setOriginObjectName(originObjectName);
 
-		FavoritePointEditorFragment.showAutoFillInstance(mapActivity, autoFill);
+		FavoritePointEditorFragmentNew.showAutoFillInstance(mapActivity, autoFill);
 	}
 
 	public void edit(FavouritePoint favorite) {
-		if (favorite == null) {
+		MapActivity mapActivity = getMapActivity();
+		if (favorite == null || mapActivity == null) {
 			return;
 		}
 		isNew = false;
 		this.favorite = favorite;
-		FavoritePointEditorFragment.showInstance(mapActivity);
+		FavoritePointEditorFragmentNew.showInstance(mapActivity);
 	}
 }

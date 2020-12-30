@@ -10,15 +10,12 @@ import android.widget.TextView;
 import net.osmand.AndroidUtils;
 import net.osmand.Location;
 import net.osmand.data.LatLon;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
+import net.osmand.plus.mapmarkers.MapMarker;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.views.DirectionDrawable;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
 
 public class MapMarkerDialogHelper {
 
@@ -54,14 +51,14 @@ public class MapMarkerDialogHelper {
 		DirectionDrawable dd;
 		if (!(arrow.getDrawable() instanceof DirectionDrawable)) {
 			newImage = true;
-			dd = new DirectionDrawable(ctx, arrow.getWidth(), arrow.getHeight());
+			dd = new DirectionDrawable((OsmandApplication) ctx.getApplicationContext(), arrow.getWidth(), arrow.getHeight());
 		} else {
 			dd = (DirectionDrawable) arrow.getDrawable();
 		}
 		if (!marker.history) {
 			dd.setImage(arrowResId, useCenter ? R.color.color_distance : R.color.color_myloc_distance);
 		} else {
-			dd.setImage(arrowResId, nightMode ? R.color.secondary_text_dark : R.color.secondary_text_light);
+			dd.setImage(arrowResId, nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light);
 		}
 		if (loc == null || heading == null || marker.point == null) {
 			dd.setAngle(0);
@@ -82,8 +79,8 @@ public class MapMarkerDialogHelper {
 			textDist.setTextColor(ctx.getResources()
 					.getColor(useCenter ? R.color.color_distance : R.color.color_myloc_distance));
 		} else {
-			waypointIcon.setImageDrawable(app.getIconsCache()
-					.getIcon(R.drawable.ic_action_flag_dark, !nightMode));
+			waypointIcon.setImageDrawable(app.getUIUtilities()
+					.getIcon(R.drawable.ic_action_flag, !nightMode));
 			AndroidUtils.setTextSecondaryColor(ctx, text, nightMode);
 			AndroidUtils.setTextSecondaryColor(ctx, textDist, nightMode);
 		}
@@ -101,17 +98,10 @@ public class MapMarkerDialogHelper {
 
 		descText.setVisibility(View.GONE);
 
-		Date date = new Date(marker.creationDate);
-		String month = new SimpleDateFormat("MMM", Locale.getDefault()).format(date);
-		if (month.length() > 1) {
-			month = Character.toUpperCase(month.charAt(0)) + month.substring(1);
-		}
-		month = month.replaceAll("\\.", "");
-		String day = new SimpleDateFormat("d", Locale.getDefault()).format(date);
-		String desc = month + " " + day;
+		String desc = OsmAndFormatter.getFormattedDate(app, marker.creationDate);
 		String markerGroupName = marker.groupName;
 		if (markerGroupName != null) {
-			if (markerGroupName.equals("")) {
+			if (markerGroupName.isEmpty()) {
 				markerGroupName = app.getString(R.string.shared_string_favorites);
 			}
 			desc += " • " + markerGroupName;
@@ -124,6 +114,6 @@ public class MapMarkerDialogHelper {
 	}
 
 	public static Drawable getMapMarkerIcon(OsmandApplication app, int colorIndex) {
-		return app.getIconsCache().getIcon(R.drawable.ic_action_flag_dark, MapMarker.getColorId(colorIndex));
+		return app.getUIUtilities().getIcon(R.drawable.ic_action_flag, MapMarker.getColorId(colorIndex));
 	}
 }

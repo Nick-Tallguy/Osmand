@@ -7,7 +7,7 @@ import net.osmand.plus.R;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
 import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
 import net.osmand.plus.base.bottomsheetmenu.BottomSheetItemWithDescription;
-import net.osmand.plus.base.bottomsheetmenu.simpleitems.DescriptionItem;
+import net.osmand.plus.base.bottomsheetmenu.simpleitems.ShortDescriptionItem;
 import net.osmand.plus.base.bottomsheetmenu.simpleitems.TitleItem;
 import net.osmand.plus.osmedit.OsmEditsFragment.ExportTypesDef;
 
@@ -36,7 +36,7 @@ public class ExportOptionsBottomSheetDialogFragment extends MenuBottomSheetDialo
 
 		items.add(new TitleItem(getString(R.string.shared_string_export)));
 
-		items.add(new DescriptionItem(getString(R.string.osm_edits_export_desc)));
+		items.add(new ShortDescriptionItem(getString(R.string.osm_edits_export_desc)));
 
 		BaseBottomSheetItem poiItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(String.valueOf(poiCount))
@@ -58,7 +58,7 @@ public class ExportOptionsBottomSheetDialogFragment extends MenuBottomSheetDialo
 
 		BaseBottomSheetItem osmNotesItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(String.valueOf(osmNotesCount))
-				.setIcon(getContentIcon(R.drawable.ic_action_bug_dark))
+				.setIcon(getContentIcon(R.drawable.ic_action_osm_note))
 				.setTitle(getString(R.string.osm_notes))
 				.setLayoutId(R.layout.bottom_sheet_item_with_right_descr)
 				.setDisabled(!(osmNotesCount > 0))

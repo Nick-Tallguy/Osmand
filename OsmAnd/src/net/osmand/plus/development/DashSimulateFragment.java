@@ -1,7 +1,6 @@
 package net.osmand.plus.development;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -10,6 +9,8 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import net.osmand.plus.OsmAndLocationProvider;
 import net.osmand.plus.R;
@@ -41,8 +42,8 @@ public class DashSimulateFragment extends DashBaseFragment {
 				: R.string.animate_route);
 		ImageButton actionButton = (ImageButton) getView().findViewById(R.id.stop);
 		actionButton.setImageDrawable(
-				!routeAnimating ? getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_play_dark)
-						: getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_rec_stop));
+				!routeAnimating ? getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_play_dark)
+						: getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_rec_stop));
 		actionButton.setContentDescription(getString(routeAnimating ? R.string.animate_route_off : R.string.animate_route));
 
 	}
@@ -61,7 +62,7 @@ public class DashSimulateFragment extends DashBaseFragment {
 
 			@Override
 			public void onClick(View v) {
-				loc.getLocationSimulation().startStopRouteAnimation(getActivity());
+				loc.getLocationSimulation().startStopGpxAnimation(getActivity());
 				dashboard.hideDashboard();
 			}
 		};

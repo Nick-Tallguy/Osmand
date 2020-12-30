@@ -6,27 +6,28 @@
     android:layout_height="wrap_content"
     xmlns:osmand="http://schemas.android.com/apk/res-auto"
     android:background="?attr/bg_color"
-    android:minHeight="48dp"
+    android:minHeight="@dimen/card_row_min_height"
     android:clickable="false"
     android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/card_row_min_height"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingRight="16dp">
+        android:paddingRight="@dimen/content_padding"
+        android:paddingEnd="@dimen/content_padding">
 
         <LinearLayout
             android:layout_width="54dp"
             android:layout_height="match_parent"
             android:gravity="center">
 
-            <ImageView
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_action_search_dark"/>
+                android:layout_width="@dimen/standard_icon_size"
+                android:layout_height="@dimen/standard_icon_size"
+                osmand:srcCompat="@drawable/ic_action_search_dark"/>
 
         </LinearLayout>
 
@@ -76,13 +77,13 @@
             android:visibility="visible"
             tools:text="SHOW ALL"/>
 
-        <android.support.v7.widget.SwitchCompat
+        <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switchItem"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"/>
 
-        <CheckBox
+        <androidx.appcompat.widget.AppCompatCheckBox
             android:id="@+id/checkboxItem"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -90,12 +91,12 @@
             android:focusable="false"
             android:visibility="gone"/>
 
-        <ImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/expandItem"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
-            android:src="@drawable/ic_action_arrow_drop_up"
+            osmand:srcCompat="@drawable/ic_action_arrow_drop_up"
             android:visibility="visible"/>
 
     </LinearLayout>
@@ -105,6 +106,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginLeft="54dp"
-        android:background="?attr/dashboard_divider"/>
+        android:background="?attr/dashboard_divider"
+        android:layout_marginStart="54dp" />
 
 </LinearLayout>

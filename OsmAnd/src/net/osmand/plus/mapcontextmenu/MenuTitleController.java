@@ -2,10 +2,13 @@ package net.osmand.plus.mapcontextmenu;
 
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.Nullable;
+
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
 import net.osmand.plus.GeocodingLookupService;
 import net.osmand.plus.GeocodingLookupService.AddressLookupRequest;
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.util.Algorithms;
 
@@ -13,6 +16,7 @@ public abstract class MenuTitleController {
 
 	protected int rightIconId;
 	protected Drawable rightIcon;
+	protected boolean bigRightIcon;
 	protected String nameStr = "";
 	protected String typeStr = "";
 	protected String commonTypeStr = "";
@@ -21,18 +25,31 @@ public abstract class MenuTitleController {
 
 	private AddressLookupRequest addressLookupRequest;
 
-	protected String searchAddressStr;
-	protected String addressNotFoundStr;
+	protected String searchAddressStr = "";
+	protected String addressNotFoundStr = "";
 
+	@Nullable
 	public abstract MapActivity getMapActivity();
 
 	public abstract LatLon getLatLon();
 
 	public abstract PointDescription getPointDescription();
 
+	@Nullable
 	public abstract Object getObject();
 
+	@Nullable
 	public abstract MenuController getMenuController();
+
+	@Nullable
+	public OsmandApplication getMyApplication() {
+		MapActivity activity = getMapActivity();
+		if (activity != null) {
+			return activity.getMyApplication();
+		} else {
+			return null;
+		}
+	}
 
 	public String getTitleStr() {
 		if (displayStreetNameInTitle() && searchingAddress()) {
@@ -47,8 +64,9 @@ public abstract class MenuTitleController {
 	}
 
 	public void cancelSearchAddress() {
-		if (addressLookupRequest != null) {
-			getMapActivity().getMyApplication().getGeocodingLookupService().cancel(addressLookupRequest);
+		OsmandApplication app = getMyApplication();
+		if (addressLookupRequest != null && app != null) {
+			app.getGeocodingLookupService().cancel(addressLookupRequest);
 			addressLookupRequest = null;
 			onSearchAddressDone();
 		}
@@ -71,6 +89,10 @@ public abstract class MenuTitleController {
 
 	public Drawable getRightIcon() {
 		return rightIcon;
+	}
+
+	public boolean isBigRightIcon() {
+		return bigRightIcon;
 	}
 
 	public Drawable getTypeIcon() {
@@ -99,17 +121,20 @@ public abstract class MenuTitleController {
 	}
 
 	protected void initTitle() {
-		searchAddressStr = PointDescription.getSearchAddressStr(getMapActivity());
-		addressNotFoundStr = PointDescription.getAddressNotFoundStr(getMapActivity());
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			searchAddressStr = PointDescription.getSearchAddressStr(mapActivity);
+			addressNotFoundStr = PointDescription.getAddressNotFoundStr(mapActivity);
 
-		if (searchingAddress()) {
-			cancelSearchAddress();
-		}
+			if (searchingAddress()) {
+				cancelSearchAddress();
+			}
 
-		acquireIcons();
-		acquireNameAndType();
-		if (needStreetName()) {
-			acquireStreetName();
+			acquireIcons();
+			acquireNameAndType();
+			if (needStreetName()) {
+				acquireStreetName();
+			}
 		}
 	}
 
@@ -127,16 +152,19 @@ public abstract class MenuTitleController {
 
 		rightIconId = 0;
 		rightIcon = null;
+		bigRightIcon = false;
 		secondLineTypeIcon = null;
 
 		if (menuController != null) {
 			rightIconId = menuController.getRightIconId();
 			rightIcon = menuController.getRightIcon();
+			bigRightIcon = menuController.isBigRightIcon();
 			secondLineTypeIcon = menuController.getSecondLineTypeIcon();
 		}
 	}
 
 	protected void acquireNameAndType() {
+		String firstNameStr = "";
 		nameStr = "";
 		typeStr = "";
 		commonTypeStr = "";
@@ -144,6 +172,7 @@ public abstract class MenuTitleController {
 
 		MenuController menuController = getMenuController();
 		if (menuController != null) {
+			firstNameStr = menuController.getFirstNameStr();
 			nameStr = menuController.getNameStr();
 			typeStr = menuController.getTypeStr();
 			commonTypeStr = menuController.getCommonTypeStr();
@@ -155,16 +184,21 @@ public abstract class MenuTitleController {
 		} else if (Algorithms.isEmpty(typeStr)) {
 			typeStr = commonTypeStr;
 		}
+
+		if (!Algorithms.isEmpty(firstNameStr)) {
+			nameStr = firstNameStr + " (" + nameStr + ")";
+		}
 	}
 
 	protected void acquireStreetName() {
 		addressLookupRequest = new AddressLookupRequest(getLatLon(), new GeocodingLookupService.OnAddressLookupResult() {
 			@Override
 			public void geocodingDone(String address) {
-				if (addressLookupRequest != null) {
+				MapActivity mapActivity = getMapActivity();
+				if (addressLookupRequest != null && mapActivity != null) {
 					addressLookupRequest = null;
 					if (Algorithms.isEmpty(address)) {
-						streetStr = PointDescription.getAddressNotFoundStr(getMapActivity());
+						streetStr = PointDescription.getAddressNotFoundStr(mapActivity);
 					} else {
 						streetStr = address;
 					}
@@ -183,7 +217,10 @@ public abstract class MenuTitleController {
 			}
 		});
 
-		getMapActivity().getMyApplication().getGeocodingLookupService().lookupAddress(addressLookupRequest);
+		OsmandApplication app = getMyApplication();
+		if (app != null) {
+			app.getGeocodingLookupService().lookupAddress(addressLookupRequest);
+		}
 	}
 
 	protected void onSearchAddressDone() {

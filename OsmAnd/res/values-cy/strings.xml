@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?><resources><string name="avoid_in_routing_title">Osgoi…</string>
-<string name="avoid_in_routing_descr">Osgoi tollffyrdd, ffyrdd garw, fferïau</string>
 <string name="show_warnings_title">Dangos larymau…</string>
 <string name="show_warnings_descr">Dangos cyfyngiad cyflymder, camerâu cyflymder a thwmpathau traffig</string>
 <string name="map_widget_fluorescent">Lliwiau fflwroleuol</string>
@@ -11,7 +10,6 @@
 
 <string name="bg_service_sleep_mode_off">Rhedeg yn y cefndir</string>
 <string name="bg_service_sleep_mode_on">Atal y cefndir</string>
-<string name="gps_wakeup_interval">Cyfnod deffro GPS: %S</string>
 <string name="int_continuosly">Parhaus</string>
 <string name="screen_is_locked">I ddatgloi\'r sgrin pwyswch yr eicon cloi</string>
 <string name="map_widget_top_text">Enw stryd</string>
@@ -25,7 +23,6 @@
 
 
 <string name="map_widget_parking">Parcio</string>
-<string name="map_widget_monitoring">Tracio</string>
 <string name="map_widget_speed">Cyflymder</string>
 <string name="map_widget_distance">Targed</string>
 <string name="map_widget_altitude">Uchder</string>
@@ -170,7 +167,7 @@ Cyfrannol cof %4$s MB (terfyn Android %5$s MB, Dalvik %6$s MB).</string>
 <string name="switch_to_raster_map_to_see">Dim bresennol fector map all-lein ar gyfer y lleoliad. Gallwch lawrlwytho un mewn Lleoliadau (data all-lein), neu newid i fapiau ar-lein.</string>
 <string name="send_files_to_osm">Anfon ffeiliau GPX i OSM?</string>
 <string name="gpx_visibility_txt">Gwelededd</string>
-<string name="gpx_description_txt">Disgrifiad</string>
+<string name="shared_string_description">Disgrifiad</string>
 <string name="validate_gpx_upload_name_pwd">Nodwch enw defnyddiwr a chyfrinair OSM i lwytho ffeiliau GPX.</string>
 <string name="default_buttons_support">Cymorth</string>
 <string name="support_new_features">Cefnogi nodweddion newydd</string>

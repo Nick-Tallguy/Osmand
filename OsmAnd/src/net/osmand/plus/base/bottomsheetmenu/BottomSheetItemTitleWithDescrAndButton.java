@@ -1,15 +1,16 @@
 package net.osmand.plus.base.bottomsheetmenu;
 
+import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.ColorRes;
-import android.support.annotation.LayoutRes;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import net.osmand.plus.OsmandApplication;
+import androidx.annotation.ColorRes;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.plus.R;
 
 public class BottomSheetItemTitleWithDescrAndButton extends BottomSheetItemWithDescription {
@@ -24,22 +25,40 @@ public class BottomSheetItemTitleWithDescrAndButton extends BottomSheetItemWithD
 	private TextView textButtonTV;
 
 	public BottomSheetItemTitleWithDescrAndButton(View customView,
-	                                              @LayoutRes int layoutId,
-	                                              Object tag,
-	                                              boolean disabled,
-	                                              View.OnClickListener onClickListener,
-	                                              int position,
-	                                              Drawable icon,
-	                                              String title,
-	                                              @ColorRes int titleColorId,
-	                                              CharSequence description,
-	                                              @ColorRes int descriptionColorId,
-	                                              String buttonTitle,
-	                                              View.OnClickListener onButtonClickListener,
-	                                              Drawable leftCompoundDrawable,
-	                                              Drawable rightCompoundDrawable,
-	                                              @ColorRes int buttonTextColor) {
-		super(customView, layoutId, tag, disabled, onClickListener, position, icon, title, titleColorId, description, descriptionColorId);
+												  @LayoutRes int layoutId,
+												  Object tag,
+												  boolean disabled,
+												  View.OnClickListener onClickListener,
+												  int position,
+												  Drawable icon,
+												  Drawable background,
+												  CharSequence title,
+												  @ColorRes int titleColorId,
+												  boolean iconHidden,
+												  CharSequence description,
+												  @ColorRes int descriptionColorId,
+												  int descriptionMaxLines,
+												  boolean descriptionLinksClickable,
+												  String buttonTitle,
+												  View.OnClickListener onButtonClickListener,
+												  Drawable leftCompoundDrawable,
+												  Drawable rightCompoundDrawable,
+												  @ColorRes int buttonTextColor) {
+		super(customView,
+				layoutId,
+				tag,
+				disabled,
+				onClickListener,
+				position,
+				icon,
+				background,
+				title,
+				titleColorId,
+				iconHidden,
+				description,
+				descriptionColorId,
+				descriptionMaxLines,
+				descriptionLinksClickable);
 		this.buttonTitle = buttonTitle;
 		this.onButtonClickListener = onButtonClickListener;
 		this.leftCompoundDrawable = leftCompoundDrawable;
@@ -59,14 +78,14 @@ public class BottomSheetItemTitleWithDescrAndButton extends BottomSheetItemWithD
 	}
 
 	@Override
-	public void inflate(OsmandApplication app, ViewGroup container, boolean nightMode) {
-		super.inflate(app, container, nightMode);
+	public void inflate(Context context, ViewGroup container, boolean nightMode) {
+		super.inflate(context, container, nightMode);
 		textButtonTV = (TextView) view.findViewById(R.id.text_button);
 		textButtonTV.setOnClickListener(onButtonClickListener);
 		textButtonTV.setCompoundDrawablesWithIntrinsicBounds(leftCompoundDrawable, null, rightCompoundDrawable, null);
 		textButtonTV.setText(buttonTitle);
 		if (buttonTextColor != INVALID_ID) {
-			textButtonTV.setTextColor(ContextCompat.getColor(app, buttonTextColor));
+			textButtonTV.setTextColor(ContextCompat.getColor(context, buttonTextColor));
 		}
 	}
 
@@ -85,7 +104,7 @@ public class BottomSheetItemTitleWithDescrAndButton extends BottomSheetItemWithD
 			return this;
 		}
 
-		public BottomSheetItemTitleWithDescrAndButton.Builder setonButtonClickListener(View.OnClickListener onButtonClickListener) {
+		public BottomSheetItemTitleWithDescrAndButton.Builder setOnButtonClickListener(View.OnClickListener onButtonClickListener) {
 			this.onButtonClickListener = onButtonClickListener;
 			return this;
 		}
@@ -108,10 +127,14 @@ public class BottomSheetItemTitleWithDescrAndButton extends BottomSheetItemWithD
 					onClickListener,
 					position,
 					icon,
+					background,
 					title,
 					titleColorId,
+					iconHidden,
 					description,
 					descriptionColorId,
+					descriptionMaxLines,
+					descriptionLinksClickable,
 					buttonTitle,
 					onButtonClickListener,
 					leftCompoundDrawable,

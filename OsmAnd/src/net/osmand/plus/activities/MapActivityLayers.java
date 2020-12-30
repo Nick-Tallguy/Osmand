@@ -3,7 +3,6 @@ package net.osmand.plus.activities;
 
 import android.content.DialogInterface;
 import android.graphics.drawable.Drawable;
-import android.support.v7.app.AlertDialog;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -11,19 +10,26 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.CallbackWithObject;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.GPXUtilities.WptPt;
+import net.osmand.IndexConstants;
 import net.osmand.ResultMatcher;
 import net.osmand.StateChangedListener;
 import net.osmand.map.ITileSource;
 import net.osmand.map.TileSourceManager.TileSourceTemplate;
 import net.osmand.plus.ContextMenuAdapter;
 import net.osmand.plus.ContextMenuItem;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.GPXUtilities.WptPt;
+import net.osmand.plus.DialogListItemAdapter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.CommonPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.CommonPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.SQLiteTileSource;
 import net.osmand.plus.activities.MapActivity.ShowQuickSearchMode;
@@ -31,29 +37,28 @@ import net.osmand.plus.helpers.GpxUiHelper;
 import net.osmand.plus.measurementtool.MeasurementToolLayer;
 import net.osmand.plus.poi.PoiFiltersHelper;
 import net.osmand.plus.poi.PoiUIFilter;
-import net.osmand.plus.quickaction.QuickActionRegistry;
 import net.osmand.plus.rastermaps.OsmandRasterMapsPlugin;
 import net.osmand.plus.render.MapVectorLayer;
 import net.osmand.plus.render.RenderingIcons;
 import net.osmand.plus.routing.RoutingHelper;
-import net.osmand.plus.views.ContextMenuLayer;
-import net.osmand.plus.views.DownloadedRegionsLayer;
-import net.osmand.plus.views.FavouritesLayer;
-import net.osmand.plus.views.GPXLayer;
-import net.osmand.plus.views.ImpassableRoadsLayer;
-import net.osmand.plus.views.MapControlsLayer;
-import net.osmand.plus.views.MapInfoLayer;
-import net.osmand.plus.views.MapMarkersLayer;
-import net.osmand.plus.views.MapQuickActionLayer;
-import net.osmand.plus.views.MapTextLayer;
+import net.osmand.plus.views.layers.ContextMenuLayer;
+import net.osmand.plus.views.layers.DownloadedRegionsLayer;
+import net.osmand.plus.views.layers.FavouritesLayer;
+import net.osmand.plus.views.layers.GPXLayer;
+import net.osmand.plus.views.layers.ImpassableRoadsLayer;
+import net.osmand.plus.views.layers.MapControlsLayer;
+import net.osmand.plus.views.layers.MapInfoLayer;
+import net.osmand.plus.views.layers.MapMarkersLayer;
+import net.osmand.plus.views.layers.MapQuickActionLayer;
+import net.osmand.plus.views.layers.MapTextLayer;
 import net.osmand.plus.views.MapTileLayer;
 import net.osmand.plus.views.OsmandMapTileView;
-import net.osmand.plus.views.POIMapLayer;
-import net.osmand.plus.views.PointLocationLayer;
-import net.osmand.plus.views.PointNavigationLayer;
-import net.osmand.plus.views.RouteLayer;
-import net.osmand.plus.views.RulerControlLayer;
-import net.osmand.plus.views.TransportStopsLayer;
+import net.osmand.plus.views.layers.POIMapLayer;
+import net.osmand.plus.views.layers.PointLocationLayer;
+import net.osmand.plus.views.layers.PointNavigationLayer;
+import net.osmand.plus.views.layers.RouteLayer;
+import net.osmand.plus.views.layers.RulerControlLayer;
+import net.osmand.plus.views.layers.TransportStopsLayer;
 import net.osmand.plus.views.mapwidgets.MapWidgetRegistry;
 
 import java.util.ArrayList;
@@ -88,19 +93,13 @@ public class MapActivityLayers {
 	private MapQuickActionLayer mapQuickActionLayer;
 	private DownloadedRegionsLayer downloadedRegionsLayer;
 	private MapWidgetRegistry mapWidgetRegistry;
-	private QuickActionRegistry quickActionRegistry;
 	private MeasurementToolLayer measurementToolLayer;
-
+	
 	private StateChangedListener<Integer> transparencyListener;
 
 	public MapActivityLayers(MapActivity activity) {
 		this.activity = activity;
-		this.mapWidgetRegistry = new MapWidgetRegistry(activity.getMyApplication().getSettings());
-		this.quickActionRegistry = new QuickActionRegistry(activity.getMyApplication().getSettings());
-	}
-
-	public QuickActionRegistry getQuickActionRegistry() {
-		return quickActionRegistry;
+		this.mapWidgetRegistry = new MapWidgetRegistry(activity.getMyApplication());
 	}
 
 	public MapWidgetRegistry getMapWidgetRegistry() {
@@ -132,7 +131,7 @@ public class MapActivityLayers {
 		mapVectorLayer = new MapVectorLayer(mapTileLayer, false);
 		mapView.addLayer(mapVectorLayer, 0.5f);
 
-		downloadedRegionsLayer = new DownloadedRegionsLayer();
+		downloadedRegionsLayer = new DownloadedRegionsLayer(activity);
 		mapView.addLayer(downloadedRegionsLayer, 0.5f);
 
 		// 0.9 gpx layer
@@ -204,8 +203,6 @@ public class MapActivityLayers {
 	public void updateLayers(OsmandMapTileView mapView) {
 		OsmandSettings settings = getApplication().getSettings();
 		updateMapSource(mapView, settings.MAP_TILE_SOURCES);
-		boolean showStops = settings.getCustomRenderBooleanProperty(OsmandSettings.TRANSPORT_STOPS_OVER_MAP).get();
-		transportStopsLayer.setShowTransportStops(showStops);
 		OsmandPlugin.refreshLayers(mapView, activity);
 	}
 
@@ -265,25 +262,26 @@ public class MapActivityLayers {
 				return true;
 			}
 		};
-		return GpxUiHelper.selectGPXFiles(files, activity, callbackWithObject);
+		return GpxUiHelper.selectGPXFiles(files, activity, callbackWithObject, getThemeRes(getApplication()), isNightMode(getApplication()));
 	}
 
 
 	public void showMultichoicePoiFilterDialog(final OsmandMapTileView mapView, final DismissListener listener) {
 		final OsmandApplication app = getApplication();
 		final PoiFiltersHelper poiFilters = app.getPoiFilters();
-		final ContextMenuAdapter adapter = new ContextMenuAdapter();
+		final ContextMenuAdapter adapter = new ContextMenuAdapter(app);
 		final List<PoiUIFilter> list = new ArrayList<>();
-		for (PoiUIFilter f : poiFilters.getTopDefinedPoiFilters()) {
-			addFilterToList(adapter, list, f, true);
-		}
-		for (PoiUIFilter f : poiFilters.getSearchPoiFilters()) {
-			addFilterToList(adapter, list, f, true);
+		for (PoiUIFilter f : poiFilters.getSortedPoiFilters(true)) {
+			if (!f.isTopWikiFilter()) {
+				addFilterToList(adapter, list, f, true);
+			}
 		}
 		list.add(poiFilters.getCustomPOIFilter());
+		adapter.setProfileDependent(true);
+		adapter.setNightMode(isNightMode(app));
 
-		final ArrayAdapter<ContextMenuItem> listAdapter = adapter.createListAdapter(activity, app.getSettings().isLightContent());
-		AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+		final ArrayAdapter<ContextMenuItem> listAdapter = adapter.createListAdapter(activity, !isNightMode(app));
+		AlertDialog.Builder builder = new AlertDialog.Builder(new ContextThemeWrapper(activity, getThemeRes(app)));
 		final ListView listView = new ListView(activity);
 		listView.setDivider(null);
 		listView.setClickable(true);
@@ -306,9 +304,12 @@ public class MapActivityLayers {
 							ContextMenuItem item = listAdapter.getItem(i);
 								PoiUIFilter filter = list.get(i);
 							if (item.getSelected()) {
-								getApplication().getPoiFilters().addSelectedPoiFilter(filter);
+								if (filter.isStandardFilter()) {
+									filter.removeUnsavedFilterByName();
+								}
+								poiFilters.addSelectedPoiFilter(filter);
 							} else {
-								getApplication().getPoiFilters().removeSelectedPoiFilter(filter);
+								poiFilters.removeSelectedPoiFilter(filter);
 							}
 						}
 						mapView.refreshMap();
@@ -327,7 +328,7 @@ public class MapActivityLayers {
 			@Override
 			public void onShow(DialogInterface dialog) {
 				Button neutralButton = alertDialog.getButton(DialogInterface.BUTTON_NEUTRAL);
-				Drawable drawable = app.getIconsCache().getThemedIcon(R.drawable.ic_action_singleselect);
+				Drawable drawable = app.getUIUtilities().getThemedIcon(R.drawable.ic_action_singleselect);
 				neutralButton.setCompoundDrawablesWithIntrinsicBounds(drawable, null, null, null);
 				neutralButton.setContentDescription(app.getString(R.string.shared_string_filters));
 			}
@@ -344,22 +345,20 @@ public class MapActivityLayers {
 	public void showSingleChoicePoiFilterDialog(final OsmandMapTileView mapView, final DismissListener listener) {
 		final OsmandApplication app = getApplication();
 		final PoiFiltersHelper poiFilters = app.getPoiFilters();
-		final ContextMenuAdapter adapter = new ContextMenuAdapter();
+		final ContextMenuAdapter adapter = new ContextMenuAdapter(app);
 		adapter.addItem(new ContextMenuItem.ItemBuilder()
 				.setTitleId(R.string.shared_string_search, app)
 				.setIcon(R.drawable.ic_action_search_dark).createItem());
 		final List<PoiUIFilter> list = new ArrayList<>();
 		list.add(poiFilters.getCustomPOIFilter());
-		for (PoiUIFilter f : poiFilters.getTopDefinedPoiFilters()) {
-			addFilterToList(adapter, list, f, false);
-		}
-		for (PoiUIFilter f : poiFilters.getSearchPoiFilters()) {
-			addFilterToList(adapter, list, f, false);
+		for (PoiUIFilter f : poiFilters.getSortedPoiFilters(true)) {
+			if (!f.isTopWikiFilter()) {
+				addFilterToList(adapter, list, f, false);
+			}
 		}
 
-		final ArrayAdapter<ContextMenuItem> listAdapter =
-				adapter.createListAdapter(activity, app.getSettings().isLightContent());
-		AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+		final ArrayAdapter<ContextMenuItem> listAdapter = adapter.createListAdapter(activity, !isNightMode(app));
+		AlertDialog.Builder builder = new AlertDialog.Builder(new ContextThemeWrapper(activity, getThemeRes(app)));
 		builder.setAdapter(listAdapter, new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
@@ -371,8 +370,12 @@ public class MapActivityLayers {
 					}
 					activity.showQuickSearch(ShowQuickSearchMode.NEW, true);
 				} else {
-					getApplication().getPoiFilters().clearSelectedPoiFilters();
-					getApplication().getPoiFilters().addSelectedPoiFilter(pf);
+					if (pf.isStandardFilter()) {
+						pf.removeUnsavedFilterByName();
+					}
+					PoiUIFilter wiki = poiFilters.getTopWikiPoiFilter();
+					poiFilters.clearSelectedPoiFilters(wiki);
+					poiFilters.addSelectedPoiFilter(pf);
 					mapView.refreshMap();
 				}
 			}
@@ -391,7 +394,7 @@ public class MapActivityLayers {
 			@Override
 			public void onShow(DialogInterface dialog) {
 				Button neutralButton = alertDialog.getButton(DialogInterface.BUTTON_NEUTRAL);
-				Drawable drawable = app.getIconsCache().getThemedIcon(R.drawable.ic_action_multiselect);
+				Drawable drawable = app.getUIUtilities().getThemedIcon(R.drawable.ic_action_multiselect);
 				neutralButton.setCompoundDrawablesWithIntrinsicBounds(drawable, null, null, null);
 				neutralButton.setContentDescription(app.getString(R.string.apply_filters));
 			}
@@ -434,7 +437,7 @@ public class MapActivityLayers {
 		adapter.addItem(builder.createItem());
 	}
 
-	public void selectMapLayer(final OsmandMapTileView mapView, final ContextMenuItem it, final ArrayAdapter<ContextMenuItem> adapter) {
+	public void selectMapLayer(final OsmandMapTileView mapView, @Nullable final ContextMenuItem it, @Nullable final ArrayAdapter<ContextMenuItem> adapter) {
 		if (OsmandPlugin.getEnabledPlugin(OsmandRasterMapsPlugin.class) == null) {
 			Toast.makeText(activity, R.string.map_online_plugin_is_not_installed, Toast.LENGTH_LONG).show();
 			return;
@@ -446,16 +449,16 @@ public class MapActivityLayers {
 
 		final String layerOsmVector = "LAYER_OSM_VECTOR";
 		final String layerInstallMore = "LAYER_INSTALL_MORE";
-		final String layerEditInstall = "LAYER_EDIT";
+		final String layerAdd = "LAYER_ADD";
 
 		entriesMap.put(layerOsmVector, getString(R.string.vector_data));
 		entriesMap.putAll(settings.getTileSourceEntries());
 		entriesMap.put(layerInstallMore, getString(R.string.install_more));
-		entriesMap.put(layerEditInstall, getString(R.string.maps_define_edit));
+		entriesMap.put(layerAdd, getString(R.string.shared_string_add));
 
 		final List<Entry<String, String>> entriesMapList = new ArrayList<>(entriesMap.entrySet());
 
-		AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+		AlertDialog.Builder builder = new AlertDialog.Builder(new ContextThemeWrapper(activity, getThemeRes(getApplication())));
 
 		String selectedTileSourceKey = settings.MAP_TILE_SOURCES.get();
 
@@ -484,88 +487,97 @@ public class MapActivityLayers {
 			items[i++] = entry.getValue();
 		}
 
-		builder.setSingleChoiceItems(items, selectedItem, new DialogInterface.OnClickListener() {
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				String layerKey = entriesMapList.get(which).getKey();
-				switch (layerKey) {
-					case layerOsmVector:
-						settings.MAP_ONLINE_DATA.set(false);
-						updateMapSource(mapView, null);
-						it.setDescription(null);
-						adapter.notifyDataSetChanged();
-						break;
-					case layerEditInstall:
-						OsmandRasterMapsPlugin.defineNewEditLayer(activity, new ResultMatcher<TileSourceTemplate>() {
+		OsmandApplication app = getApplication();
+		boolean nightMode = isNightMode(app);
+		int themeRes = getThemeRes(app);
+		int selectedModeColor = ContextCompat.getColor(app, settings.getApplicationMode().getIconColorInfo().getColor(nightMode));
+		DialogListItemAdapter dialogAdapter = DialogListItemAdapter.createSingleChoiceAdapter(
+				items, nightMode, selectedItem, app, selectedModeColor, themeRes, new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						int which = (int) v.getTag();
+						String layerKey = entriesMapList.get(which).getKey();
+						switch (layerKey) {
+							case layerOsmVector:
+								settings.MAP_ONLINE_DATA.set(false);
+								updateMapSource(mapView, null);
+								updateItem(it, adapter, null);
+								break;
+							case layerAdd:
+								OsmandRasterMapsPlugin.defineNewEditLayer(activity.getSupportFragmentManager(), null, null);
+								break;
+							case layerInstallMore:
+								OsmandRasterMapsPlugin.installMapLayers(activity, new ResultMatcher<TileSourceTemplate>() {
+									TileSourceTemplate template = null;
+									int count = 0;
 
-							@Override
-							public boolean publish(TileSourceTemplate object) {
-								settings.MAP_TILE_SOURCES.set(object.getName());
-								settings.MAP_ONLINE_DATA.set(true);
-								if(it != null) {
-									it.setDescription(object.getName());
-								}
-								updateMapSource(mapView, settings.MAP_TILE_SOURCES);
-								return true;
-							}
-
-							@Override
-							public boolean isCancelled() {
-								return false;
-							}
-
-						});
-						break;
-					case layerInstallMore:
-						OsmandRasterMapsPlugin.installMapLayers(activity, new ResultMatcher<TileSourceTemplate>() {
-							TileSourceTemplate template = null;
-							int count = 0;
-
-							@Override
-							public boolean publish(TileSourceTemplate object) {
-								if (object == null) {
-									if (count == 1) {
-										settings.MAP_TILE_SOURCES.set(template.getName());
-										settings.MAP_ONLINE_DATA.set(true);
-										it.setDescription(template.getName());
-										adapter.notifyDataSetChanged();
-										updateMapSource(mapView, settings.MAP_TILE_SOURCES);
-									} else {
-										selectMapLayer(mapView, it, adapter);
+									@Override
+									public boolean publish(TileSourceTemplate object) {
+										if (object == null) {
+											if (count == 1) {
+												settings.MAP_TILE_SOURCES.set(template.getName());
+												settings.MAP_ONLINE_DATA.set(true);
+												updateItem(it, adapter, template.getName());
+												updateMapSource(mapView, settings.MAP_TILE_SOURCES);
+											} else {
+												selectMapLayer(mapView, it, adapter);
+											}
+										} else {
+											count++;
+											template = object;
+										}
+										return false;
 									}
-								} else {
-									count++;
-									template = object;
-								}
-								return false;
-							}
 
-							@Override
-							public boolean isCancelled() {
-								return false;
-							}
-						});
-						break;
-					default:
-						settings.MAP_TILE_SOURCES.set(layerKey);
-						settings.MAP_ONLINE_DATA.set(true);
-						it.setDescription(layerKey);
-						adapter.notifyDataSetChanged();
-						updateMapSource(mapView, settings.MAP_TILE_SOURCES);
-						break;
+									@Override
+									public boolean isCancelled() {
+										return false;
+									}
+								});
+								break;
+							default:
+								settings.MAP_TILE_SOURCES.set(layerKey);
+								settings.MAP_ONLINE_DATA.set(true);
+								updateItem(it, adapter, layerKey.replace(IndexConstants.SQLITE_EXT, ""));
+								updateMapSource(mapView, settings.MAP_TILE_SOURCES);
+								break;
+						}
+					}
 				}
-
-				dialog.dismiss();
-			}
-
-		});
+		);
+		builder.setAdapter(dialogAdapter, null);
 		builder.setNegativeButton(R.string.shared_string_dismiss, null);
-		builder.show();
+		dialogAdapter.setDialog(builder.show());
 	}
 
+	private void updateItem(@Nullable ContextMenuItem item,
+							@Nullable ArrayAdapter<ContextMenuItem> adapter,
+							@Nullable String description) {
+		if (item != null) {
+			item.setDescription(description);
+		}
+		if (adapter != null) {
+			adapter.notifyDataSetChanged();
+		}
+	}
+
+	private boolean isNightMode(OsmandApplication app) {
+		if (app == null) {
+			return false;
+		}
+		return app.getDaynightHelper().isNightModeForMapControls();
+	}
+	
+	private int getThemeRes(OsmandApplication app) {
+		return isNightMode(app) ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
+	}
 
 	private String getString(int resId) {
 		return activity.getString(resId);
+	}
+
+	public RouteLayer getRouteLayer() {
+		return routeLayer;
 	}
 
 	public PointNavigationLayer getNavigationLayer() {

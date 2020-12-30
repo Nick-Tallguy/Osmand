@@ -1,9 +1,12 @@
 package net.osmand.plus.search.listitems;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.text.Spannable;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import net.osmand.binary.BinaryMapIndexReader;
 import net.osmand.data.Amenity;
@@ -18,20 +21,25 @@ import net.osmand.osm.PoiCategory;
 import net.osmand.osm.PoiFilter;
 import net.osmand.osm.PoiType;
 import net.osmand.plus.FavouritesDbHelper.FavoriteGroup;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.GPXUtilities.WptPt;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.search.SearchHistoryFragment;
-import net.osmand.plus.base.FavoriteImageDrawable;
+import net.osmand.plus.base.PointImageDrawable;
 import net.osmand.plus.helpers.SearchHistoryHelper.HistoryEntry;
+import net.osmand.plus.poi.PoiUIFilter;
 import net.osmand.plus.render.RenderingIcons;
 import net.osmand.search.core.CustomSearchPoiFilter;
 import net.osmand.search.core.SearchResult;
 import net.osmand.util.Algorithms;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 
 public class QuickSearchListItem {
 
@@ -214,7 +222,7 @@ public class QuickSearchListItem {
 			case FAVORITE:
 				FavouritePoint fav = (FavouritePoint) searchResult.object;
 				return fav.getCategory().length() == 0 ?
-						app.getString(R.string.shared_string_favorites) : fav.getCategory();
+						app.getString(R.string.shared_string_favorites) : fav.getCategoryDisplayName(app);
 			case FAVORITE_GROUP:
 				return app.getString(R.string.shared_string_my_favorites);
 			case REGION:
@@ -256,12 +264,12 @@ public class QuickSearchListItem {
 		switch (searchResult.objectType) {
 			case FAVORITE:
 			case FAVORITE_GROUP:
-				return app.getIconsCache().getThemedIcon(R.drawable.ic_small_group);
+				return app.getUIUtilities().getThemedIcon(R.drawable.ic_action_group_name_16);
 			case RECENT_OBJ:
 				HistoryEntry historyEntry = (HistoryEntry) searchResult.object;
 				String typeName = historyEntry.getName().getTypeName();
 				if (typeName != null && !typeName.isEmpty()) {
-					return app.getIconsCache().getThemedIcon(R.drawable.ic_small_group);
+					return app.getUIUtilities().getThemedIcon(R.drawable.ic_action_group_name_16);
 				} else {
 					return null;
 				}
@@ -273,8 +281,9 @@ public class QuickSearchListItem {
 		return getIcon(app, searchResult);
 	}
 
+	@Nullable
 	public static String getPoiTypeIconName(AbstractPoiType abstractPoiType) {
-		if (RenderingIcons.containsBigIcon(abstractPoiType.getIconKeyName())) {
+		if (abstractPoiType != null && RenderingIcons.containsBigIcon(abstractPoiType.getIconKeyName())) {
 			return abstractPoiType.getIconKeyName();
 		} else if (abstractPoiType instanceof PoiType
 				&& RenderingIcons.containsBigIcon(
@@ -307,9 +316,9 @@ public class QuickSearchListItem {
 		int iconId = -1;
 		switch (searchResult.objectType) {
 			case CITY:
-				return getIcon(app, R.drawable.ic_action_building_number);
+				return getIcon(app, R.drawable.ic_action_building2);
 			case VILLAGE:
-				return getIcon(app, R.drawable.ic_action_home_dark);
+				return getIcon(app, R.drawable.ic_action_village);
 			case POSTCODE:
 			case STREET:
 				return getIcon(app, R.drawable.ic_action_street_name);
@@ -324,11 +333,10 @@ public class QuickSearchListItem {
 						iconId = RenderingIcons.getBigIconResourceId(iconName);
 					}
 				} else if (searchResult.object instanceof CustomSearchPoiFilter) {
-					Object res = ((CustomSearchPoiFilter) searchResult.object).getIconResource();
-					if (res instanceof String && RenderingIcons.containsBigIcon(res.toString())) {
-						iconId = RenderingIcons.getBigIconResourceId(res.toString());
-					} else {
-						iconId = R.drawable.mx_user_defined;
+					CustomSearchPoiFilter searchPoiFilter = (CustomSearchPoiFilter) searchResult.object;
+					PoiUIFilter filter = app.getPoiFilters().getFilterById(searchPoiFilter.getFilterId());
+					if (filter != null) {
+						iconId = getCustomFilterIconRes(filter);
 					}
 				}
 				if (iconId > 0) {
@@ -355,26 +363,17 @@ public class QuickSearchListItem {
 				return getIcon(app, R.drawable.ic_action_world_globe);
 			case FAVORITE:
 				FavouritePoint fav = (FavouritePoint) searchResult.object;
-				return FavoriteImageDrawable.getOrCreate(app, fav.getColor(), false);
+				int color = app.getFavorites().getColorWithCategory(fav, app.getResources().getColor(R.color.color_favorite));
+				return PointImageDrawable.getFromFavorite(app, color, false, fav);
 			case FAVORITE_GROUP:
 				FavoriteGroup group = (FavoriteGroup) searchResult.object;
-				int color = group.color == 0 || group.color == Color.BLACK ? app.getResources().getColor(R.color.color_favorite) : group.color;
-				return app.getIconsCache().getPaintedIcon(R.drawable.ic_action_fav_dark, color | 0xff000000);
+				color = group.getColor() == 0 ? ContextCompat.getColor(app, R.color.color_favorite) : group.getColor();
+				return app.getUIUtilities().getPaintedIcon(R.drawable.ic_action_favorite, color | 0xff000000);
 			case REGION:
 				return getIcon(app, R.drawable.ic_world_globe_dark);
 			case RECENT_OBJ:
 				HistoryEntry entry = (HistoryEntry) searchResult.object;
-				if (entry.getName() != null && !Algorithms.isEmpty(entry.getName().getIconName())) {
-					String iconName = entry.getName().getIconName();
-					if (RenderingIcons.containsBigIcon(iconName)) {
-						iconId = RenderingIcons.getBigIconResourceId(iconName);
-					} else {
-						iconId = app.getResources().getIdentifier(iconName, "drawable", app.getPackageName());
-					}
-				}
-				if (iconId <= 0) {
-					iconId = SearchHistoryFragment.getItemIcon(entry.getName());
-				}
+				iconId = getHistoryIconId(app, entry);
 				try {
 					return getIcon(app, iconId);
 				} catch (Exception e) {
@@ -382,15 +381,54 @@ public class QuickSearchListItem {
 				}
 			case WPT:
 				WptPt wpt = (WptPt) searchResult.object;
-				return FavoriteImageDrawable.getOrCreate(app, wpt.getColor(), false);
+				return PointImageDrawable.getFromWpt(app, wpt.getColor(), false, wpt);
 			case UNKNOWN_NAME_FILTER:
 				break;
 		}
 		return null;
 	}
 
+	public static int getHistoryIconId(OsmandApplication app, HistoryEntry entry) {
+		int iconId = -1;
+		if (entry.getName() != null && !Algorithms.isEmpty(entry.getName().getIconName())) {
+			String iconName = entry.getName().getIconName();
+			if (RenderingIcons.containsBigIcon(iconName)) {
+				iconId = RenderingIcons.getBigIconResourceId(iconName);
+			} else {
+				iconId = app.getResources().getIdentifier(iconName, "drawable", app.getPackageName());
+			}
+		}
+		if (iconId <= 0) {
+			iconId = SearchHistoryFragment.getItemIcon(entry.getName());
+		}
+		return iconId;
+	}
+
 	private static Drawable getIcon(OsmandApplication app, int iconId) {
-		return app.getIconsCache().getIcon(iconId,
+		return app.getUIUtilities().getIcon(iconId,
 				app.getSettings().isLightContent() ? R.color.osmand_orange : R.color.osmand_orange_dark);
+	}
+
+	@DrawableRes
+	public static int getCustomFilterIconRes(PoiUIFilter filter) {
+		int iconId = 0;
+		if (filter != null) {
+			Map<PoiCategory, LinkedHashSet<String>> acceptedTypes = filter.getAcceptedTypes();
+			List<PoiCategory> categories = new ArrayList<>(acceptedTypes.keySet());
+			if (categories.size() == 1) {
+				String res = "";
+				PoiCategory category = categories.get(0);
+				LinkedHashSet<String> filters = acceptedTypes.get(category);
+				if (filters == null || filters.size() > 1) {
+					res = category.getIconKeyName();
+				} else {
+					res = getPoiTypeIconName(category.getPoiTypeByKeyName(filters.iterator().next()));
+				}
+				if (res != null && RenderingIcons.containsBigIcon(res)) {
+					iconId = RenderingIcons.getBigIconResourceId(res);
+				}
+			}
+		}
+		return iconId > 0 ? iconId : R.drawable.mx_special_custom_category;
 	}
 }

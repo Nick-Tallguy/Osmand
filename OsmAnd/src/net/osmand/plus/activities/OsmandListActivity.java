@@ -1,10 +1,7 @@
 package net.osmand.plus.activities;
 
-import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.R;
 import android.app.ActionBar;
 import android.os.Bundle;
-import android.support.v4.view.MenuItemCompat;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -12,6 +9,10 @@ import android.widget.AdapterView;
 import android.widget.HeaderViewListAdapter;
 import android.widget.ListAdapter;
 import android.widget.ListView;
+
+import net.osmand.AndroidUtils;
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.R;
 
 
 public abstract class OsmandListActivity extends
@@ -29,8 +30,11 @@ public abstract class OsmandListActivity extends
 		super.onStart();
 		getListView().setBackgroundColor(
 				getResources().getColor(
-						getMyApplication().getSettings().isLightContent() ? R.color.bg_color_light
-								: R.color.bg_color_dark));
+						getMyApplication().getSettings().isLightContent() ? R.color.list_background_color_light
+								: R.color.list_background_color_dark));
+		getListView().setDivider(getMyApplication().getUIUtilities().getIcon(R.drawable.divider_solid,
+				getMyApplication().getSettings().isLightContent() ? R.color.divider_color_light : R.color.divider_color_dark));
+		getListView().setDividerHeight(AndroidUtils.dpToPx(getMyApplication(), 1));
 	}
 
 
@@ -54,7 +58,7 @@ public abstract class OsmandListActivity extends
 	public MenuItem createMenuItem(Menu m, int id, int titleRes, int iconDark, int menuItemType) {
 		MenuItem menuItem = m.add(0, id, 0, titleRes);
 		if (iconDark != 0) {
-			menuItem.setIcon(getMyApplication().getIconsCache().getIcon(iconDark));
+			menuItem.setIcon(getMyApplication().getUIUtilities().getIcon(iconDark));
 		}
 		menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 			@Override
@@ -62,7 +66,7 @@ public abstract class OsmandListActivity extends
 				return onOptionsItemSelected(item);
 			}
 		});
-		MenuItemCompat.setShowAsAction(menuItem, menuItemType);
+		menuItem.setShowAsAction(menuItemType);
 		return menuItem;
 	}
 

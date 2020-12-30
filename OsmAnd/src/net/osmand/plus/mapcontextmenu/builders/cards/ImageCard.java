@@ -3,19 +3,23 @@ package net.osmand.plus.mapcontextmenu.builders.cards;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.net.TrafficStats;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.widget.AppCompatButton;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.widget.AppCompatButton;
+
 import net.osmand.AndroidNetworkUtils;
 import net.osmand.AndroidUtils;
 import net.osmand.Location;
+import net.osmand.PlatformUtil;
+import net.osmand.data.Amenity;
 import net.osmand.data.LatLon;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -24,8 +28,11 @@ import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.MenuBuilder;
 import net.osmand.plus.mapillary.MapillaryContributeCard;
 import net.osmand.plus.mapillary.MapillaryImageCard;
+import net.osmand.plus.openplacereviews.OPRConstants;
+import net.osmand.plus.wikimedia.WikiImageHelper;
 import net.osmand.util.Algorithms;
 
+import org.apache.commons.logging.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,7 +41,9 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +54,7 @@ public abstract class ImageCard extends AbstractCard {
 	public static String TYPE_MAPILLARY_PHOTO = "mapillary-photo";
 	public static String TYPE_MAPILLARY_CONTRIBUTE = "mapillary-contribute";
 
+	private static final Log LOG = PlatformUtil.getLog(ImageCard.class);
 	protected String type;
 	// Image location
 	protected LatLon location;
@@ -134,10 +144,10 @@ public abstract class ImageCard extends AbstractCard {
 					this.externalLink = imageObject.getBoolean("externalLink");
 				}
 				if (imageObject.has("topIcon") && !imageObject.isNull("topIcon")) {
-					this.topIconId = getDrawableId(imageObject.getString("topIcon"));
+					this.topIconId = AndroidUtils.getDrawableId(getMyApplication(), imageObject.getString("topIcon"));
 				}
 				if (imageObject.has("buttonIcon") && !imageObject.isNull("buttonIcon")) {
-					this.buttonIconId = getDrawableId(imageObject.getString("buttonIcon"));
+					this.buttonIconId = AndroidUtils.getDrawableId(getMyApplication(), imageObject.getString("buttonIcon"));
 				}
 				if (imageObject.has("buttonText") && !imageObject.isNull("buttonText")) {
 					this.buttonText = imageObject.getString("buttonText");
@@ -169,14 +179,6 @@ public abstract class ImageCard extends AbstractCard {
 		}
 	}
 
-	private int getDrawableId(String id) {
-		if (Algorithms.isEmpty(id)) {
-			return 0;
-		} else {
-			return getMyApplication().getResources().getIdentifier(id, "drawable", getMyApplication().getPackageName());
-		}
-	}
-
 	private static ImageCard createCard(MapActivity mapActivity, JSONObject imageObject) {
 		ImageCard imageCard = null;
 		try {
@@ -192,6 +194,14 @@ public abstract class ImageCard extends AbstractCard {
 			}
 		} catch (JSONException e) {
 			e.printStackTrace();
+		}
+		return imageCard;
+	}
+
+	private static ImageCard createCardOpr(MapActivity mapActivity, JSONObject imageObject) {
+		ImageCard imageCard = null;
+		if (imageObject.has("cid")) {
+			imageCard = new IPFSImageCard(mapActivity, imageObject);
 		}
 		return imageCard;
 	}
@@ -328,7 +338,7 @@ public abstract class ImageCard extends AbstractCard {
 					R.drawable.context_menu_card_light, R.drawable.context_menu_card_dark);
 
 			if (icon == null && topIconId != 0) {
-				icon = getMyApplication().getIconsCache().getIcon(topIconId);
+				icon = getMyApplication().getUIUtilities().getIcon(topIconId);
 			}
 			if (icon == null) {
 				iconImageView.setVisibility(View.GONE);
@@ -373,9 +383,9 @@ public abstract class ImageCard extends AbstractCard {
 			}
 			if (buttonIcon == null && buttonIconId != 0) {
 				if (buttonIconColor != 0) {
-					buttonIcon = getMyApplication().getIconsCache().getPaintedIcon(buttonIconId, buttonIconColor);
+					buttonIcon = getMyApplication().getUIUtilities().getPaintedIcon(buttonIconId, buttonIconColor);
 				} else {
-					buttonIcon = getMyApplication().getIconsCache().getIcon(buttonIconId);
+					buttonIcon = getMyApplication().getUIUtilities().getIcon(buttonIconId);
 				}
 			}
 			button.setCompoundDrawablesWithIntrinsicBounds(buttonIcon, null, null, null);
@@ -400,6 +410,28 @@ public abstract class ImageCard extends AbstractCard {
 		}
 	}
 
+	private static String[] getIdFromResponse(String response) {
+		try {
+			JSONArray obj = new JSONObject(response).getJSONArray("objects");
+			JSONArray images = (JSONArray) ((JSONObject) obj.get(0)).get("id");
+			return toStringArray(images);
+		} catch (JSONException e) {
+			e.printStackTrace();
+		}
+		return new String[0];
+	}
+
+	private static String[] toStringArray(JSONArray array) {
+		if (array == null)
+			return null;
+
+		String[] arr = new String[array.length()];
+		for (int i = 0; i < arr.length; i++) {
+			arr[i] = array.optString(i);
+		}
+		return arr;
+	}
+
 	public static class GetImageCardsTask extends AsyncTask<Void, Void, List<ImageCard>> {
 
 		private MapActivity mapActivity;
@@ -408,15 +440,18 @@ public abstract class ImageCard extends AbstractCard {
 		private Map<String, String> params;
 		private GetImageCardsListener listener;
 		private List<ImageCard> result;
+		private static final int GET_IMAGE_CARD_THREAD_ID = 10104;
 
 		public interface GetImageCardsListener {
 			void onPostProcess(List<ImageCard> cardList);
+
+			void onPlaceIdAcquired(String[] placeId);
 
 			void onFinish(List<ImageCard> cardList);
 		}
 
 		public GetImageCardsTask(@NonNull MapActivity mapActivity, LatLon latLon,
-								 @Nullable Map<String, String> params, GetImageCardsListener listener) {
+		                         @Nullable Map<String, String> params, GetImageCardsListener listener) {
 			this.mapActivity = mapActivity;
 			this.app = mapActivity.getMyApplication();
 			this.latLon = latLon;
@@ -426,14 +461,29 @@ public abstract class ImageCard extends AbstractCard {
 
 		@Override
 		protected List<ImageCard> doInBackground(Void... params) {
+			TrafficStats.setThreadStatsTag(GET_IMAGE_CARD_THREAD_ID);
 			List<ImageCard> result = new ArrayList<>();
+			Object o = mapActivity.getMapLayers().getContextMenuLayer().getSelectedObject();
+			if (o instanceof Amenity) {
+				Amenity am = (Amenity) o;
+				long amenityId = am.getId() >> 1;
+				String baseUrl = OPRConstants.getBaseUrl(app);
+				String url = baseUrl + "api/objects-by-index?type=opr.place&index=osmid&key=" + amenityId;
+				String response = AndroidNetworkUtils.sendRequest(app, url, Collections.<String, String>emptyMap(),
+						"Requesting location images...", false, false);
+				if (response != null) {
+					getPicturesForPlace(result, response);
+					String[] id = getIdFromResponse(response);
+					listener.onPlaceIdAcquired(id);
+				}
+			}
 			try {
 				final Map<String, String> pms = new LinkedHashMap<>();
-				pms.put("lat", "" + latLon.getLatitude());
-				pms.put("lon", "" + latLon.getLongitude());
+				pms.put("lat", "" + (float) latLon.getLatitude());
+				pms.put("lon", "" + (float) latLon.getLongitude());
 				Location myLocation = app.getLocationProvider().getLastKnownLocation();
 				if (myLocation != null) {
-					pms.put("myLocation", "" + myLocation.getLatitude() + "," + myLocation.getLongitude());
+					pms.put("mloc", "" + (float) myLocation.getLatitude() + "," + (float) myLocation.getLongitude());
 				}
 				pms.put("app", Version.isPaidVersion(app) ? "paid" : "free");
 				String preferredLang = app.getSettings().MAP_PREFERRED_LOCALE.get();
@@ -444,9 +494,19 @@ public abstract class ImageCard extends AbstractCard {
 					pms.put("lang", preferredLang);
 				}
 				if (this.params != null) {
+					String wikidataId = this.params.get(Amenity.WIKIDATA);
+					if (wikidataId != null) {
+						this.params.remove(Amenity.WIKIDATA);
+						WikiImageHelper.addWikidataImageCards(mapActivity, wikidataId, result);
+					}
+					String wikimediaContent = this.params.get(Amenity.WIKIMEDIA_COMMONS);
+					if (wikimediaContent != null) {
+						this.params.remove(Amenity.WIKIMEDIA_COMMONS);
+						WikiImageHelper.addWikimediaImageCards(mapActivity, wikimediaContent, result);
+					}
 					pms.putAll(this.params);
 				}
-				String response = AndroidNetworkUtils.sendRequest(app, "https://osmand.net/api/cm_place.php", pms,
+				String response = AndroidNetworkUtils.sendRequest(app, "https://osmand.net/api/cm_place", pms,
 						"Requesting location images...", false, false);
 
 				if (!Algorithms.isEmpty(response)) {
@@ -469,12 +529,42 @@ public abstract class ImageCard extends AbstractCard {
 					}
 				}
 			} catch (Exception e) {
-				e.printStackTrace();
+				LOG.error(e);
 			}
 			if (listener != null) {
 				listener.onPostProcess(result);
 			}
 			return result;
+		}
+
+		private void getPicturesForPlace(List<ImageCard> result, String response) {
+			try {
+				if (!Algorithms.isEmpty(response)) {
+					JSONArray obj = new JSONObject(response).getJSONArray("objects");
+					JSONObject imagesWrapper = ((JSONObject) ((JSONObject) obj.get(0)).get("images"));
+					Iterator<String> it = imagesWrapper.keys();
+					while (it.hasNext()) {
+						JSONArray images = imagesWrapper.getJSONArray(it.next());
+						if (images.length() > 0) {
+							for (int i = 0; i < images.length(); i++) {
+								try {
+									JSONObject imageObject = (JSONObject) images.get(i);
+									if (imageObject != JSONObject.NULL) {
+										ImageCard imageCard = ImageCard.createCardOpr(mapActivity, imageObject);
+										if (imageCard != null) {
+											result.add(imageCard);
+										}
+									}
+								} catch (JSONException e) {
+									LOG.error(e);
+								}
+							}
+						}
+					}
+				}
+			} catch (Exception e) {
+				LOG.error(e);
+			}
 		}
 
 		@Override

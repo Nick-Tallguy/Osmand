@@ -18,7 +18,7 @@ import net.osmand.plus.AppInitializer.AppInitializeListener;
 import net.osmand.plus.AppInitializer.InitEvents;
 import net.osmand.plus.OsmAndFormatter;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.OsmandListActivity;
@@ -137,21 +137,19 @@ public class GeoIntentActivity extends OsmandListActivity {
 					}
 					settings.setMapLocationToShow(p.getLatitude(), p.getLongitude(),
 							settings.getLastKnownMapZoom(), pd); //$NON-NLS-1$
-					MapActivity.launchMapActivityMoveToTop(GeoIntentActivity.this);
 				} else {
 					Uri uri = intent.getData();
 					String searchString = p != null && p.isGeoAddress() ? p.getQuery() : uri.toString();
 					settings.setSearchRequestToShow(searchString);
-					MapActivity.launchMapActivityMoveToTop(GeoIntentActivity.this);
 				}
+				MapActivity.launchMapActivityMoveToTop(GeoIntentActivity.this);
+				GeoIntentActivity.this.finish();
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
 
 	}
-
-
 
 	@Override
 	protected void onStop() {

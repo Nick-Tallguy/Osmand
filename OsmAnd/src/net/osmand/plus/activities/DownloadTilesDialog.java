@@ -3,12 +3,15 @@ package net.osmand.plus.activities;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+
+import com.google.android.material.slider.Slider;
 
 import net.osmand.PlatformUtil;
 import net.osmand.data.QuadRect;
@@ -33,26 +36,25 @@ import java.util.List;
 
 public class DownloadTilesDialog {
 
-	
-	private final static Log log = PlatformUtil.getLog(DownloadTilesDialog.class); 
+	private final static Log log = PlatformUtil.getLog(DownloadTilesDialog.class);
 	private final Context ctx;
 	private final OsmandApplication app;
 	private final OsmandMapTileView mapView;
 
-	public DownloadTilesDialog(Context ctx, OsmandApplication app, OsmandMapTileView mapView){
+	public DownloadTilesDialog(Context ctx, OsmandApplication app, OsmandMapTileView mapView) {
 		this.ctx = ctx;
 		this.app = app;
 		this.mapView = mapView;
 	}
 	
-	
 	public void openDialog(){
 		BaseMapLayer mainLayer = mapView.getMainLayer();
-		if(!(mainLayer instanceof MapTileLayer) || !((MapTileLayer) mainLayer).isVisible()){
+		if (!(mainLayer instanceof MapTileLayer) || !((MapTileLayer) mainLayer).isVisible()) {
 			Toast.makeText(ctx, R.string.maps_could_not_be_downloaded, Toast.LENGTH_SHORT).show();
+			return;
 		}
 		final ITileSource mapSource = ((MapTileLayer) mainLayer).getMap();
-		if(mapSource == null || !mapSource.couldBeDownloadedFromInternet()){
+		if (mapSource == null || !mapSource.couldBeDownloadedFromInternet()) {
 			Toast.makeText(ctx, R.string.maps_could_not_be_downloaded, Toast.LENGTH_SHORT).show();
 			return;
 		}
@@ -63,44 +65,35 @@ public class DownloadTilesDialog {
 		
 		// calculate pixel rectangle
 		AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
-		LayoutInflater inflater = (LayoutInflater)ctx.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+		LayoutInflater inflater = (LayoutInflater) ctx.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 		View view = inflater.inflate(R.layout.download_tiles, null);
-		
-		
-		
-		((TextView)view.findViewById(R.id.MinZoom)).setText(zoom+""); //$NON-NLS-1$
-		((TextView)view.findViewById(R.id.MaxZoom)).setText(max+""); //$NON-NLS-1$
-		final SeekBar seekBar = (SeekBar) view.findViewById(R.id.ZoomToDownload);
-		seekBar.setMax(max - zoom);
-		seekBar.setProgress((max - zoom) / 2);
-		
+
+		((TextView) view.findViewById(R.id.MinZoom)).setText(String.valueOf(zoom));
+		((TextView) view.findViewById(R.id.MaxZoom)).setText(String.valueOf(max));
+
+		final Slider slider = (Slider) view.findViewById(R.id.ZoomToDownload);
 		final TextView downloadText = ((TextView) view.findViewById(R.id.DownloadDescription));
 		final String template = ctx.getString(R.string.tiles_to_download_estimated_size);
-		
-		
-		updateLabel(zoom, rb.getLatLonBounds(), downloadText, template, seekBar.getProgress());
-		seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
 
-			@Override
-			public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-				updateLabel(zoom, rb.getLatLonBounds(), downloadText, template, progress);
-			}
-
-			@Override
-			public void onStartTrackingTouch(SeekBar seekBar) {
-			}
-
-			@Override
-			public void onStopTrackingTouch(SeekBar seekBar) {
-			}
-			
-		});
+		final boolean ellipticYTile = mapSource.isEllipticYTile();
+		updateLabel(zoom, rb.getLatLonBounds(), downloadText, template, (int) slider.getValue(), ellipticYTile);
+		if (max > zoom) {
+			slider.setValueTo(max - zoom);
+			int progress = (max - zoom) / 2;
+			slider.setValue(progress);
+			slider.addOnChangeListener(new Slider.OnChangeListener() {
+				@Override
+				public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+					updateLabel(zoom, rb.getLatLonBounds(), downloadText, template, (int) value, ellipticYTile);
+				}
+			});
+		}
 		
 		builder.setPositiveButton(R.string.shared_string_download, new DialogInterface.OnClickListener(){
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
 				dialog.dismiss();
-				run(zoom, seekBar.getProgress(), rb.getLatLonBounds(), mapSource);
+				run(zoom, (int) slider.getValue(), rb.getLatLonBounds(), mapSource);
 			}
 		});
 		builder.setNegativeButton(R.string.shared_string_cancel, null);
@@ -111,22 +104,16 @@ public class DownloadTilesDialog {
 	private volatile boolean cancel = false;
 	private IMapDownloaderCallback callback;
 	
-	public void run(final int zoom, final int progress, final QuadRect latlonRect, final ITileSource map){
+	public void run(final int zoom, final int progress, final QuadRect latlonRect, final ITileSource map) {
 		cancel = false;
-		int numberTiles = 0;
-		for (int z = zoom; z <= progress + zoom; z++) {
-			int x1 = (int) MapUtils.getTileNumberX(z, latlonRect.left);
-			int x2 = (int) MapUtils.getTileNumberX(z, latlonRect.right);
-			int y1 = (int) MapUtils.getTileNumberY(z, latlonRect.top);
-			int y2 = (int) MapUtils.getTileNumberY(z, latlonRect.bottom);
-			numberTiles += (x2 - x1 + 1) * (y2 - y1 + 1);
-		}
+		final boolean ellipticYTile = map.isEllipticYTile();
+		int numberTiles = getNumberTiles(zoom, progress, latlonRect, ellipticYTile);
 		final ProgressDialog progressDlg = new ProgressDialog(ctx);
 		progressDlg.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-		progressDlg.setMessage(ctx.getString(R.string.shared_string_downloading) + ctx.getString(R.string.shared_string_ellipsis));
+		progressDlg.setMessage(ctx.getString(R.string.shared_string_downloading));
 		progressDlg.setCancelable(true);
 		progressDlg.setMax(numberTiles);
-		progressDlg.setOnCancelListener(new DialogInterface.OnCancelListener(){
+		progressDlg.setOnCancelListener(new DialogInterface.OnCancelListener() {
 
 			@Override
 			public void onCancel(DialogInterface dialog) {
@@ -158,8 +145,15 @@ public class DownloadTilesDialog {
 					for (int z = zoom; z <= zoom + progress && !cancel; z++) {
 						int x1 = (int) MapUtils.getTileNumberX(z, latlonRect.left);
 						int x2 = (int) MapUtils.getTileNumberX(z, latlonRect.right);
-						int y1 = (int) MapUtils.getTileNumberY(z, latlonRect.top);
-						int y2 = (int) MapUtils.getTileNumberY(z, latlonRect.bottom);
+						int y1;
+						int y2;
+						if (ellipticYTile) {
+							y1 = (int) MapUtils.getTileEllipsoidNumberY(z, latlonRect.top);
+							y2 = (int) MapUtils.getTileEllipsoidNumberY(z, latlonRect.bottom);
+						} else {
+							y1 = (int) MapUtils.getTileNumberY(z, latlonRect.top);
+							y2 = (int) MapUtils.getTileNumberY(z, latlonRect.bottom);
+						}
 						for (int x = x1; x <= x2 && !cancel; x++) {
 							for (int y = y1; y <= y2 && !cancel; y++) {
 								String tileId = rm.calculateTileId(map, x, y, z);
@@ -184,7 +178,6 @@ public class DownloadTilesDialog {
 								}
 							}
 						}
-						
 					}
 					if(cancel){
 						instance.refuseAllPreviousRequests();
@@ -211,26 +204,34 @@ public class DownloadTilesDialog {
 				}
 				progressDlg.dismiss();
 			}
-			
 		};
-		
-		
-		
 		new Thread(r, "Downloading tiles").start(); //$NON-NLS-1$
 		progressDlg.show();
 	}
 
+	private void updateLabel(final int zoom, final QuadRect latlonRect, final TextView downloadText,
+	                         final String template, int progress, boolean ellipticYTile) {
+		int numberTiles = getNumberTiles(zoom, progress, latlonRect, ellipticYTile);
+		downloadText.setText(MessageFormat.format(template, (progress + zoom) + "",
+				numberTiles, (double) numberTiles * 12 / 1000));
+	}
 
-	private void updateLabel(final int zoom, final QuadRect latlonRect, final TextView downloadText, final String template, int progress) {
+	private int getNumberTiles(int zoom, int progress, QuadRect latlonRect, boolean ellipticYTile) {
 		int numberTiles = 0;
 		for (int z = zoom; z <= progress + zoom; z++) {
 			int x1 = (int) MapUtils.getTileNumberX(z, latlonRect.left);
 			int x2 = (int) MapUtils.getTileNumberX(z, latlonRect.right);
-			int y1 = (int) MapUtils.getTileNumberY(z, latlonRect.top);
-			int y2 = (int) MapUtils.getTileNumberY(z, latlonRect.bottom);
+			int y1;
+			int y2;
+			if (ellipticYTile) {
+				y1 = (int) MapUtils.getTileEllipsoidNumberY(z, latlonRect.top);
+				y2 = (int) MapUtils.getTileEllipsoidNumberY(z, latlonRect.bottom);
+			} else {
+				y1 = (int) MapUtils.getTileNumberY(z, latlonRect.top);
+				y2 = (int) MapUtils.getTileNumberY(z, latlonRect.bottom);
+			}
 			numberTiles += (x2 - x1 + 1) * (y2 - y1 + 1);
 		}
-		downloadText.setText(MessageFormat.format(template, (progress + zoom)+"", //$NON-NLS-1$ 
-				numberTiles, (double)numberTiles*12/1000));
+		return numberTiles;
 	}
 }

@@ -10,8 +10,8 @@ import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
 import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.IconsCache;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.TrackActivity;
@@ -19,6 +19,7 @@ import net.osmand.plus.mapcontextmenu.MapContextMenu;
 import net.osmand.plus.mapcontextmenu.editors.RtePtEditor;
 import net.osmand.plus.mapcontextmenu.editors.WptPtEditor;
 import net.osmand.plus.mapcontextmenu.editors.WptPtEditor.OnDismissListener;
+import net.osmand.plus.views.layers.ContextMenuLayer;
 
 public class AddGpxPointBottomSheetHelper implements OnDismissListener {
 	private final View view;
@@ -28,7 +29,7 @@ public class AddGpxPointBottomSheetHelper implements OnDismissListener {
 	private final MapActivity mapActivity;
 	private final MapContextMenu contextMenu;
 	private final ContextMenuLayer contextMenuLayer;
-	private final IconsCache iconsCache;
+	private final UiUtilities iconsCache;
 	private String titleText;
 	private boolean applyingPositionMode;
 	private NewGpxPoint newGpxPoint;
@@ -36,7 +37,7 @@ public class AddGpxPointBottomSheetHelper implements OnDismissListener {
 
 	public AddGpxPointBottomSheetHelper(final MapActivity activity, ContextMenuLayer ctxMenuLayer) {
 		this.contextMenuLayer = ctxMenuLayer;
-		iconsCache = activity.getMyApplication().getIconsCache();
+		iconsCache = activity.getMyApplication().getUIUtilities();
 		mapActivity = activity;
 		contextMenu = activity.getContextMenu();
 		view = activity.findViewById(R.id.add_gpx_point_bottom_sheet);
@@ -52,14 +53,18 @@ public class AddGpxPointBottomSheetHelper implements OnDismissListener {
 				LatLon latLon = contextMenu.getLatLon();
 				if (pointDescription.isWpt()) {
 					WptPtEditor editor = activity.getContextMenu().getWptPtPointEditor();
-					editor.setOnDismissListener(AddGpxPointBottomSheetHelper.this);
-					editor.setNewGpxPointProcessing(true);
-					editor.add(gpx, latLon, titleText);
+					if (editor != null) {
+						editor.setOnDismissListener(AddGpxPointBottomSheetHelper.this);
+						editor.setNewGpxPointProcessing(true);
+						editor.add(gpx, latLon, titleText);
+					}
 				} else if (pointDescription.isRte()) {
 					RtePtEditor editor = activity.getContextMenu().getRtePtPointEditor();
-					editor.setOnDismissListener(AddGpxPointBottomSheetHelper.this);
-					editor.setNewGpxPointProcessing(true);
-					editor.add(gpx, latLon, titleText);
+					if (editor != null) {
+						editor.setOnDismissListener(AddGpxPointBottomSheetHelper.this);
+						editor.setNewGpxPointProcessing(true);
+						editor.add(gpx, latLon, titleText);
+					}
 				}
 			}
 		});
@@ -81,7 +86,7 @@ public class AddGpxPointBottomSheetHelper implements OnDismissListener {
 	}
 
 	public void setTitle(String title) {
-		if (title.equals("")) {
+		if (title.isEmpty()) {
 			if (pointDescription.isWpt()) {
 				title = mapActivity.getString(R.string.waypoint_one);
 			} else if (pointDescription.isRte()) {

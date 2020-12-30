@@ -1,25 +1,27 @@
 package net.osmand.plus.base.bottomsheetmenu;
 
-import android.support.annotation.LayoutRes;
+import android.content.Context;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import net.osmand.plus.OsmandApplication;
+import androidx.annotation.LayoutRes;
+
 import net.osmand.plus.R;
 
 public class BaseBottomSheetItem {
 
 	public static final int INVALID_POSITION = -1;
 	public static final int INVALID_ID = -1;
+	public static final int INVALID_VALUE = -1;
 
 	protected View view;
 	@LayoutRes
 	protected int layoutId = INVALID_ID;
 	private Object tag;
 	private boolean disabled;
-	private View.OnClickListener onClickListener;
+	protected View.OnClickListener onClickListener;
 	protected int position = INVALID_POSITION;
 
 	public View getView() {
@@ -48,8 +50,8 @@ public class BaseBottomSheetItem {
 
 	}
 
-	public void inflate(OsmandApplication app, ViewGroup container, boolean nightMode) {
-		View view = getView(app, container, nightMode);
+	public void inflate(Context context, ViewGroup container, boolean nightMode) {
+		View view = getView(context, container, nightMode);
 		if (tag != null) {
 			view.setTag(tag);
 		}
@@ -66,13 +68,13 @@ public class BaseBottomSheetItem {
 		}
 	}
 
-	private View getView(OsmandApplication app, ViewGroup parent, boolean nightMode) {
+	private View getView(Context context, ViewGroup parent, boolean nightMode) {
 		if (view != null) {
 			return view;
 		}
 		if (layoutId != INVALID_ID) {
 			final int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
-			return view = LayoutInflater.from(new ContextThemeWrapper(app, themeRes))
+			return view = LayoutInflater.from(new ContextThemeWrapper(context, themeRes))
 					.inflate(layoutId, parent, false);
 		}
 		throw new RuntimeException("BottomSheetItem must have specified view or layoutId.");

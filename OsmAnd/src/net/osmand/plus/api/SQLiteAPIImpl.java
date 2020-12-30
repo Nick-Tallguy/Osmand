@@ -1,21 +1,34 @@
 package net.osmand.plus.api;
 
+import net.osmand.PlatformUtil;
 import net.osmand.plus.OsmandApplication;
+
+import org.apache.commons.logging.Log;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
 public class SQLiteAPIImpl implements SQLiteAPI {
 
 	private OsmandApplication app;
+	private static final Log LOG = PlatformUtil.getLog(SQLiteAPIImpl.class);
 
 	public SQLiteAPIImpl(OsmandApplication app) {
 		this.app = app;
 	}
 
+	@SuppressLint("InlinedApi")
 	@Override
 	public SQLiteConnection getOrCreateDatabase(String name, boolean readOnly) {
-		android.database.sqlite.SQLiteDatabase db = app.openOrCreateDatabase(name,
-				readOnly ? SQLiteDatabase.OPEN_READONLY : (SQLiteDatabase.OPEN_READWRITE | SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING), null);
+		android.database.sqlite.SQLiteDatabase db = null;
+		try {
+			db = app.openOrCreateDatabase(name, Context.MODE_PRIVATE
+					| (readOnly ? 0 : Context.MODE_ENABLE_WRITE_AHEAD_LOGGING), null);
+		} catch (RuntimeException e) {
+			LOG.error(e.getMessage(), e);
+		}
 		if(db == null) {
 			return null;
 		}
@@ -75,11 +88,22 @@ public class SQLiteAPIImpl implements SQLiteAPI {
 				public void close() {
 					c.close();
 				}
+				
+				public boolean isNull(int ind) {
+					return c.isNull(ind);
+				}
+
+				@Override
+				public int getColumnIndex(String columnName) {
+					return c.getColumnIndex(columnName);
+				}
+
 
 				@Override
 				public double getDouble(int ind) {
 					return c.getDouble(ind);
 				}
+				
 
 				@Override
 				public long getLong(int ind) {

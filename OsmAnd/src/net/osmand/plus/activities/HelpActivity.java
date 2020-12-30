@@ -5,16 +5,17 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.IdRes;
-import android.support.annotation.StringRes;
-import android.support.v4.app.FragmentActivity;
-import android.support.v4.content.ContextCompat;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.IdRes;
+import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
 
 import net.osmand.AndroidUtils;
 import net.osmand.plus.ContextMenuAdapter;
@@ -41,7 +42,7 @@ public class HelpActivity extends OsmandActionBarActivity implements AdapterView
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.fragment_help_screen);
 
-		ContextMenuAdapter contextMenuAdapter = new ContextMenuAdapter();
+		ContextMenuAdapter contextMenuAdapter = new ContextMenuAdapter(getMyApplication());
 		contextMenuAdapter.setDefaultLayoutId(R.layout.two_line_with_images_list_item);
 
 		createBeginWithOsmandItems(contextMenuAdapter);
@@ -58,10 +59,12 @@ public class HelpActivity extends OsmandActionBarActivity implements AdapterView
 		ListView listView = (ListView) findViewById(android.R.id.list);
 		listView.setAdapter(mAdapter);
 		listView.setOnItemClickListener(this);
-		int dividerColor = lightContent ? R.color.icon_color_light : R.color.dialog_inactive_text_color_dark;
+		int dividerColor = lightContent ? R.color.divider_color_light : R.color.divider_color_dark;
 		Drawable dividerDrawable = new ColorDrawable(ContextCompat.getColor(this, dividerColor));
 		listView.setDivider(dividerDrawable);
 		listView.setDividerHeight(AndroidUtils.dpToPx(this, 1f));
+		listView.setBackgroundColor(getResources().getColor(
+				lightContent ? R.color.list_background_color_light : R.color.list_background_color_dark));
 
 		setTitle(R.string.shared_string_help);
 		setupHomeButton();
@@ -96,12 +99,16 @@ public class HelpActivity extends OsmandActionBarActivity implements AdapterView
 				R.string.navigation_item_description, "feature_articles/navigation.html"));
 		contextMenuAdapter.addItem(createItem(R.string.faq_item,
 				R.string.faq_item_description, "feature_articles/faq.html"));
+		contextMenuAdapter.addItem(createItem(R.string.map_legend,
+				R.string.legend_item_description, "feature_articles/map-legend.html"));
 	}
 
 	private void createSocialNetworksItems(ContextMenuAdapter contextMenuAdapter) {
 		contextMenuAdapter.addItem(createCategory(R.string.follow_us));
 		contextMenuAdapter.addItem(createSocialItem(R.string.twitter, R.string.twitter_address,
 				R.drawable.ic_action_social_twitter));
+	        contextMenuAdapter.addItem(createSocialItem(R.string.reddit, R.string.reddit_address,
+				R.drawable.ic_action_social_reddit));
 		contextMenuAdapter.addItem(createSocialItem(R.string.facebook, R.string.facebook_address,
 				R.drawable.ic_action_social_facebook));
 		contextMenuAdapter.addItem(createSocialItem(R.string.vk, R.string.vk_address,
@@ -122,8 +129,28 @@ public class HelpActivity extends OsmandActionBarActivity implements AdapterView
 				"feature_articles/find-something-on-map.html"));
 		contextMenuAdapter.addItem(createItem(R.string.planning_trip_item, NULL_ID,
 				"feature_articles/trip-planning.html"));
-		contextMenuAdapter.addItem(createItem(R.string.map_legend, NULL_ID,
-				"feature_articles/map-legend.html"));
+		contextMenuAdapter.addItem(createItem(R.string.navigation_profiles_item, NULL_ID,
+				"feature_articles/navigation-profiles.html"));
+		contextMenuAdapter.addItem(createItem(R.string.osmand_purchases_item, NULL_ID,
+				"feature_articles/osmand_purchases.html"));
+		contextMenuAdapter.addItem(createItem(R.string.subscription_osmandlive_item, NULL_ID,
+				"feature_articles/subscription.html"));
+		contextMenuAdapter.addItem(createItem(R.string.favorites_item, NULL_ID,
+				"feature_articles/favourites.html"));
+		contextMenuAdapter.addItem(createItem(R.string.map_markers_item, NULL_ID,
+				"feature_articles/map-markers.html"));
+		contextMenuAdapter.addItem(createItem(R.string.travel_item, NULL_ID,
+				"feature_articles/travel.html"));
+		contextMenuAdapter.addItem(createItem(R.string.plan_a_route, NULL_ID,
+				"feature_articles/plan-route.html"));
+		contextMenuAdapter.addItem(createItem(R.string.radius_ruler_item, NULL_ID,
+				"feature_articles/ruler.html"));
+		contextMenuAdapter.addItem(createItem(R.string.quick_action_item, NULL_ID,
+				"feature_articles/quick-action.html"));
+		contextMenuAdapter.addItem(createItem(R.string.mapillary_item, NULL_ID,
+				"feature_articles/mapillary.html"));
+		contextMenuAdapter.addItem(createItem(R.string.tracker_item, NULL_ID,
+				"feature_articles/tracker.html"));
 	}
 
 	private void createPluginsItems(ContextMenuAdapter contextMenuAdapter) {
@@ -145,9 +172,11 @@ public class HelpActivity extends OsmandActionBarActivity implements AdapterView
 				"feature_articles/technical-articles.html"));
 		contextMenuAdapter.addItem(createItem(R.string.versions_item, NULL_ID,
 				"feature_articles/changes.html"));
+		contextMenuAdapter.addItem(createItem(R.string.what_is_new, NULL_ID,
+				"feature_articles/osmand-3-9-released.html"));
 
 		String releasedate = "";
-		if (!this.getString(R.string.app_edition).equals("")) {
+		if (!this.getString(R.string.app_edition).isEmpty()) {
 			releasedate = ", " + this.getString(R.string.shared_string_release).toLowerCase() + ": " + this.getString(R.string.app_edition);
 		}
 		String version = Version.getFullVersion(getMyApplication()) + releasedate;

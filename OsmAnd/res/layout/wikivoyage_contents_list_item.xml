@@ -11,7 +11,6 @@
 		android:id="@+id/upper_row_divider"
 		android:layout_width="wrap_content"
 		android:layout_height="1dp"
-		android:layout_marginBottom="@dimen/bottom_sheet_divider_margin_bottom"
 		android:background="?attr/wikivoyage_card_divider_color" />
 
 	<LinearLayout
@@ -34,23 +33,20 @@
 			tools:drawableStart="@drawable/ic_action_list_header"
 			tools:text="@string/shared_string_contents" />
 
-		<ImageView
+		<androidx.appcompat.widget.AppCompatImageView
 			android:id="@+id/explist_indicator"
 			android:layout_width="wrap_content"
 			android:layout_height="match_parent"
 			android:layout_gravity="end"
 			android:paddingLeft="@dimen/list_content_padding"
 			android:paddingRight="@dimen/list_content_padding"
+			android:background="?attr/selectableItemBackground"
 			android:scaleType="center"
-			tools:src="@drawable/ic_action_arrow_up" />
+			android:visibility="gone"
+			tools:src="@drawable/ic_action_arrow_up"
+			android:paddingEnd="@dimen/list_content_padding"
+			android:paddingStart="@dimen/list_content_padding" />
 
 	</LinearLayout>
-
-	<View
-		android:id="@+id/bottom_row_divider"
-		android:layout_width="wrap_content"
-		android:layout_height="1dp"
-		android:layout_marginTop="@dimen/bottom_sheet_divider_margin_top"
-		android:background="?attr/wikivoyage_card_divider_color" />
 
 </LinearLayout>

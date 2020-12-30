@@ -6,21 +6,20 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/ctx_menu_info_view_bg"
+    android:background="?attr/activity_background_color"
     android:orientation="vertical">
 
-    <android.support.design.widget.AppBarLayout
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="@dimen/dashboard_map_toolbar"
         android:background="?attr/actionModeBackground">
 
-        <android.support.v7.widget.Toolbar
+        <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="@dimen/dashboard_map_toolbar"
             android:minHeight="@dimen/dashboard_map_toolbar"
-            app:contentInsetLeft="54dp"
-            app:contentInsetStart="54dp">
+            android:padding="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -53,12 +52,13 @@
                     android:textColor="@color/color_white"
                     android:textSize="@dimen/default_desc_text_size"
                     tools:drawableRight="@drawable/ic_action_car_dark"
-                    tools:text="car"/>
+                    tools:text="car"
+	                tools:drawableEnd="@drawable/ic_action_car_dark" />
             </LinearLayout>
 
-        </android.support.v7.widget.Toolbar>
+        </androidx.appcompat.widget.Toolbar>
 
-    </android.support.design.widget.AppBarLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -71,14 +71,16 @@
             android:background="?attr/actionModeBackground"
             android:paddingTop="@dimen/action_bar_image_top_margin_land">
 
-            <ImageView
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/action_bar_image"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginLeft="@dimen/bottom_sheet_content_margin_small"
                 android:layout_marginRight="@dimen/bottom_sheet_content_margin_small"
-                tools:src="@drawable/img_help_markers_direction_device_night"/>
+                tools:src="@drawable/img_help_markers_direction_device_night"
+	            android:layout_marginStart="@dimen/bottom_sheet_content_margin_small"
+	            android:layout_marginEnd="@dimen/bottom_sheet_content_margin_small" />
         </FrameLayout>
 
         <com.github.ksoichiro.android.observablescrollview.ObservableScrollView
@@ -91,7 +93,9 @@
                 android:layout_height="match_parent"
                 android:layout_marginLeft="@dimen/content_padding"
                 android:layout_marginRight="@dimen/content_padding"
-                android:orientation="vertical">
+                android:orientation="vertical"
+	            android:layout_marginEnd="@dimen/content_padding"
+	            android:layout_marginStart="@dimen/content_padding">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -128,7 +132,8 @@
                             android:textColor="?attr/contextMenuButtonColor"
                             android:textSize="@dimen/default_list_text_size"
                             tools:drawableRight="@drawable/ic_action_arrow_drop_down"
-                            tools:text="Two"/>
+                            tools:text="Two"
+	                        tools:drawableEnd="@drawable/ic_action_arrow_drop_down" />
                     </LinearLayout>
 
                     <View
@@ -163,7 +168,9 @@
                         android:layout_height="@dimen/bottom_sheet_title_height"
                         android:background="?attr/selectableItemBackground"
                         android:paddingLeft="@dimen/content_padding"
-                        android:paddingRight="@dimen/content_padding">
+                        android:paddingRight="@dimen/content_padding"
+	                    android:paddingStart="@dimen/content_padding"
+	                    android:paddingEnd="@dimen/content_padding">
 
                         <TextView
                             android:layout_width="0dp"
@@ -175,7 +182,7 @@
                             android:text="@string/show_direction"
                             android:textAppearance="@style/TextAppearance.ListItemTitle"/>
 
-                        <android.support.v7.widget.SwitchCompat
+                        <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/distance_indication_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -204,7 +211,9 @@
                         android:paddingTop="@dimen/content_padding_small"
                         android:text="@string/distance_indication_descr"
                         android:textColor="?android:textColorSecondary"
-                        android:textSize="@dimen/default_desc_text_size"/>
+                        android:textSize="@dimen/default_desc_text_size"
+	                    android:layout_marginStart="@dimen/content_padding"
+	                    android:layout_marginEnd="@dimen/content_padding" />
 
                     <LinearLayout
                         android:id="@+id/top_bar_row"
@@ -217,7 +226,7 @@
                         android:paddingRight="@dimen/content_padding_small"
                         android:paddingStart="@dimen/content_padding">
 
-                        <ImageView
+                        <androidx.appcompat.widget.AppCompatImageView
                             android:id="@+id/top_bar_icon"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -257,7 +266,7 @@
                         android:paddingRight="@dimen/content_padding_small"
                         android:paddingStart="@dimen/content_padding">
 
-                        <ImageView
+                        <androidx.appcompat.widget.AppCompatImageView
                             android:id="@+id/widget_icon"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -301,7 +310,9 @@
                         android:layout_height="@dimen/bottom_sheet_title_height"
                         android:background="?attr/selectableItemBackground"
                         android:paddingLeft="@dimen/content_padding"
-                        android:paddingRight="@dimen/content_padding">
+                        android:paddingRight="@dimen/content_padding"
+	                    android:paddingStart="@dimen/content_padding"
+	                    android:paddingEnd="@dimen/content_padding">
 
                         <TextView
                             android:layout_width="0dp"
@@ -313,7 +324,7 @@
                             android:text="@string/show_arrows_on_the_map"
                             android:textAppearance="@style/TextAppearance.ListItemTitle"/>
 
-                        <android.support.v7.widget.SwitchCompat
+                        <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/show_arrows_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -342,7 +353,9 @@
                         android:paddingTop="@dimen/content_padding_small"
                         android:text="@string/show_arrows_descr"
                         android:textColor="?android:textColorSecondary"
-                        android:textSize="@dimen/default_desc_text_size"/>
+                        android:textSize="@dimen/default_desc_text_size"
+	                    android:layout_marginStart="@dimen/content_padding"
+	                    android:layout_marginEnd="@dimen/content_padding" />
 
                 </LinearLayout>
 
@@ -359,7 +372,9 @@
                         android:layout_height="@dimen/bottom_sheet_title_height"
                         android:background="?attr/selectableItemBackground"
                         android:paddingLeft="@dimen/content_padding"
-                        android:paddingRight="@dimen/content_padding">
+                        android:paddingRight="@dimen/content_padding"
+	                    android:paddingStart="@dimen/content_padding"
+	                    android:paddingEnd="@dimen/content_padding">
 
                         <TextView
                             android:layout_width="0dp"
@@ -371,7 +386,7 @@
                             android:text="@string/show_guide_line"
                             android:textAppearance="@style/TextAppearance.ListItemTitle"/>
 
-                        <android.support.v7.widget.SwitchCompat
+                        <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/show_guide_line_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -400,14 +415,15 @@
                         android:paddingTop="@dimen/content_padding_small"
                         android:text="@string/show_guide_line_descr"
                         android:textColor="?android:textColorSecondary"
-                        android:textSize="@dimen/default_desc_text_size"/>
+                        android:textSize="@dimen/default_desc_text_size"
+	                    android:layout_marginEnd="@dimen/content_padding"
+	                    android:layout_marginStart="@dimen/content_padding" />
 
                 </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/content_padding"
                     android:layout_marginTop="@dimen/content_padding"
                     android:background="?attr/bg_card"
                     android:orientation="vertical">
@@ -418,7 +434,9 @@
                         android:layout_height="@dimen/bottom_sheet_title_height"
                         android:background="?attr/selectableItemBackground"
                         android:paddingLeft="@dimen/content_padding"
-                        android:paddingRight="@dimen/content_padding">
+                        android:paddingRight="@dimen/content_padding"
+	                    android:paddingEnd="@dimen/content_padding"
+	                    android:paddingStart="@dimen/content_padding">
 
                         <TextView
                             android:layout_width="0dp"
@@ -430,7 +448,7 @@
                             android:text="@string/one_tap_active"
                             android:textAppearance="@style/TextAppearance.ListItemTitle"/>
 
-                        <android.support.v7.widget.SwitchCompat
+                        <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/one_tap_active_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -459,7 +477,72 @@
                         android:paddingTop="@dimen/content_padding_small"
                         android:text="@string/one_tap_active_descr"
                         android:textColor="?android:textColorSecondary"
-                        android:textSize="@dimen/default_desc_text_size"/>
+                        android:textSize="@dimen/default_desc_text_size"
+	                    android:layout_marginStart="@dimen/content_padding"
+	                    android:layout_marginEnd="@dimen/content_padding" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/content_padding"
+                    android:layout_marginTop="@dimen/content_padding"
+                    android:background="?attr/bg_card"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/keep_passed_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/bottom_sheet_title_height"
+                        android:background="?attr/selectableItemBackground"
+                        android:paddingLeft="@dimen/content_padding"
+                        android:paddingRight="@dimen/content_padding"
+	                    android:paddingStart="@dimen/content_padding"
+	                    android:paddingEnd="@dimen/content_padding">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/keep_passed_markers"
+                            android:textAppearance="@style/TextAppearance.ListItemTitle"/>
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/keep_passed_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical|end"
+                            android:layout_marginLeft="@dimen/bottom_sheet_content_margin_small"
+                            android:layout_marginStart="@dimen/bottom_sheet_content_margin_small"
+                            android:background="@null"
+                            android:clickable="false"
+                            android:focusable="false"
+                            android:focusableInTouchMode="false"/>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginLeft="@dimen/content_padding"
+                        android:layout_marginStart="@dimen/content_padding"
+                        android:background="?attr/dashboard_divider"/>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="@dimen/content_padding"
+                        android:layout_marginRight="@dimen/content_padding"
+                        android:paddingBottom="@dimen/content_padding_small"
+                        android:paddingTop="@dimen/content_padding_small"
+                        android:text="@string/keep_passed_markers_descr"
+                        android:textColor="?android:textColorSecondary"
+                        android:textSize="@dimen/default_desc_text_size"
+	                    android:layout_marginStart="@dimen/content_padding"
+	                    android:layout_marginEnd="@dimen/content_padding" />
 
                 </LinearLayout>
 

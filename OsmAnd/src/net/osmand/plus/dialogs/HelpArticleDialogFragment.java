@@ -3,19 +3,19 @@ package net.osmand.plus.dialogs;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.Toolbar;
+import androidx.fragment.app.DialogFragment;
+
+import net.osmand.AndroidUtils;
 import net.osmand.PlatformUtil;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.R;
 
 import org.apache.commons.logging.Log;
@@ -43,8 +43,7 @@ public class HelpArticleDialogFragment extends DialogFragment {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		boolean isLightTheme = (getOsmandApplication())
-				.getSettings().OSMAND_THEME.get() == OsmandSettings.OSMAND_LIGHT_THEME;
+		boolean isLightTheme = (getOsmandApplication()).getSettings().isLightContent();
 		int themeId = isLightTheme ? R.style.OsmandLightTheme : R.style.OsmandDarkTheme;
 		setStyle(STYLE_NO_FRAME, themeId);
 	}
@@ -57,6 +56,7 @@ public class HelpArticleDialogFragment extends DialogFragment {
 		final View view = inflater.inflate(R.layout.fragment_help_article, container, false);
 
 		Toolbar toolbar = (Toolbar) view.findViewById(R.id.toolbar);
+		toolbar.setNavigationIcon(AndroidUtils.getNavigationIconResId(getContext()));
 		toolbar.setNavigationContentDescription(R.string.access_shared_string_navigate_up);
 		toolbar.setNavigationOnClickListener(new View.OnClickListener() {
 			@Override
@@ -79,21 +79,7 @@ public class HelpArticleDialogFragment extends DialogFragment {
 
 		//Scale web view font size with system font size
 		float scale = getActivity().getResources().getConfiguration().fontScale;
-		if (android.os.Build.VERSION.SDK_INT >= 14) {
-			webView.getSettings().setTextZoom((int) (scale * 100f));
-		} else {
-			if (scale <= 0.7f) {
-				webView.getSettings().setTextSize(WebSettings.TextSize.SMALLEST);
-			} else if (scale <= 0.85f) {
-				webView.getSettings().setTextSize(WebSettings.TextSize.SMALLER);
-			} else if (scale <= 1.0f) {
-				webView.getSettings().setTextSize(WebSettings.TextSize.NORMAL);
-			} else if (scale <= 1.15f) {
-				webView.getSettings().setTextSize(WebSettings.TextSize.LARGER);
-			} else {
-				webView.getSettings().setTextSize(WebSettings.TextSize.LARGEST);
-			}
-		}
+		webView.getSettings().setTextZoom((int) (scale * 100f));
 
 		if (assetName != null) {
 			String fileContents = getAssetAsString(assetName, getActivity());

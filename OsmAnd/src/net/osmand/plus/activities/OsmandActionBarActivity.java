@@ -1,24 +1,26 @@
 package net.osmand.plus.activities;
 
-import android.graphics.PorterDuff;
+import android.annotation.SuppressLint;
 import android.graphics.drawable.Drawable;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.view.ViewGroup;
+
+import net.osmand.AndroidUtils;
+import androidx.appcompat.app.ActionBar;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 
-public class OsmandActionBarActivity extends AppCompatActivity {
+@SuppressLint("Registered")
+public class OsmandActionBarActivity extends OsmandInAppPurchaseActivity {
 
 	protected boolean haveHomeButton = true;
 
     //should be called after set content view
-    protected void setupHomeButton(){
-        Drawable back = ((OsmandApplication)getApplication()).getIconsCache().getIcon(R.drawable.ic_arrow_back);
-        back.setColorFilter(ContextCompat.getColor(this, R.color.color_white), PorterDuff.Mode.MULTIPLY);
+    protected void setupHomeButton() {
+    	boolean lightTheme = getMyApplication().getSettings().isLightContent();
+        Drawable back = ((OsmandApplication)getApplication()).getUIUtilities().getIcon(AndroidUtils.getNavigationIconResId(getApplication()),
+				lightTheme ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark);
         final ActionBar supportActionBar = getSupportActionBar();
         if (supportActionBar != null) {
             supportActionBar.setHomeButtonEnabled(true);
@@ -50,8 +52,4 @@ public class OsmandActionBarActivity extends AppCompatActivity {
 			setupHomeButton();
 		}
     }
-
-	public OsmandApplication getMyApplication() {
-		return (OsmandApplication) getApplication();
-	}
 }

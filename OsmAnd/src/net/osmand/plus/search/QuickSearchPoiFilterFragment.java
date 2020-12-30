@@ -2,13 +2,8 @@ package net.osmand.plus.search;
 
 import android.content.Context;
 import android.content.DialogInterface;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.PopupMenu;
-import android.support.v7.widget.SwitchCompat;
-import android.support.v7.widget.Toolbar;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -28,23 +23,29 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.appcompat.widget.SwitchCompat;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.DialogFragment;
+
 import net.osmand.AndroidUtils;
 import net.osmand.osm.AbstractPoiType;
 import net.osmand.osm.MapPoiTypes;
 import net.osmand.osm.PoiCategory;
 import net.osmand.osm.PoiFilter;
 import net.osmand.osm.PoiType;
-import net.osmand.plus.IconsCache;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.dialogs.DirectionsDialogs;
 import net.osmand.plus.poi.PoiUIFilter;
 import net.osmand.plus.render.RenderingIcons;
 import net.osmand.plus.widgets.TextViewEx;
 import net.osmand.util.Algorithms;
 
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -83,6 +84,7 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 	private ArrayList<String> collapsedCategories = new ArrayList<>();
 	private ArrayList<String> showAllCategories = new ArrayList<>();
 	private Map<PoiType, String> poiAdditionalsTranslations = new HashMap<>();
+	private boolean isLightTheme;
 
 	public QuickSearchPoiFilterFragment() {
 	}
@@ -94,7 +96,7 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		boolean isLightTheme = getMyApplication().getSettings().OSMAND_THEME.get() == OsmandSettings.OSMAND_LIGHT_THEME;
+		isLightTheme = getMyApplication().getSettings().isLightContent();
 		int themeId = isLightTheme ? R.style.OsmandLightTheme : R.style.OsmandDarkTheme;
 		setStyle(STYLE_NO_FRAME, themeId);
 	}
@@ -145,7 +147,9 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 		description.setText(filter.getName());
 
 		Toolbar toolbar = (Toolbar) view.findViewById(R.id.toolbar);
-		toolbar.setNavigationIcon(app.getIconsCache().getIcon(R.drawable.ic_action_remove_dark));
+		Drawable icClose = app.getUIUtilities().getIcon(R.drawable.ic_action_remove_dark,
+				isLightTheme ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark);
+		toolbar.setNavigationIcon(icClose);
 		toolbar.setNavigationContentDescription(R.string.shared_string_close);
 		toolbar.setNavigationOnClickListener(new View.OnClickListener() {
 			@Override
@@ -153,12 +157,14 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 				dismiss();
 			}
 		});
+		toolbar.setBackgroundColor(ContextCompat.getColor(app, isLightTheme ? R.color.app_bar_color_light : R.color.app_bar_color_dark));
+		toolbar.setTitleTextColor(ContextCompat.getColor(app, isLightTheme ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark));
 
 		ImageButton moreButton = (ImageButton) view.findViewById(R.id.moreButton);
 		moreButton.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				IconsCache iconsCache = app.getIconsCache();
+				UiUtilities iconsCache = app.getUIUtilities();
 				final PopupMenu optionsMenu = new PopupMenu(getContext(), v);
 				DirectionsDialogs.setupPopUpMenuIcon(optionsMenu);
 				MenuItem item;
@@ -208,8 +214,8 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 
 		listView = (ListView) view.findViewById(android.R.id.list);
 		listView.setBackgroundColor(getResources().getColor(
-				app.getSettings().isLightContent() ? R.color.ctx_menu_info_view_bg_light
-						: R.color.ctx_menu_info_view_bg_dark));
+				app.getSettings().isLightContent() ? R.color.activity_background_color_light
+						: R.color.activity_background_color_dark));
 
 		View editTextView = inflater.inflate(R.layout.poi_filter_list_item, listView, false);
 		editText = (EditText) editTextView.findViewById(R.id.editText);
@@ -235,7 +241,7 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 
 		editText.setVisibility(View.VISIBLE);
 		final ImageView textEditIcon = (ImageView) editTextView.findViewById(R.id.icon);
-		textEditIcon.setImageDrawable(app.getIconsCache().getThemedIcon(R.drawable.ic_action_search_dark));
+		textEditIcon.setImageDrawable(app.getUIUtilities().getThemedIcon(R.drawable.ic_action_search_dark));
 		textEditIcon.setVisibility(View.VISIBLE);
 		editTextView.findViewById(R.id.titleBold).setVisibility(View.GONE);
 		editTextView.findViewById(R.id.titleButton).setVisibility(View.GONE);
@@ -322,8 +328,9 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 			public void onClick(DialogInterface dialog, int which) {
 
 				if (app.getPoiFilters().removePoiFilter(filter)) {
-					Toast.makeText(getContext(), MessageFormat.format(getContext().getText(R.string.edit_filter_delete_message).toString(),
-							filter.getName()), Toast.LENGTH_SHORT).show();
+					Toast.makeText(getContext(),
+							getContext().getString(R.string.edit_filter_delete_message, filter.getName()),
+							Toast.LENGTH_SHORT).show();
 					app.getSearchUICore().refreshCustomPoiFilters();
 					QuickSearchDialogFragment quickSearchDialogFragment = (QuickSearchDialogFragment) getParentFragment();
 					quickSearchDialogFragment.reloadCategories();
@@ -365,14 +372,16 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 		builder.setPositiveButton(R.string.shared_string_save, new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
-				PoiUIFilter nFilter = new PoiUIFilter(editText.getText().toString(), null, filter.getAcceptedTypes(), app);
+				String filterName = editText.getText().toString();
+				PoiUIFilter nFilter = new PoiUIFilter(filterName, null, filter.getAcceptedTypes(), app);
 				applyFilterFields();
 				if (!Algorithms.isEmpty(filter.getFilterByName())) {
 					nFilter.setSavedFilterByName(filter.getFilterByName());
 				}
-				if (app.getPoiFilters().createPoiFilter(nFilter)) {
-					Toast.makeText(getContext(), MessageFormat.format(getContext().getText(R.string.edit_filter_create_message).toString(),
-							editText.getText().toString()), Toast.LENGTH_SHORT).show();
+				if (app.getPoiFilters().createPoiFilter(nFilter, false)) {
+					Toast.makeText(getContext(), 
+						       getContext().getString(R.string.edit_filter_create_message, filterName),
+						       Toast.LENGTH_SHORT).show();
 					app.getSearchUICore().refreshCustomPoiFilters();
 					((QuickSearchDialogFragment) getParentFragment()).replaceQueryWithUiFilter(nFilter, "");
 					((QuickSearchDialogFragment) getParentFragment()).reloadCategories();
@@ -403,6 +412,11 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 		if (editText.hasFocus()) {
 			AndroidUtils.hideSoftKeyboard(getActivity(), editText);
 		}
+	}
+
+	public void refreshList() {
+		initListItems();
+		updateListView();
 	}
 
 	private void updateListView() {
@@ -804,8 +818,8 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 				}
 
 				if (item.iconId != 0) {
-					icon.setImageDrawable(app.getIconsCache().getIcon(item.iconId,
-							app.getSettings().isLightContent() ? R.color.icon_color : R.color.color_white));
+					icon.setImageDrawable(app.getUIUtilities().getIcon(item.iconId,
+							app.getSettings().isLightContent() ? R.color.icon_color_default_light : R.color.color_white));
 					icon.setVisibility(View.VISIBLE);
 				} else {
 					icon.setVisibility(View.GONE);
@@ -817,7 +831,7 @@ public class QuickSearchPoiFilterFragment extends DialogFragment {
 						titleBold.setText(item.text);
 						if (item.expandable) {
 							expandItem.setImageDrawable(item.expanded ?
-									app.getIconsCache().getThemedIcon(R.drawable.ic_action_arrow_up) : app.getIconsCache().getThemedIcon(R.drawable.ic_action_arrow_down));
+									app.getUIUtilities().getThemedIcon(R.drawable.ic_action_arrow_up) : app.getUIUtilities().getThemedIcon(R.drawable.ic_action_arrow_down));
 							expandItem.setVisibility(View.VISIBLE);
 						} else {
 							expandItem.setVisibility(View.GONE);

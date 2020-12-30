@@ -5,11 +5,10 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v7.app.AlertDialog;
+import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.LinearLayout.LayoutParams;
@@ -17,23 +16,21 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import net.osmand.IndexConstants;
+import androidx.appcompat.app.AlertDialog;
+
 import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.OsmandActionBarActivity;
+import net.osmand.plus.routing.data.StreetName;
 import net.osmand.plus.voice.AbstractPrologCommandPlayer;
-import net.osmand.plus.voice.TTSCommandPlayerImpl;
 import net.osmand.plus.voice.CommandBuilder;
 import net.osmand.plus.voice.CommandPlayer;
-import net.osmand.plus.routing.VoiceRouter;
-import net.osmand.util.Algorithms;
+import net.osmand.plus.voice.TTSCommandPlayerImpl;
 
-import java.io.File;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
-
-import alice.tuprolog.Struct;
-import alice.tuprolog.Term;
 
 
 /**
@@ -43,7 +40,9 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 
 	private String osmandVoice ="";
 	private String osmandVoiceLang ="";
-	private Button infoButton;
+	private Button buttonInfo;
+	private Button buttonDelay;
+	private Button buttonDisplay;
 
 	@Override
 	public void onCreate(Bundle icicle) {
@@ -62,41 +61,28 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 		gl.setPadding(3, 3, 3, 3);
 		
 		TextView tv = new TextView(this);
-		tv.setText("Tap a button and listen to the corresponding voice prompt to identify missing or faulty propmts.");
+		tv.setText(R.string.test_voice_desrc);
 		tv.setPadding(0, 5, 0, 7);
 		
 		ScrollView sv = new ScrollView(this);
-		gl.addView(sv, new LayoutParams(android.view.ViewGroup.LayoutParams.FILL_PARENT, 
-				android.view.ViewGroup.LayoutParams.FILL_PARENT));
+		gl.addView(sv, new LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+				android.view.ViewGroup.LayoutParams.MATCH_PARENT));
 		final LinearLayout ll = new LinearLayout(this);
 		ll.setOrientation(LinearLayout.VERTICAL);
-		sv.addView(ll, new LayoutParams(android.view.ViewGroup.LayoutParams.FILL_PARENT, 
-				android.view.ViewGroup.LayoutParams.FILL_PARENT));
+		sv.addView(ll, new LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+				android.view.ViewGroup.LayoutParams.MATCH_PARENT));
 		
 		// add buttons
 		setContentView(gl);
-		getSupportActionBar(). setTitle(R.string.test_voice_prompts);
+		getSupportActionBar().setTitle(R.string.test_voice_prompts);
 		
 		selectVoice(ll);
 	}
-	
-	private Set<String> getVoiceFiles() {
-		// read available voice data
-		File extStorage = ((OsmandApplication) getApplication()).getAppPath(IndexConstants.VOICE_INDEX_DIR);
-		Set<String> setFiles = new LinkedHashSet<String>();
-		if (extStorage.exists()) {
-			for (File f : extStorage.listFiles()) {
-				if (f.isDirectory()) {
-					setFiles.add(f.getName());
-				}
-			}
-		}
-		return setFiles;
-	}
+
 	private void selectVoice(final LinearLayout ll) {
 		String[] entries;
 		final String[] entrieValues;
-		Set<String> voiceFiles = getVoiceFiles();
+		Set<String> voiceFiles = getMyApplication().getRoutingOptionsHelper().getVoiceFiles(this);
 		entries = new String[voiceFiles.size() ];
 		entrieValues = new String[voiceFiles.size() ];
 		int k = 0;
@@ -131,7 +117,7 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 							addButtons(ll, p);
 						}
 					}
-				}, true, true);
+				}, true, true, false);
 				dialog.dismiss();
 			}
 		});
@@ -140,79 +126,36 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 
 	private String getVoiceSystemInfo() {
 		String v ="";
-		v += " \u25CF App profile:   " + ((OsmandApplication) getApplication()).getSettings().APPLICATION_MODE.get().getStringKey();
+		v += " \u25CF App profile: " + ((OsmandApplication) getApplication()).getSettings().APPLICATION_MODE.get().getStringKey();
 
-		if (((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get() == 3) {
-			v += "\n \u25CF Voice guidance output:   Media/music audio";
-		} else if (((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get() == 5) {
-			v += "\n \u25CF Voice guidance output:   Notification audio";
-		} else if (((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get() == 0) {
-			v += "\n \u25CF Voice guidance output:   Phone call audio";
+		int stream = ((OsmandApplication) getApplication()).getSettings().AUDIO_MANAGER_STREAM.get();
+		if (stream == 3) {
+			v += "\n \u25CF Voice guidance output: Media/music audio";
+		} else if (stream == 5) {
+			v += "\n \u25CF Voice guidance output: Notification audio";
+		} else if (stream == 0) {
+			v += "\n \u25CF Voice guidance output: Phone call audio";
 		} else {
-			v += "\n \u25CF Voice guidance output:   " + ((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get();
+			v += "\n \u25CF Voice guidance output: " + stream;
 		}
 
-		v += "\n \u25CF OsmAnd voice:   " + osmandVoice;
-		v += "\n \u25CF OsmAnd voice language:   " + osmandVoiceLang;
+		v += "\n \u25CF OsmAnd voice: " + osmandVoice;
+		v += "\n \u25CF OsmAnd voice language: " + osmandVoiceLang;
 
-		if (AbstractPrologCommandPlayer.getCurrentVersion() > 99) {
-			v += "\n \u25CF Voice language availability:   " + TTSCommandPlayerImpl.getTtsVoiceStatus();
-			v += "\n \u25CF Voice actually used:   " + TTSCommandPlayerImpl.getTtsVoiceUsed();
+		v += "\n \u25CF TTS voice language availability: " + TTSCommandPlayerImpl.getTtsVoiceStatus();
+		v += "\n \u25CF TTS voice actually used: " + TTSCommandPlayerImpl.getTtsVoiceUsed();
+
+		if (stream == 0) {
+			v += "\n \u25CF BT SCO: " + AbstractPrologCommandPlayer.btScoInit;
 		} else {
-			v += "\n \u25CF Voice language availability:   Recorded voice";
-			v += "\n \u25CF Voice actually used:   Recorded voice";
+			v += "\n \u25CF BT SCO: The current app profile is not set to use 'Phone call audio'.";
 		}
 
-		if (((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get() == 0) {
-			v += "\n \u25CF BT SCO:   " + AbstractPrologCommandPlayer.btScoInit;
-		} else {
-			v += "\n \u25CF BT SCO:   The current app profile is not set to use 'Phone call audio'.";
-		}
-
-		v += "\n \u25CF Phone call audio delay:   " + ((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() + "\u00A0ms";
+		//OsmandPreference<Integer> pref = ((OsmandApplication) getApplication()).getSettings().VOICE_PROMPT_DELAY[stream];
+		//if(pref != null) {
+		//	v += "\n \u25CF Voice prompt delay for selected output: " + pref.get() + "\u00A0ms";
+		//}
 		return v;
-	}
-
-	private Term street(CommandPlayer p, String name) {
-		return street(p, name, "", "", "");
-	}
-	
-	private Term street(CommandPlayer p, String name, String ref) {
-		return street(p, name, ref, "", "");
-	}
-	
-	private Term street(CommandPlayer p, String name, String ref, String dest) {
-		return street(p, name, ref, dest, "");
-	}
-	
-	private Term getTermString(String s) {
-		if(!Algorithms.isEmpty(s)) {
-			return new Struct(s);
-		}
-		return new Struct("");
-	}
-
-	private Term street(CommandPlayer p, String name, String ref, String destName, String currentName) {
-		// Pass all test strings through our character replacement method
-			ref = VoiceRouter.getSpeakablePointName(ref);
-			name = VoiceRouter.getSpeakablePointName(name);
-			destName = VoiceRouter.getSpeakablePointName(destName);
-			currentName = VoiceRouter.getSpeakablePointName(currentName);
-
-		if(p.supportsStructuredStreetNames()) {
-			Struct next = new Struct(new Term[] { getTermString(ref),
-					getTermString(name),
-					getTermString(destName) });
-			Term current = new Struct("");
-			if (currentName.length() > 0) {
-				current = new Struct(new Term[] { getTermString(""),
-						getTermString(currentName),
-						getTermString("") });
-			}
-			Struct voice = new Struct("voice", next, current );
-			return voice;
-		}
-		return new Struct(name);
 	}
 
 	private void addButtons(final LinearLayout ll, CommandPlayer p) {
@@ -221,27 +164,33 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 		addButton(ll, "\u25BA (1.2)  New route calculated, 1350m, 3680sec (01:01:20)", builder(p).newRouteCalculated(1350, 3680));
 		addButton(ll, "\u25BA (1.3)  New route calculated 3700m, 7320sec (02:02)", builder(p).newRouteCalculated(3700, 7320));
 		addButton(ll, "\u25BA (1.4)  New route calculated 9100m, 10980sec (03:03)", builder(p).newRouteCalculated(9100, 10980));
+		addButton(ll, "\u25BA (1.5)  New route calculated, 1500m, 4820sec (01:20:20)", builder(p).newRouteCalculated(1500, 4820));
 		addButton(ll, "\u25BA (2.1)  Route recalculated 11500m, 18600sec (05:10)", builder(p).routeRecalculated(11500, 18600));
-		addButton(ll, "\u25BA (2.2)  Route recalculated 19633m, 26700sec (07:25)", builder(p).routeRecalculated(19633, 26700));
-		addButton(ll, "\u25BA (2.3)  Route recalculated 89750m, 55800sec (15:30)", builder(p).routeRecalculated(89750, 55800));
-		addButton(ll, "\u25BA (2.4)  Route recalculated 125900m, 92700sec (25:45)", builder(p).routeRecalculated(125900, 92700));
+		addButton(ll, "\u25BA (2.2)  Route recalculated 19633m, 26700sec (07:25)", builder(p).routeRecalculated(19633, 26700) );
+		addButton(ll, "\u25BA (2.3)  Route recalculated 89750m, 55800sec (15:30)", builder(p).routeRecalculated(89750, 55800) );
+		addButton(ll, "\u25BA (2.4)  Route recalculated 125900m, 92700sec (25:45)", builder(p).routeRecalculated(125900, 92700) );
 
-		addButton(ll, "All turn types: prepareTurn, makeTurnIn, turn:", builder(p));
+		addButton(ll, "All turn types: prepareTurn, makeTurnIn, turn, takeExit, takeExitIn:", builder(p));
 		addButton(ll, "\u25BA (3.1)  After 1520m turn slightly left", builder(p).prepareTurn(AbstractPrologCommandPlayer.A_LEFT_SL, 1520, street(p, "")));
 		addButton(ll, "\u25BA (3.2)  In 450m turn sharply left onto 'Hauptstra"+"\u00df"+"e', then bear right", builder(p).turn(AbstractPrologCommandPlayer.A_LEFT_SH, 450, street(p, "Hauptstraße")).then().bearRight(street(p, "")));
 		addButton(ll, "\u25BA (3.3)  Turn left, then in 100m turn slightly right", builder(p).turn(AbstractPrologCommandPlayer.A_LEFT, street(p, "")).then().turn(AbstractPrologCommandPlayer.A_RIGHT_SL, 100, street(p, "")));
-		addButton(ll, "\u25BA (3.4)  After 3100m turn right onto 'SR 80' toward 'Rome'", builder(p).prepareTurn(AbstractPrologCommandPlayer.A_RIGHT, 3100, street(p, "", "SR 80", "Rome")));
-		addButton(ll, "\u25BA (3.5)  In 370m turn slightly right onto 'Route 23' 'Main Street', then bear left", builder(p).turn(AbstractPrologCommandPlayer.A_RIGHT_SL, 370, street(p, "Main Street", "Route 23")).then().bearLeft(street(p, "")));
-		addButton(ll, "\u25BA (3.6)  Turn sharply right onto 'Dr.-Quinn-Stra"+"\u00df"+"e'", builder(p).turn(AbstractPrologCommandPlayer.A_RIGHT_SH, street(p, "Dr.-Quinn-Straße")));
+		addButton(ll, "\u25BA (3.4)  After 3100m turn right onto 'SR 80' toward 'Rome'", builder(p).prepareTurn(AbstractPrologCommandPlayer.A_RIGHT, 3100, street(p,  "SR 80", "", "Rome")));
+		addButton(ll, "\u25BA (3.5)  In 370m turn slightly right onto 'Route 23' 'Main Street', then bear left", builder(p).turn(AbstractPrologCommandPlayer.A_RIGHT_SL, 370, street(p, "Route 23", "Main Street", "")).then().bearLeft(street(p, "")));
+		addButton(ll, "\u25BA (3.6)  Turn sharply right onto 'Dr.-Quinn-Stra"+"\u00df"+"e'", builder(p).turn(AbstractPrologCommandPlayer.A_RIGHT_SH, street(p, "", "Dr.-Quinn-Straße", "")));
+		addButton(ll, "\u25BA (3.7)  Turn slightly right onto exit 6 onto 'Amsterdam-Osdorp'", builder(p).takeExit(AbstractPrologCommandPlayer.A_RIGHT_SL, "6", 6, street(p, "", "Amsterdam-Osdorp", "")));
+		addButton(ll, "\u25BA (3.8)  In 350m turn slightly right onto exit 6, 'Amsterdam-Osdorp'", builder(p).takeExit(AbstractPrologCommandPlayer.A_RIGHT_SL, 350, "6", 6, street(p, "", "Amsterdam-Osdorp", "")));
+		addButton(ll, "\u25BA (3.9)  In 350m turn slightly right onto exit 6, 'Amsterdam-Osdorp' towards Osdorp", builder(p).takeExit(AbstractPrologCommandPlayer.A_RIGHT_SL, 350, "6", 6, street(p, "", "Amsterdam-Osdorp", "Osdorp")));
+		addButton(ll, "\u25BA (3.10)  In 350m turn slightly right to exit 6 towards 'Osdorp'", builder(p).takeExit(AbstractPrologCommandPlayer.A_RIGHT_SL, 350, "6", 6, street(p, "", "", "Osdorp")));
+		addButton(ll, "\u25BA (3.11)  Turn slightly right to exit 260B ", builder(p).takeExit(AbstractPrologCommandPlayer.A_RIGHT_SL, "260 B", 260, street(p, "", "", "")));
+		addButton(ll, "\u25BA (3.12)  Turn slightly left to exit 15B ", builder(p).takeExit(AbstractPrologCommandPlayer.A_LEFT_SL, "15 B", 15, street(p, "", "", "")));
 
 		addButton(ll, "Keep left/right: prepareTurn, makeTurnIn, turn:", builder(p));
 		addButton(ll, "\u25BA (4.1)  After 1810m keep left ' '", builder(p).prepareTurn(AbstractPrologCommandPlayer.A_LEFT_KEEP, 1810, street(p, "")));
 		addButton(ll, "\u25BA (4.2)  In 400m keep left ' ' then in 80m keep right onto 'A1'", builder(p).turn(AbstractPrologCommandPlayer.A_LEFT_KEEP, 400, street(p, "")).then().turn(AbstractPrologCommandPlayer.A_RIGHT_KEEP, 80, street(p,"", "A1")));
 		addButton(ll, "\u25BA (4.3)  Keep right on 'Highway 60'", builder(p).turn(AbstractPrologCommandPlayer.A_RIGHT_KEEP, street(p, "Highway 60", "", "", "Highway 60")));
-		addButton(ll, "\u25BA (4.4)  Turn left onto 'Broadway', then in 100m keep right and arrive at your destination 'Town Hall'",
+		addButton(ll, "\u25BA (4.4)  Turn left onto 'Broadway', then in 100m keep right and arrive at your destination 'Town Hall'",  
 				builder(p).turn(AbstractPrologCommandPlayer.A_LEFT, street(p, "Broadway"))
 				.then().turn(AbstractPrologCommandPlayer.A_RIGHT_KEEP, 100, street(p, "")).andArriveAtDestination("Town Hall"));
-
 		addButton(ll, "Roundabouts: prepareTurn, makeTurnIn, turn:", builder(p));
 		addButton(ll, "\u25BA (5.1)  After 1250m enter a roundabout", builder(p).prepareRoundAbout(1250, 3, street(p,"", "I 15", "Los Angeles")));
 		addButton(ll, "\u25BA (5.2)  In 450m enter the roundabout and take the 1st exit onto 'I 15' toward 'Los Angeles'", builder(p).roundAbout(450, 0, 1, street(p,"", "I 15", "Los Angeles")));
@@ -255,12 +204,12 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 
 		addButton(ll, "Go straight, follow the road, approaching:", builder(p));
 		addButton(ll, "\u25BA (7.1)  Straight ahead", builder(p).goAhead());
-		addButton(ll, "\u25BA (7.2)  Continue for 2350m to ' '", builder(p).goAhead(2350, street(p, "")));
+		addButton(ll, "\u25BA (7.2)  Continue for 2350m to ' '", builder(p).goAhead(2350, street(p)));
 		addButton(ll, "\u25BA (7.3)  Continue for 360m to 'Broadway' and arrive at your intermediate destination ' '", builder(p).goAhead(360, street(p,"Broadway")).andArriveAtIntermediatePoint(""));
 		addButton(ll, "\u25BA (7.4)  Continue for 800m to 'Dr Martin Luther King Jr Boulevard' and arrive at your destination ' '", builder(p).goAhead(800, street(p,"", "Dr Martin Luther King Jr Boulevard")).andArriveAtDestination(""));
-		addButton(ll, "\u25BA (7.5)  Continue for 200m and pass GPX waypoint 'Trailhead'", builder(p).goAhead(200, null).andArriveAtWayPoint("Trailhead"));
-		addButton(ll, "\u25BA (7.6)  Continue for 400m and pass favorite 'Brewery'", builder(p).goAhead(400, null).andArriveAtFavorite("Brewery"));
-		addButton(ll, "\u25BA (7.7)  Continue for 600m and pass POI 'Museum'", builder(p).goAhead(600, null).andArriveAtPoi("Museum"));
+		addButton(ll, "\u25BA (7.5)  Continue for 200m and pass GPX waypoint 'Trailhead'", builder(p).goAhead(200, new StreetName()).andArriveAtWayPoint("Trailhead") );
+		addButton(ll, "\u25BA (7.6)  Continue for 400m and pass favorite 'Brewery'", builder(p).goAhead(400, new StreetName()).andArriveAtFavorite("Brewery") );
+		addButton(ll, "\u25BA (7.7)  Continue for 600m and pass POI 'Museum'", builder(p).goAhead(600, new StreetName()).andArriveAtPoi("Museum") );
 
 		addButton(ll, "Arriving and passing points:", builder(p));
 		addButton(ll, "\u25BA (8.1)  Arrive at your destination 'Home'", builder(p).arrivedAtDestination("Home"));
@@ -286,10 +235,31 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 		addButton(ll, "\u25BA (10.3) You have been off the route for 1050m", builder(p).offRoute(1050));
 		addButton(ll, "\u25BA (10.4) You are back on the route", builder(p).backOnRoute());
 
-		addButton(ll, "Voice system info:", builder(p));
-		addButton(ll, "\u25BA (11.1) (Tap to refresh)\n" + getVoiceSystemInfo(), builder(p).attention(""));
-		addButton(ll, "\u25BA (11.2) Tap to change Phone call audio delay (if car stereo cuts off prompts). Default is 1500\u00A0ms.", builder(p).attention(""));
+		addButton(ll, "System info and settings:", builder(p));
+		addButton(ll, "\u25BA (11.1) (TAP TO FULLY POPULATE)\n" + getVoiceSystemInfo(), builder(p).attention(""));
+		addButton(ll, "\u25BA (11.2) (TAP TO CHANGE)\n \u25CF Voice prompt delay for selected output: " +
+				((OsmandApplication) getApplication()).getSettings().VOICE_PROMPT_DELAY[((OsmandApplication) getApplication()).getSettings().AUDIO_MANAGER_STREAM.get()].get() +
+				"\u00A0ms\n (Avoids car stereo cutting off prompts. Default is 1500\u00A0ms for Phone call audio, or else 0\u00A0ms.)", builder(p).attention(""));
+		addButton(ll, "\u25BA (11.3) (TAP TO TOGGLE)\n \u25CF Display each TTS utterance on screen: " +
+				((OsmandApplication) getApplication()).getSettings().DISPLAY_TTS_UTTERANCE.get().toString(), builder(p).attention(""));
 		ll.forceLayout();
+	}
+
+	private StreetName street(CommandPlayer p, String... args) {
+		Map<String, String> res = new HashMap<>();
+		if (!p.supportsStructuredStreetNames()) {
+			return new StreetName();
+		}
+		String[] streetNames = new String[]{"toRef", "toStreetName", "toDest", "fromRef", "fromStreetName", "fromDest"};
+		for (int i = 0; i < args.length; i++) {
+			res.put(streetNames[i], args[i]);
+		}
+		for (String streetName : streetNames) {
+			if (res.get(streetName) == null) {
+				res.put(streetName, "");
+			}
+		}
+		return new StreetName(res);
 	}
 
 	private CommandBuilder builder(CommandPlayer p){
@@ -301,7 +271,7 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 		button.setGravity(Gravity.LEFT);
 		button.setTransformationMethod(null); //or else button text is all upper case
 		button.setText(description);
-		button.setLayoutParams(new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.WRAP_CONTENT));
+		button.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 		if (!description.startsWith("\u25BA (")) {
 			// Section headline buttons
 			button.setPadding(10, 20, 10, 5);
@@ -309,7 +279,12 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 			button.setPadding(40, 5, 10, 5);
 		}
 		if (description.startsWith("\u25BA (11.1)")) {
-			infoButton = button;
+			// Buttons with refreshable caption
+			buttonInfo = button;
+		} else if (description.startsWith("\u25BA (11.2)")) {
+			buttonDelay = button;
+		} else if (description.startsWith("\u25BA (11.3)")) {
+			buttonDisplay = button;
 		}
 		
 		layout.addView(button);
@@ -319,27 +294,32 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 			public void onClick(View v) {
 				builder.play();
 				if (description.startsWith("\u25BA (11.1)")) {
-					infoButton.setText("\u25BA (11.1) (Tap to refresh)\n" + getVoiceSystemInfo());
-					Toast.makeText(TestVoiceActivity.this, "Info refreshed.", Toast.LENGTH_LONG).show();
+					buttonInfo.setText("\u25BA (11.1) Voice system info:\n" + getVoiceSystemInfo());
+					// Toast.makeText(TestVoiceActivity.this, "Info refreshed.", Toast.LENGTH_LONG).show();
 				}
 				if (description.startsWith("\u25BA (11.2)")) {
-					if (((OsmandApplication) getApplication()).getSettings().AUDIO_STREAM_GUIDANCE.get() == 0) {
-						if (((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() == 1000) {
-							((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.set(1500);
-						} else if (((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() == 1500) {
-							((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.set(2000);
-						} else if (((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() == 2000) {
-							((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.set(2500);
-						} else if (((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() == 2500) {
-							((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.set(3000);
+					int ams = ((OsmandApplication) getApplication()).getSettings().AUDIO_MANAGER_STREAM.get();
+					OsmandPreference<Integer> pref = ((OsmandApplication) getApplication()).getSettings().VOICE_PROMPT_DELAY[ams];
+					if (pref != null) {
+						if (pref.get() >= 3000) {
+							pref.set(0);
 						} else {
-							((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.set(1000);
+							pref.set(pref.get() + 500);
 						}
-						infoButton.setText("\u25BA (11.1) (Tap to refresh)\n" + getVoiceSystemInfo());
-						Toast.makeText(TestVoiceActivity.this, "BT SCO init delay changed to " + ((OsmandApplication) getApplication()).getSettings().BT_SCO_DELAY.get() + "\u00A0ms.", Toast.LENGTH_LONG).show();
-					} else {
-						Toast.makeText(TestVoiceActivity.this, "Setting only available when using 'Phone call audio'.", Toast.LENGTH_LONG).show();
+						// Toast.makeText(TestVoiceActivity.this, "Voice prompt delay changed to " + pref.get() + "\u00A0ms.", Toast.LENGTH_LONG).show();
 					}
+					buttonDelay.setText("\u25BA (11.2) (TAP TO CHANGE)\n \u25CF Voice prompt delay for selected output: " +
+							((OsmandApplication) getApplication()).getSettings().VOICE_PROMPT_DELAY[((OsmandApplication) getApplication()).getSettings().AUDIO_MANAGER_STREAM.get()].get() +
+							"\u00A0ms\n (Avoids car stereo cutting off prompts. Default is 1500\u00A0ms for Phone call audio, or else 0\u00A0ms.)");
+				}
+				if (description.startsWith("\u25BA (11.3)")) {
+					if (((OsmandApplication) getApplication()).getSettings().DISPLAY_TTS_UTTERANCE.get() == false) {
+						((OsmandApplication) getApplication()).getSettings().DISPLAY_TTS_UTTERANCE.set(true);
+					} else {
+						((OsmandApplication) getApplication()).getSettings().DISPLAY_TTS_UTTERANCE.set(false);
+					}
+					buttonDisplay.setText("\u25BA (11.3) (TAP TO TOGGLE)\n \u25CF Display each TTS utterance on screen: " +
+							((OsmandApplication) getApplication()).getSettings().DISPLAY_TTS_UTTERANCE.get().toString());
 				}
 			}
 		});
@@ -349,9 +329,9 @@ public class TestVoiceActivity extends OsmandActionBarActivity {
 	public boolean onOptionsItemSelected(MenuItem item) {
 		int itemId = item.getItemId();
 		switch (itemId) {
-		case android.R.id.home:
-			finish();
-			return true;
+			case android.R.id.home:
+				finish();
+				return true;
 		}
 		return false;
 	}

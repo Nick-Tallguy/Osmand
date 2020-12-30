@@ -9,21 +9,24 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.v7.app.AlertDialog;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
-import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.LinearLayout.LayoutParams;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.AppCompatCheckBox;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.AndroidUtils;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.Version;
 import net.osmand.plus.activities.MapActivity;
 
@@ -33,9 +36,10 @@ public class StartGPSStatus extends OsmAndAction {
 		GPC_CONNECTED("GPS Connected", "org.bruxo.gpsconnected", "", ""),
 		GPS_STATUS("GPS Status & Toolbox", "com.eclipsim.gpsstatus2", "", "com.eclipsim.gpsstatus2.GPSStatus"),
 		GPS_TEST("GPS Test", "com.chartcross.gpstest", "com.chartcross.gpstestplus", ""),
-		INVIU_GPS("inViu GPS-details ", "de.enaikoon.android.inviu.gpsdetails", "", ""),
-		ANDROI_TS_GPS_TEST("AndroiTS GPS Test", "com.androits.gps.test.free", "com.androits.gps.test.pro", ""),
-		SAT_STAT("SatStat (F-droid)", "com.vonglasow.michael.satstat", "", "");
+		GPSTEST("GPSTest", "com.android.gpstest", "", ""),
+		SAT_STAT("SatStat (F-droid)", "com.vonglasow.michael.satstat", "", ""),
+		GPSTESTSS("GPSTest (F-droid)", "com.android.gpstest.osmdroid", "", "");
+
 		
 		public final String stringRes;
 		public final String appName;
@@ -110,11 +114,16 @@ public class StartGPSStatus extends OsmAndAction {
 		final int dp12 = AndroidUtils.dpToPx(mapActivity, 12f);
 		final int dp8 = AndroidUtils.dpToPx(mapActivity, 8f);
 		lv.setPadding(0, dp8, 0, dp8);
-		final CheckBox cb = new CheckBox(activity);
+		final AppCompatCheckBox cb = new AppCompatCheckBox(activity);
 		cb.setText(R.string.shared_string_remember_my_choice);
 		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
-		lp.setMargins(dp24, dp8, dp8, dp24);
+		AndroidUtils.setMargins(lp, dp24, dp8, dp8, dp24);
 		cb.setLayoutParams(lp);
+		cb.setPadding(dp8, 0, 0, 0);
+		int textColorPrimary = ContextCompat.getColor(activity, isNightMode() ? R.color.text_color_primary_dark : R.color.text_color_primary_light);
+		int selectedModeColor = ContextCompat.getColor(activity, getSettings().getApplicationMode().getIconColorInfo().getColor(isNightMode()));
+		cb.setTextColor(textColorPrimary);
+		UiUtilities.setupCompoundButton(isNightMode(), selectedModeColor, cb);
 		
 		final int layout = R.layout.list_menu_item_native;
 		final ArrayAdapter<GpsStatusApps> adapter = new ArrayAdapter<GpsStatusApps>(mapActivity, layout, GpsStatusApps.values()) {
@@ -156,7 +165,7 @@ public class StartGPSStatus extends OsmAndAction {
 			// if (g.activity.length() == 0) {
 				PackageManager pm = mapActivity.getPackageManager();
 				try {
-					String appName = !g.paidAppName.equals("") &&
+					String appName = !g.paidAppName.isEmpty() &&
 							g.installed(mapActivity, g.paidAppName) ? g.paidAppName : g.appName;
 					intent = pm.getLaunchIntentForPackage(appName);
 				} catch (RuntimeException e) {

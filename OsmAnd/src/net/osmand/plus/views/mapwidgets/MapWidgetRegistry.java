@@ -1,37 +1,43 @@
 package net.osmand.plus.views.mapwidgets;
 
 import android.content.Context;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 
-import net.osmand.plus.ApplicationMode;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
+
+import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.ContextMenuAdapter;
 import net.osmand.plus.ContextMenuItem;
-import net.osmand.plus.IconsCache;
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.OsmandSettings.OsmandPreference;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.dialogs.ConfigureMapMenu;
 import net.osmand.plus.mapmarkers.DirectionIndicationDialogFragment;
 import net.osmand.plus.quickaction.QuickActionListFragment;
-import net.osmand.plus.views.MapInfoLayer;
-import net.osmand.plus.views.MapQuickActionLayer;
+import net.osmand.plus.views.layers.MapInfoLayer;
+import net.osmand.plus.views.layers.MapQuickActionLayer;
 import net.osmand.plus.views.OsmandMapLayer.DrawSettings;
-import net.osmand.plus.widgets.IconPopupMenu;
+import net.osmand.plus.views.mapwidgets.widgets.TextInfoWidget;
+import net.osmand.plus.views.mapwidgets.widgetstates.WidgetState;
+import net.osmand.plus.widgets.popup.PopUpMenuItem;
+import net.osmand.plus.widgets.popup.PopUpMenuHelper;
+import net.osmand.plus.widgets.popup.PopUpMenuHelper.PopUpMenuWidthType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -42,25 +48,39 @@ public class MapWidgetRegistry {
 	public static final String HIDE_PREFIX = "-";
 	public static final String SHOW_PREFIX = "";
 	public static final String SETTINGS_SEPARATOR = ";";
+
+	public static String WIDGET_NEXT_TURN = "next_turn";
+	public static String WIDGET_NEXT_TURN_SMALL = "next_turn_small";
+	public static String WIDGET_NEXT_NEXT_TURN = "next_next_turn";
+	public static String WIDGET_COMPASS = "compass";
+	public static String WIDGET_DISTANCE = "distance";
+	public static String WIDGET_INTERMEDIATE_DISTANCE = "intermediate_distance";
+	public static String WIDGET_TIME = "time";
+	public static String WIDGET_INTERMEDIATE_TIME = "intermediate_time";
+	public static String WIDGET_MAX_SPEED = "max_speed";
+	public static String WIDGET_SPEED = "speed";
+	public static String WIDGET_ALTITUDE = "altitude";
+	public static String WIDGET_GPS_INFO = "gps_info";
+	public static String WIDGET_MARKER_1 = "map_marker_1st";
+	public static String WIDGET_MARKER_2 = "map_marker_2nd";
+	public static String WIDGET_BEARING = "bearing";
+	public static String WIDGET_PLAIN_TIME = "plain_time";
+	public static String WIDGET_BATTERY = "battery";
+	public static String WIDGET_RULER = "ruler";
+
+	public static String WIDGET_STREET_NAME = "street_name";
+
+
 	private Set<MapWidgetRegInfo> leftWidgetSet = new TreeSet<>();
 	private Set<MapWidgetRegInfo> rightWidgetSet = new TreeSet<>();
 	private Map<ApplicationMode, Set<String>> visibleElementsFromSettings = new LinkedHashMap<>();
+	private final OsmandApplication app;
 	private final OsmandSettings settings;
 
-
-	public MapWidgetRegistry(OsmandSettings settings) {
-		this.settings = settings;
-
-		for (ApplicationMode ms : ApplicationMode.values(settings)) {
-			String mpf = settings.MAP_INFO_CONTROLS.getModeValue(ms);
-			if (mpf.equals(SHOW_PREFIX)) {
-				visibleElementsFromSettings.put(ms, null);
-			} else {
-				LinkedHashSet<String> set = new LinkedHashSet<>();
-				visibleElementsFromSettings.put(ms, set);
-				Collections.addAll(set, mpf.split(SETTINGS_SEPARATOR));
-			}
-		}
+	public MapWidgetRegistry(OsmandApplication app) {
+		this.app = app;
+		this.settings = app.getSettings();
+		loadVisibleElementsFromSettings();
 	}
 
 	public void populateStackControl(LinearLayout stack,
@@ -193,7 +213,7 @@ public class MapWidgetRegistry {
 	}
 
 	private void processVisibleModes(String key, MapWidgetRegInfo ii) {
-		for (ApplicationMode ms : ApplicationMode.values(settings)) {
+		for (ApplicationMode ms : ApplicationMode.values(app)) {
 			boolean collapse = ms.isWidgetCollapsible(key);
 			boolean def = ms.isWidgetVisible(key);
 			Set<String> set = visibleElementsFromSettings.get(ms);
@@ -213,6 +233,9 @@ public class MapWidgetRegistry {
 				ii.visibleModes.add(ms);
 			} else if (collapse) {
 				ii.visibleCollapsible.add(ms);
+			} else {
+				ii.visibleModes.remove(ms);
+				ii.visibleCollapsible.remove(ms);
 			}
 		}
 	}
@@ -275,6 +298,30 @@ public class MapWidgetRegistry {
 		}
 	}
 
+	public void updateVisibleWidgets() {
+		loadVisibleElementsFromSettings();
+		for (MapWidgetRegInfo ri : leftWidgetSet) {
+			processVisibleModes(ri.key, ri);
+		}
+		for (MapWidgetRegInfo ri : rightWidgetSet) {
+			processVisibleModes(ri.key, ri);
+		}
+	}
+
+	private void loadVisibleElementsFromSettings() {
+		visibleElementsFromSettings.clear();
+		for (ApplicationMode ms : ApplicationMode.values(app)) {
+			String mpf = settings.MAP_INFO_CONTROLS.getModeValue(ms);
+			if (mpf.equals(SHOW_PREFIX)) {
+				visibleElementsFromSettings.put(ms, null);
+			} else {
+				LinkedHashSet<String> set = new LinkedHashSet<>();
+				visibleElementsFromSettings.put(ms, set);
+				Collections.addAll(set, mpf.split(SETTINGS_SEPARATOR));
+			}
+		}
+	}
+
 	private void saveVisibleElementsToSettings(ApplicationMode mode) {
 		StringBuilder bs = new StringBuilder();
 		for (String ks : this.visibleElementsFromSettings.get(mode)) {
@@ -308,19 +355,20 @@ public class MapWidgetRegistry {
 	}
 
 	private void resetDefaultAppearance(ApplicationMode appMode) {
-//		settings.SHOW_RULER.resetToDefault();
 		settings.TRANSPARENT_MAP_THEME.resetToDefault();
 		settings.SHOW_STREET_NAME.resetToDefault();
-		settings.CENTER_POSITION_ON_MAP.resetToDefault();
 		settings.MAP_MARKERS_MODE.resetToDefault();
 	}
 
 	public void addControlsAppearance(final MapActivity map, final ContextMenuAdapter cm, ApplicationMode mode) {
-		addControlId(map, cm, R.string.map_widget_transparent, settings.TRANSPARENT_MAP_THEME);
-		addControlId(map, cm, R.string.always_center_position_on_map, settings.CENTER_POSITION_ON_MAP);
 		if (mode != ApplicationMode.DEFAULT) {
 			addControlId(map, cm, R.string.map_widget_top_text, settings.SHOW_STREET_NAME);
 		}
+		cm.addItem(new ContextMenuItem.ItemBuilder().setTitleId(R.string.coordinates_widget, map)
+				.setIcon(R.drawable.ic_action_coordinates_widget)
+				.setSelected(settings.SHOW_COORDINATES_WIDGET.get())
+				.setListener(new AppearanceItemClickListener(settings.SHOW_COORDINATES_WIDGET, map))
+				.setLayout(R.layout.list_item_icon_and_switch).createItem());
 		cm.addItem(new ContextMenuItem.ItemBuilder().setTitleId(R.string.map_markers, map)
 				.setDescription(settings.MAP_MARKERS_MODE.get().toHumanString(map))
 				.setListener(new ContextMenuAdapter.ItemClickListener() {
@@ -339,6 +387,8 @@ public class MapWidgetRegistry {
 						return false;
 					}
 				}).setLayout(R.layout.list_item_text_button).createItem());
+		addControlId(map, cm, R.string.map_widget_transparent, settings.TRANSPARENT_MAP_THEME);
+		addControlId(map, cm, R.string.show_lanes, settings.SHOW_LANES);
 	}
 
 	public void updateMapMarkersMode(MapActivity mapActivity) {
@@ -363,13 +413,12 @@ public class MapWidgetRegistry {
 							  @StringRes int stringId, OsmandPreference<Boolean> pref) {
 		cm.addItem(new ContextMenuItem.ItemBuilder().setTitleId(stringId, map)
 				.setSelected(pref.get())
-				.setListener(new ApearanceItemClickListener(pref, map)).createItem());
+				.setListener(new AppearanceItemClickListener(pref, map)).createItem());
 	}
 
 	public static boolean distChanged(int oldDist, int dist) {
 		return !(oldDist != 0 && oldDist - dist < 100 && Math.abs(((float) dist - oldDist) / oldDist) < 0.01);
 	}
-
 
 	public void addControls(MapActivity map, ContextMenuAdapter cm, ApplicationMode mode) {
 		addQuickActionControl(map, cm, mode);
@@ -407,10 +456,10 @@ public class MapWidgetRegistry {
 		contextMenuAdapter.addItem(new ContextMenuItem.ItemBuilder().setTitleId(R.string.map_widget_right, mapActivity)
 				.setCategory(true).setLayout(R.layout.list_group_empty_title_with_switch).createItem());
 
-		boolean selected = mapActivity.getMapLayers().getQuickActionRegistry().isQuickActionOn();
+		boolean selected = app.getQuickActionRegistry().isQuickActionOn();
 		contextMenuAdapter.addItem(new ContextMenuItem.ItemBuilder()
 				.setTitleId(R.string.configure_screen_quick_action, mapActivity)
-				.setIcon(R.drawable.map_quick_action)
+				.setIcon(R.drawable.ic_quick_action)
 				.setSelected(selected)
 				.setColor(selected ? R.color.osmand_orange : ContextMenuItem.INVALID_ID)
 				.setSecondaryIcon( R.drawable.ic_action_additional_option)
@@ -426,9 +475,11 @@ public class MapWidgetRegistry {
 						int slideInAnim = R.anim.slide_in_bottom;
 						int slideOutAnim = R.anim.slide_out_bottom;
 
+						QuickActionListFragment fragment = new QuickActionListFragment();
+						fragment.setFromDashboard(true);
 						mapActivity.getSupportFragmentManager().beginTransaction()
 								.setCustomAnimations(slideInAnim, slideOutAnim, slideInAnim, slideOutAnim)
-								.add(R.id.fragmentContainer, new QuickActionListFragment(), QuickActionListFragment.TAG)
+								.add(R.id.fragmentContainer, fragment, QuickActionListFragment.TAG)
 								.addToBackStack(QuickActionListFragment.TAG).commitAllowingStateLoss();
 
 						return true;
@@ -438,7 +489,7 @@ public class MapWidgetRegistry {
 											   int position,
 											   boolean visible) {
 
-						mapActivity.getMapLayers().getQuickActionRegistry().setQuickActionFabState(visible);
+						app.getQuickActionRegistry().setQuickActionFabState(visible);
 
 						MapQuickActionLayer mil = mapActivity.getMapLayers().getMapQuickActionLayer();
 						if (mil != null) {
@@ -463,6 +514,9 @@ public class MapWidgetRegistry {
 
 			final boolean selected = r.visibleCollapsed(mode) || r.visible(mode);
 			final String desc = mapActivity.getString(R.string.shared_string_collapse);
+			final boolean nightMode = app.getDaynightHelper().isNightModeForMapControls();
+			final int currentModeColorRes = mode.getIconColorInfo().getColor(nightMode);
+			final int currentModeColor = ContextCompat.getColor(app, currentModeColorRes);
 			ContextMenuItem.ItemBuilder itemBuilder = new ContextMenuItem.ItemBuilder()
 					.setIcon(r.getDrawableMenu())
 					.setSelected(selected)
@@ -480,14 +534,8 @@ public class MapWidgetRegistry {
 								return false;
 							}
 							View textWrapper = view.findViewById(R.id.text_wrapper);
-							IconPopupMenu popup = new IconPopupMenu(view.getContext(), textWrapper);
-							MenuInflater inflater = popup.getMenuInflater();
-							final Menu menu = popup.getMenu();
-							inflater.inflate(R.menu.widget_visibility_menu, menu);
-							IconsCache ic = mapActivity.getMyApplication().getIconsCache();
-							menu.findItem(R.id.action_show).setIcon(ic.getThemedIcon(R.drawable.ic_action_view));
-							menu.findItem(R.id.action_hide).setIcon(ic.getThemedIcon(R.drawable.ic_action_hide));
-							menu.findItem(R.id.action_collapse).setIcon(ic.getThemedIcon(R.drawable.ic_action_widget_collapse));
+							List<PopUpMenuItem> items = new ArrayList<>();
+							UiUtilities ic = app.getUIUtilities();
 
 							final int[] menuIconIds = r.getDrawableMenuIds();
 							final int[] menuTitleIds = r.getMessageIds();
@@ -499,57 +547,77 @@ public class MapWidgetRegistry {
 								for (int i = 0; i < menuIconIds.length; i++) {
 									int iconId = menuIconIds[i];
 									int titleId = menuTitleIds[i];
-									int id = menuItemIds[i];
-									MenuItem menuItem = menu.add(R.id.single_selection_group, id, i, titleId)
-											.setChecked(id == checkedId);
-									menuItem.setIcon(menuItem.isChecked() && selected
-											? ic.getIcon(iconId, R.color.osmand_orange) : ic.getThemedIcon(iconId));
+									final int id = menuItemIds[i];
+									boolean isChecked = id == checkedId;
+									String title = app.getString(titleId);
+									Drawable icon = isChecked && selected ? ic.getIcon(iconId, currentModeColorRes) : ic.getThemedIcon(iconId);
+									items.add(new PopUpMenuItem.Builder(app)
+											.setTitle(title)
+											.setIcon(icon)
+											.setOnClickListener(new View.OnClickListener() {
+												@Override
+												public void onClick(View v) {
+													r.changeState(id);
+													MapInfoLayer mil = mapActivity.getMapLayers().getMapInfoLayer();
+													if (mil != null) {
+														mil.recreateControls();
+													}
+													ContextMenuItem item = adapter.getItem(pos);
+													item.setIcon(r.getDrawableMenu());
+													if (r.getMessage() != null) {
+														item.setTitle(r.getMessage());
+													} else {
+														item.setTitle(mapActivity.getResources().getString(r.getMessageId()));
+													}
+													adapter.notifyDataSetChanged();
+												}
+											})
+											.showCompoundBtn(currentModeColor)
+											.setSelected(isChecked)
+											.create());
 								}
-								menu.setGroupCheckable(R.id.single_selection_group, true, true);
-								menu.setGroupVisible(R.id.single_selection_group, true);
 							}
 
-							popup.setOnMenuItemClickListener(
-									new IconPopupMenu.OnMenuItemClickListener() {
+							// show
+							items.add(new PopUpMenuItem.Builder(app)
+									.setTitleId(R.string.shared_string_show)
+									.setIcon(ic.getThemedIcon(R.drawable.ic_action_view))
+									.setOnClickListener(new View.OnClickListener() {
 										@Override
-										public boolean onMenuItemClick(MenuItem menuItem) {
-
-											switch (menuItem.getItemId()) {
-												case R.id.action_show:
-													setVisibility(adapter, pos, true, false);
-													return true;
-												case R.id.action_hide:
-													setVisibility(adapter, pos, false, false);
-													return true;
-												case R.id.action_collapse:
-													setVisibility(adapter, pos, true, true);
-													return true;
-												default:
-													if (menuItemIds != null) {
-														for (int menuItemId : menuItemIds) {
-															if (menuItem.getItemId() == menuItemId) {
-																r.changeState(menuItemId);
-																MapInfoLayer mil = mapActivity.getMapLayers().getMapInfoLayer();
-																if (mil != null) {
-																	mil.recreateControls();
-																}
-																ContextMenuItem item = adapter.getItem(pos);
-																item.setIcon(r.getDrawableMenu());
-																if (r.getMessage() != null) {
-																	item.setTitle(r.getMessage());
-																} else {
-																	item.setTitle(mapActivity.getResources().getString(r.getMessageId()));
-																}
-																adapter.notifyDataSetChanged();
-																return true;
-															}
-														}
-													}
-											}
-											return false;
+										public void onClick(View v) {
+											setVisibility(adapter, pos, true, false);
 										}
-									});
-							popup.show();
+									})
+									.create());
+
+							// hide
+							items.add(new PopUpMenuItem.Builder(app)
+									.setTitleId(R.string.shared_string_hide)
+									.setIcon(ic.getThemedIcon(R.drawable.ic_action_hide))
+									.setOnClickListener(new View.OnClickListener() {
+										@Override
+										public void onClick(View v) {
+											setVisibility(adapter, pos, false, false);
+										}
+									})
+									.create());
+
+							// collapse
+							items.add(new PopUpMenuItem.Builder(app)
+									.setTitleId(R.string.shared_string_collapse)
+									.setIcon(ic.getThemedIcon(R.drawable.ic_action_widget_collapse))
+									.setOnClickListener(new View.OnClickListener() {
+										@Override
+										public void onClick(View v) {
+											setVisibility(adapter, pos, true, true);
+										}
+									})
+									.create());
+
+							new PopUpMenuHelper.Builder(textWrapper, items, nightMode)
+									.setWidthType(PopUpMenuWidthType.STANDARD)
+									.show();
+
 							return false;
 						}
 
@@ -751,7 +819,10 @@ public class MapWidgetRegistry {
 	}
 
 	public ContextMenuAdapter getViewConfigureMenuAdapter(final MapActivity map) {
-		final ContextMenuAdapter cm = new ContextMenuAdapter();
+		final ContextMenuAdapter cm = new ContextMenuAdapter(app);
+		boolean nightMode = app.getDaynightHelper().isNightModeForMapControls();
+		cm.setProfileDependent(true);
+		cm.setNightMode(nightMode);
 		cm.setDefaultLayoutId(R.layout.list_item_icon_and_menu);
 		cm.addItem(new ContextMenuItem.ItemBuilder().setTitleId(R.string.app_modes_choose, map)
 				.setLayout(R.layout.mode_toggles).createItem());
@@ -767,49 +838,23 @@ public class MapWidgetRegistry {
 		return cm;
 	}
 
-	class ApearanceItemClickListener implements ContextMenuAdapter.ItemClickListener {
-		private MapActivity map;
+	static class AppearanceItemClickListener implements ContextMenuAdapter.ItemClickListener {
+
+		private MapActivity mapActivity;
 		private OsmandPreference<Boolean> pref;
 
-		public ApearanceItemClickListener(OsmandPreference<Boolean> pref, MapActivity map) {
+		public AppearanceItemClickListener(OsmandPreference<Boolean> pref, MapActivity mapActivity) {
 			this.pref = pref;
-			this.map = map;
+			this.mapActivity = mapActivity;
 		}
 
 		@Override
 		public boolean onContextMenuClick(ArrayAdapter<ContextMenuItem> a,
 										  int itemId, int pos, boolean isChecked, int[] viewCoordinates) {
 			pref.set(!pref.get());
-			map.updateApplicationModeSettings();
+			mapActivity.updateApplicationModeSettings();
 			a.notifyDataSetChanged();
 			return false;
 		}
-	}
-
-	public static abstract class WidgetState {
-
-		private OsmandApplication ctx;
-
-		public OsmandApplication getCtx() {
-			return ctx;
-		}
-
-		public WidgetState(OsmandApplication ctx) {
-			this.ctx = ctx;
-		}
-
-		public abstract int getMenuTitleId();
-
-		public abstract int getMenuIconId();
-
-		public abstract int getMenuItemId();
-
-		public abstract int[] getMenuTitleIds();
-
-		public abstract int[] getMenuIconIds();
-
-		public abstract int[] getMenuItemIds();
-
-		public abstract void changeState(int stateId);
 	}
 }

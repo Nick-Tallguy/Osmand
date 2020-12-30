@@ -2,6 +2,8 @@ package net.osmand.plus.mapcontextmenu.controllers;
 
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.NonNull;
+
 import net.osmand.data.PointDescription;
 import net.osmand.plus.GpxSelectionHelper.GpxDisplayItem;
 import net.osmand.plus.R;
@@ -12,7 +14,7 @@ import net.osmand.plus.mapcontextmenu.builders.GpxItemMenuBuilder;
 public class GpxItemMenuController extends MenuController {
 	private GpxDisplayItem item;
 
-	public GpxItemMenuController(MapActivity mapActivity, PointDescription pointDescription, GpxDisplayItem item) {
+	public GpxItemMenuController(@NonNull MapActivity mapActivity, @NonNull PointDescription pointDescription, @NonNull GpxDisplayItem item) {
 		super(new GpxItemMenuBuilder(mapActivity, item), pointDescription, mapActivity);
 		this.item = item;
 	}
@@ -29,14 +31,21 @@ public class GpxItemMenuController extends MenuController {
 		return item;
 	}
 
+	@NonNull
 	@Override
 	public String getTypeStr() {
 		return getPointDescription().getTypeName();
 	}
 
+	@NonNull
 	@Override
 	public String getCommonTypeStr() {
-		return getMapActivity().getString(R.string.gpx_selection_segment_title);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return mapActivity.getString(R.string.gpx_selection_segment_title);
+		} else {
+			return "";
+		}
 	}
 
 	@Override

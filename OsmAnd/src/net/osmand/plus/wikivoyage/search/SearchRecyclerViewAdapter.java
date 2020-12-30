@@ -2,22 +2,26 @@ package net.osmand.plus.wikivoyage.search;
 
 import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.squareup.picasso.Picasso;
+import com.squareup.picasso.RequestCreator;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.widgets.tools.CropCircleTransformation;
-import net.osmand.plus.wikivoyage.data.WikivoyageArticle;
+import net.osmand.plus.wikivoyage.WikivoyageUtils;
+import net.osmand.plus.wikivoyage.data.TravelArticle;
 import net.osmand.plus.wikivoyage.data.WikivoyageSearchHistoryItem;
 import net.osmand.plus.wikivoyage.data.WikivoyageSearchResult;
 import net.osmand.util.Algorithms;
@@ -73,12 +77,13 @@ public class SearchRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView
 			Object item = getItem(pos);
 			if (item instanceof WikivoyageSearchResult) {
 				WikivoyageSearchResult searchRes = (WikivoyageSearchResult) item;
-				Picasso.get()
-						.load(WikivoyageArticle.getImageUrl(searchRes.getImageTitle(), true))
-						.transform(new CropCircleTransformation())
+				RequestCreator rc = Picasso.get()
+						.load(TravelArticle.getImageUrl(searchRes.getImageTitle(), true));
+				WikivoyageUtils.setupNetworkPolicy(app.getSettings(), rc);
+				rc.transform(new CropCircleTransformation())
 						.placeholder(placeholder)
 						.into(holder.icon);
-				holder.title.setText(searchRes.getArticleTitles().get(0));
+				holder.title.setText(searchRes.getArticleTitle());
 				holder.leftDescr.setText(searchRes.getIsPartOf());
 				holder.rightDescr.setText(searchRes.getFirstLangsString());
 			} else {
@@ -130,16 +135,19 @@ public class SearchRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView
 	}
 
 	private LayerDrawable getPlaceholder(boolean history) {
-		LayerDrawable res = (LayerDrawable) ContextCompat.getDrawable(
+		int colorDefault = ContextCompat.getColor(app, R.color.icon_color_default_light);
+		LayerDrawable res = (LayerDrawable) AppCompatResources.getDrawable(
 				app, history
 						? R.drawable.wikivoyage_search_history_placeholder
 						: R.drawable.wikivoyage_search_placeholder
 		);
 		if (Build.VERSION.SDK_INT < 21 && res != null) {
-			res.setDrawableByLayerId(R.id.placeholder_icon, app.getIconsCache().getIcon(
+			res.setDrawableByLayerId(R.id.placeholder_icon, app.getUIUtilities().getIcon(
 					history ? R.drawable.ic_action_history : R.drawable.ic_action_placeholder_city,
-					R.color.icon_color
+					R.color.icon_color_default_light
 			));
+		} else {
+			res.setTint(colorDefault);
 		}
 		return res;
 	}

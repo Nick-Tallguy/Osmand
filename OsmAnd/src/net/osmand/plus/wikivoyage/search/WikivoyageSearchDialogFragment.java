@@ -1,12 +1,6 @@
 package net.osmand.plus.wikivoyage.search;
 
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.FragmentManager;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.Toolbar;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -17,19 +11,26 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.widget.Toolbar;
+import androidx.fragment.app.FragmentManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
 import net.osmand.ResultMatcher;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
-import net.osmand.plus.wikivoyage.WikivoyageBaseDialogFragment;
+import net.osmand.plus.wikivoyage.WikiBaseDialogFragment;
 import net.osmand.plus.wikivoyage.article.WikivoyageArticleDialogFragment;
-import net.osmand.plus.wikivoyage.data.WikivoyageLocalDataHelper;
+import net.osmand.plus.wikivoyage.data.TravelLocalDataHelper;
 import net.osmand.plus.wikivoyage.data.WikivoyageSearchHistoryItem;
 import net.osmand.plus.wikivoyage.data.WikivoyageSearchResult;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class WikivoyageSearchDialogFragment extends WikivoyageBaseDialogFragment {
+public class WikivoyageSearchDialogFragment extends WikiBaseDialogFragment {
 
 	public static final String TAG = "WikivoyageSearchDialogFragment";
 
@@ -55,6 +56,9 @@ public class WikivoyageSearchDialogFragment extends WikivoyageBaseDialogFragment
 
 		Toolbar toolbar = (Toolbar) mainView.findViewById(R.id.toolbar);
 		setupToolbar(toolbar);
+		toolbar.setContentInsetStartWithNavigation(
+				getResources().getDimensionPixelOffset(R.dimen.wikivoyage_search_divider_margin_start)
+		);
 
 		searchEt = (EditText) toolbar.findViewById(R.id.searchEditText);
 		searchEt.setHint(R.string.shared_string_search);
@@ -108,12 +112,11 @@ public class WikivoyageSearchDialogFragment extends WikivoyageBaseDialogFragment
 					Object item = adapter.getItem(pos);
 					if (item instanceof WikivoyageSearchResult) {
 						WikivoyageSearchResult res = (WikivoyageSearchResult) item;
-						WikivoyageArticleDialogFragment
-								.showInstance(fm, res.getCityId(), new ArrayList<>(res.getLangs()));
+						WikivoyageArticleDialogFragment.showInstance(fm, res.getArticleId(), new ArrayList<>(res.getLangs()));
 					} else if (item instanceof WikivoyageSearchHistoryItem) {
 						WikivoyageSearchHistoryItem historyItem = (WikivoyageSearchHistoryItem) item;
 						WikivoyageArticleDialogFragment
-								.showInstance(app, fm, historyItem.getCityId(), historyItem.getLang());
+								.showInstanceByTitle(app, fm, historyItem.getArticleTitle(), historyItem.getLang());
 					}
 				}
 			}
@@ -147,8 +150,8 @@ public class WikivoyageSearchDialogFragment extends WikivoyageBaseDialogFragment
 
 	private void setAdapterItems(@Nullable List<WikivoyageSearchResult> items) {
 		if (items == null || items.isEmpty()) {
-			adapter.setHistoryItems(WikivoyageLocalDataHelper
-					.getInstance(getMyApplication()).getAllHistory());
+			TravelLocalDataHelper ldh = getMyApplication().getTravelHelper().getBookmarksHelper();
+			adapter.setHistoryItems(ldh.getAllHistory());
 		} else {
 			adapter.setItems(items);
 		}
@@ -161,6 +164,7 @@ public class WikivoyageSearchDialogFragment extends WikivoyageBaseDialogFragment
 			@Override
 			public boolean publish(final List<WikivoyageSearchResult> results) {
 				getMyApplication().runInUIThread(new Runnable() {
+					@Override
 					public void run() {
 						if (!isCancelled()) {
 							setAdapterItems(results);

@@ -5,9 +5,6 @@ import android.app.DatePickerDialog;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.AppCompatImageView;
-import android.support.v7.widget.AppCompatTextView;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.ContextThemeWrapper;
@@ -25,10 +22,16 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.AppCompatImageView;
+import androidx.appcompat.widget.AppCompatTextView;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.map.TileSourceManager;
 import net.osmand.plus.OsmandPlugin;
-import net.osmand.plus.OsmandSettings;
+import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.BaseOsmAndFragment;
 import net.osmand.plus.resources.ResourceManager;
@@ -48,7 +51,7 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MapActivity mapActivity = (MapActivity) getActivity();
         final OsmandSettings settings = getSettings();
         final MapillaryPlugin plugin = OsmandPlugin.getPlugin(MapillaryPlugin.class);
@@ -56,8 +59,10 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
         final boolean nightMode = getMyApplication().getDaynightHelper().isNightModeForMapControls();
         final int themeRes = nightMode ? R.style.OsmandDarkTheme : R.style.OsmandLightTheme;
         final int backgroundColor = ContextCompat.getColor(getActivity(),
-                nightMode ? R.color.ctx_menu_info_view_bg_dark : R.color.ctx_menu_info_view_bg_light);
+                nightMode ? R.color.activity_background_color_dark : R.color.activity_background_color_light);
         final DateFormat dateFormat = SimpleDateFormat.getDateInstance(DateFormat.MEDIUM);
+        final int currentModeColorRes = getMyApplication().getSettings().getApplicationMode().getIconColorInfo().getColor(nightMode);
+        final int currentModeColor = ContextCompat.getColor(getActivity(), currentModeColorRes);
 
         final View view = View.inflate(new ContextThemeWrapper(getContext(), themeRes), R.layout.fragment_mapillary_filters, null);
         view.findViewById(R.id.mapillary_filters_linear_layout).setBackgroundColor(backgroundColor);
@@ -65,15 +70,15 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
 
         final View toggleRow = view.findViewById(R.id.toggle_row);
         final boolean selected = settings.SHOW_MAPILLARY.get();
-        final int toggleActionStringId = selected ? R.string.shared_string_enabled : R.string.shared_string_disabled;
+        final int toggleActionStringId = selected ? R.string.shared_string_on : R.string.shared_string_off;
         int toggleIconColorId;
         int toggleIconId;
         if (selected) {
             toggleIconId = R.drawable.ic_action_view;
-            toggleIconColorId = nightMode ? R.color.color_dialog_buttons_dark : R.color.color_dialog_buttons_light;
+            toggleIconColorId = currentModeColorRes;
         } else {
             toggleIconId = R.drawable.ic_action_hide;
-            toggleIconColorId = nightMode ? 0 : R.color.icon_color;
+            toggleIconColorId = nightMode ? R.color.icon_color_default_dark : R.color.icon_color_default_light;
         }
         ((AppCompatTextView) toggleRow.findViewById(R.id.toggle_row_title)).setText(toggleActionStringId);
         final Drawable drawable = getIcon(toggleIconId, toggleIconColorId);
@@ -95,6 +100,7 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
                 toggle.setChecked(!toggle.isChecked());
             }
         });
+        UiUtilities.setupCompoundButton(nightMode, currentModeColor, toggle);
 
 
         final Button reloadTile = (Button) view.findViewById(R.id.button_reload_tile);
@@ -109,16 +115,15 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
         });
 
 
-        final int colorRes = nightMode ? R.color.color_white : R.color.icon_color;
+        final int colorRes = nightMode ? R.color.icon_color_default_dark : R.color.icon_color_default_light;
         ((AppCompatImageView) view.findViewById(R.id.mapillary_filters_user_icon)).setImageDrawable(getIcon(R.drawable.ic_action_user, colorRes));
         ((AppCompatImageView) view.findViewById(R.id.mapillary_filters_date_icon)).setImageDrawable(getIcon(R.drawable.ic_action_data, colorRes));
-        ((AppCompatImageView) view.findViewById(R.id.mapillary_filters_tile_cache_icon)).setImageDrawable(getIcon(R.drawable.ic_layer_top_dark, colorRes));
-
+        ((AppCompatImageView) view.findViewById(R.id.mapillary_filters_tile_cache_icon)).setImageDrawable(getIcon(R.drawable.ic_layer_top, colorRes));
 
         final DelayAutoCompleteTextView textView = (DelayAutoCompleteTextView) view.findViewById(R.id.auto_complete_text_view);
         textView.setAdapter(new MapillaryAutoCompleteAdapter(getContext(), R.layout.auto_complete_suggestion, getMyApplication()));
         String selectedUsername = settings.MAPILLARY_FILTER_USERNAME.get();
-        if (!selectedUsername.equals("") && settings.USE_MAPILLARY_FILTER.get()) {
+        if (!selectedUsername.isEmpty() && settings.USE_MAPILLARY_FILTER.get()) {
             textView.setText(selectedUsername);
             textView.setSelection(selectedUsername.length());
         }
@@ -149,13 +154,7 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
             @Override
             public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
                 view.findViewById(R.id.warning_linear_layout).setVisibility(View.GONE);
-                if (!settings.MAPILLARY_FILTER_USERNAME.get().equals("") ||
-                        settings.MAPILLARY_FILTER_TO_DATE.get() != 0 ||
-                        settings.MAPILLARY_FILTER_FROM_DATE.get() != 0) {
-                    changeButtonState((Button) view.findViewById(R.id.button_apply), 1, true);
-                } else {
-                    changeButtonState((Button) view.findViewById(R.id.button_apply), .5f, false);
-                }
+                enableButtonApply(view);
             }
 
             @Override
@@ -178,7 +177,7 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
                 from.set(Calendar.DAY_OF_MONTH, dayOfMonth);
                 dateFromEt.setText(dateFormat.format(from.getTime()));
                 settings.MAPILLARY_FILTER_FROM_DATE.set(from.getTimeInMillis());
-                changeButtonState((Button) view.findViewById(R.id.button_apply), 1, true);
+                enableButtonApply(view);
                 mapActivity.getDashboard().refreshContent(true);
             }
         };
@@ -205,7 +204,7 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
                 to.set(Calendar.DAY_OF_MONTH, dayOfMonth);
                 dateToEt.setText(dateFormat.format(to.getTime()));
                 settings.MAPILLARY_FILTER_TO_DATE.set(to.getTimeInMillis());
-                changeButtonState((Button) view.findViewById(R.id.button_apply), 1, true);
+                enableButtonApply(view);
                 mapActivity.getDashboard().refreshContent(true);
             }
         };
@@ -232,9 +231,29 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
             }
         }
 
+        final View rowPano = view.findViewById(R.id.pano_row);
+        final CompoundButton pano = (CompoundButton) rowPano.findViewById(R.id.pano_row_toggle);
+        pano.setOnCheckedChangeListener(null);
+        pano.setChecked(settings.MAPILLARY_FILTER_PANO.get());
+        pano.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                settings.MAPILLARY_FILTER_PANO.set(!settings.MAPILLARY_FILTER_PANO.get());
+                enableButtonApply(view);
+                mapActivity.getDashboard().refreshContent(true);
+            }
+        });
+        rowPano.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                pano.setChecked(!pano.isChecked());
+            }
+        });
+        UiUtilities.setupCompoundButton(nightMode, currentModeColor, pano);
+
 
         final Button apply = (Button) view.findViewById(R.id.button_apply);
-        changeButtonState(apply, .5f, false);
+        disableButtonApply(view);
         apply.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -242,16 +261,16 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
                 String dateFrom = dateFromEt.getText().toString();
                 String dateTo = dateToEt.getText().toString();
 
-                if (!settings.MAPILLARY_FILTER_USERNAME.get().equals("") || !dateFrom.equals("") || !dateTo.equals("")) {
+                if (!settings.MAPILLARY_FILTER_USERNAME.get().isEmpty() || !dateFrom.isEmpty() || !dateTo.isEmpty() || settings.MAPILLARY_FILTER_PANO.get()) {
                     settings.USE_MAPILLARY_FILTER.set(true);
                 }
-                if (dateFrom.equals("")) {
+                if (dateFrom.isEmpty()) {
                     settings.MAPILLARY_FILTER_FROM_DATE.set(0L);
                 }
-                if (dateTo.equals("")) {
+                if (dateTo.isEmpty()) {
                     settings.MAPILLARY_FILTER_TO_DATE.set(0L);
                 }
-                if (!username.equals("") && settings.MAPILLARY_FILTER_USERNAME.get().equals("")) {
+                if (!username.isEmpty() && settings.MAPILLARY_FILTER_USERNAME.get().isEmpty()) {
                     view.findViewById(R.id.warning_linear_layout).setVisibility(View.VISIBLE);
                 } else {
                     mapActivity.getDashboard().hideDashboard();
@@ -271,12 +290,14 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
                 textView.setText("");
                 dateFromEt.setText("");
                 dateToEt.setText("");
+                pano.setChecked(false);
 
                 settings.USE_MAPILLARY_FILTER.set(false);
                 settings.MAPILLARY_FILTER_USER_KEY.set("");
                 settings.MAPILLARY_FILTER_USERNAME.set("");
                 settings.MAPILLARY_FILTER_FROM_DATE.set(0L);
                 settings.MAPILLARY_FILTER_TO_DATE.set(0L);
+                settings.MAPILLARY_FILTER_PANO.set(false);
 
                 plugin.updateLayers(mapActivity.getMapView(), mapActivity);
                 hideKeyboard();
@@ -292,6 +313,14 @@ public class MapillaryFiltersFragment extends BaseOsmAndFragment {
             InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
         }
+    }
+
+    private void enableButtonApply(View view) {
+        changeButtonState((Button) view.findViewById(R.id.button_apply), 1, true);
+    }
+
+    private void disableButtonApply(View view) {
+        changeButtonState((Button) view.findViewById(R.id.button_apply), .5f, false);
     }
 
     private void changeButtonState(Button button, float alpha, boolean enabled) {

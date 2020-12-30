@@ -24,9 +24,6 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
-import android.support.v4.view.ViewPropertyAnimatorListener;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -41,6 +38,10 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.PopupWindow;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.ViewPropertyAnimatorListener;
 
 import net.osmand.plus.R;
 
@@ -724,8 +725,8 @@ public class SwipeDismissListViewTouchListener implements View.OnTouchListener {
 				}
 
 				if (mSwiping) {
-					ViewCompat.setTranslationX(mSwipeDownView, deltaX);
-					ViewCompat.setAlpha(mSwipeDownView, Math.max(0f, Math.min(1f,
+					mSwipeDownView.setTranslationX(deltaX);
+					mSwipeDownView.setAlpha(Math.max(0f, Math.min(1f,
 							1f - 2f * Math.abs(deltaX) / mViewWidth)));
 					return true;
 				}
@@ -823,8 +824,8 @@ public class SwipeDismissListViewTouchListener implements View.OnTouchListener {
 
 			ViewGroup.LayoutParams lp;
 			for (PendingDismissData pendingDismiss : mPendingDismisses) {
-				ViewCompat.setAlpha(pendingDismiss.view, 1f);
-				ViewCompat.setTranslationX(pendingDismiss.view, 0);
+				pendingDismiss.view.setAlpha(1f);
+				pendingDismiss.view.setTranslationX(0);
 				lp = pendingDismiss.childView.getLayoutParams();
 				lp.height = originalLayoutHeight;
 				pendingDismiss.childView.setLayoutParams(lp);

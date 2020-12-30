@@ -1,17 +1,22 @@
 package net.osmand.data;
 
-import net.osmand.LocationConvert;
-import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.OsmandSettings;
-import net.osmand.plus.R;
-import net.osmand.util.Algorithms;
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.openlocationcode.OpenLocationCode;
-import com.jwetherell.openmap.common.LatLonPoint;
-import com.jwetherell.openmap.common.UTMPoint;
+
+import net.osmand.LocationConvert;
+import net.osmand.plus.OsmAndFormatter;
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.R;
+import net.osmand.plus.activities.MapActivity;
+import net.osmand.util.Algorithms;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class PointDescription {
 	private String type = "";
@@ -24,6 +29,7 @@ public class PointDescription {
 
 	public static final String POINT_TYPE_FAVORITE = "favorite";
 	public static final String POINT_TYPE_WPT = "wpt";
+	public static final String POINT_TYPE_GPX = "gpx";
 	public static final String POINT_TYPE_RTE = "rte";
 	public static final String POINT_TYPE_POI = "poi";
 	public static final String POINT_TYPE_ADDRESS = "address";
@@ -46,6 +52,10 @@ public class PointDescription {
 	public static final String POINT_TYPE_TRANSPORT_ROUTE = "transport_route";
 	public static final String POINT_TYPE_TRANSPORT_STOP = "transport_stop";
 	public static final String POINT_TYPE_MAPILLARY_IMAGE = "mapillary_image";
+	public static final String POINT_TYPE_POI_TYPE = "poi_type";
+	public static final String POINT_TYPE_CUSTOM_POI_FILTER = "custom_poi_filter";
+	public static final int LOCATION_URL = 200;
+	public static final int LOCATION_LIST_HEADER = 201;
 
 
 	public static final PointDescription LOCATION_POINT = new PointDescription(POINT_TYPE_LOCATION, "");
@@ -131,7 +141,7 @@ public class PointDescription {
 			} else if (isPoi()) {
 				typeName = ctx.getString(R.string.poi);
 			} else if (isWpt()) {
-				return ctx.getString(R.string.gpx_wpt);
+				return ctx.getString(R.string.shared_string_waypoint);
 			}
 			if (!Algorithms.isEmpty(typeName)) {
 				if (Algorithms.isEmpty(name)) {
@@ -147,50 +157,72 @@ public class PointDescription {
 	public static String getLocationName(Context ctx, double lat, double lon, boolean sh) {
 		OsmandSettings st = ((OsmandApplication) ctx.getApplicationContext()).getSettings();
 		int f = st.COORDINATES_FORMAT.get();
-		if (f == PointDescription.UTM_FORMAT) {
-			UTMPoint pnt = new UTMPoint(new LatLonPoint(lat, lon));
-			return pnt.zone_number + "" + pnt.zone_letter + " " + ((long) pnt.easting) + " "
-					+ ((long) pnt.northing);
-		} else if (f == PointDescription.OLC_FORMAT) {
-			try {
-				return getLocationOlcName(lat, lon);
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-				return "0, 0";
-			}
-		} else {
-			try {
-				return ctx.getString(sh ? R.string.short_location_on_map : R.string.location_on_map, LocationConvert.convert(lat, f),
-						LocationConvert.convert(lon, f));
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-				return ctx.getString(sh ? R.string.short_location_on_map : R.string.location_on_map, 0, 0); 
-			}
+		return OsmAndFormatter.getFormattedCoordinates(lat, lon, f);
+	}
+
+	public static Map<Integer, String> getLocationData(MapActivity ctx, double lat, double lon, boolean sh) {
+		OsmandSettings settings = ((OsmandApplication) ctx.getApplicationContext()).getSettings();
+		Map<Integer, String> results = new LinkedHashMap<>();
+
+		String latLonString ;
+		String latLonDeg;
+		String latLonMin;
+		String latLonSec;
+		
+		String utm = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.UTM_FORMAT);
+		String olc = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.OLC_FORMAT);
+		String mgrs = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.MGRS_FORMAT);
+
+		try {
+			latLonString = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.FORMAT_DEGREES_SHORT);
+			latLonDeg = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.FORMAT_DEGREES);
+			latLonMin = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.FORMAT_MINUTES);
+			latLonSec = OsmAndFormatter.getFormattedCoordinates(lat, lon, OsmAndFormatter.FORMAT_SECONDS);
+		} catch (RuntimeException e) {
+			latLonString = "0, 0";
+			latLonDeg = "0°, 0°";
+			latLonMin = "0° 0′, 0° 0′";
+			latLonSec = "0° 0′ 0″, 0° 0′ 0″";
 		}
+
+		results.put(OsmAndFormatter.FORMAT_DEGREES_SHORT, latLonString);
+		results.put(OsmAndFormatter.FORMAT_DEGREES, latLonDeg);
+		results.put(OsmAndFormatter.FORMAT_MINUTES, latLonMin);
+		results.put(OsmAndFormatter.FORMAT_SECONDS, latLonSec);
+		results.put(OsmAndFormatter.UTM_FORMAT, utm);
+		results.put(OsmAndFormatter.OLC_FORMAT, olc);
+		results.put(OsmAndFormatter.MGRS_FORMAT, mgrs);
+
+		int zoom = 17;
+		if (ctx.getMapView() != null) {
+			zoom = ctx.getMapView().getZoom();
+		}
+		final String httpUrl = "https://osmand.net/go?lat=" + (lat) + "&lon=" + (lon) + "&z=" + zoom;
+		results.put(LOCATION_URL, httpUrl);
+
+		int f = settings.COORDINATES_FORMAT.get();
+		
+		if (f == PointDescription.UTM_FORMAT) {
+			results.put(LOCATION_LIST_HEADER, utm);
+		} else if (f == PointDescription.OLC_FORMAT) {
+			results.put(LOCATION_LIST_HEADER, olc);
+		} else if (f == PointDescription.MGRS_FORMAT) {
+			results.put(LOCATION_LIST_HEADER, mgrs);
+		} else if (f == PointDescription.FORMAT_DEGREES) {
+			results.put(LOCATION_LIST_HEADER, latLonDeg);
+		} else if (f == PointDescription.FORMAT_MINUTES) {
+			results.put(LOCATION_LIST_HEADER, latLonMin);
+		} else if (f == PointDescription.FORMAT_SECONDS) {
+			results.put(LOCATION_LIST_HEADER, latLonSec);
+		}
+		return results;
 	}
 
 	public static String getLocationNamePlain(Context ctx, double lat, double lon) {
 		OsmandSettings st = ((OsmandApplication) ctx.getApplicationContext()).getSettings();
 		int f = st.COORDINATES_FORMAT.get();
-		if (f == PointDescription.UTM_FORMAT) {
-			UTMPoint pnt = new UTMPoint(new LatLonPoint(lat, lon));
-			return pnt.zone_number + "" + pnt.zone_letter + " " + ((long) pnt.easting) + " "
-					+ ((long) pnt.northing);
-		} else if (f == PointDescription.OLC_FORMAT) {
-			try {
-				return getLocationOlcName(lat, lon);
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-				return "0, 0";
-			}
-		} else {
-			try {
-				return LocationConvert.convert(lat, f) + ", " + LocationConvert.convert(lon, f);
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-				return "0, 0";
-			}
-		}
+		return OsmAndFormatter.getFormattedCoordinates(lat, lon, f);
+
 	}
 
 	public static String getLocationOlcName(double lat, double lon) {
@@ -251,6 +283,18 @@ public class PointDescription {
 
 	public boolean isMyLocation() {
 		return POINT_TYPE_MY_LOCATION.equals(type);
+	}
+
+	public boolean isPoiType() {
+		return POINT_TYPE_POI_TYPE.equals(type);
+	}
+
+	public boolean isCustomPoiFilter() {
+		return POINT_TYPE_CUSTOM_POI_FILTER.equals(type);
+	}
+
+	public boolean isGpxPoint() {
+		return POINT_TYPE_GPX.equals(type);
 	}
 
 	@Override
@@ -356,7 +400,8 @@ public class PointDescription {
 	public static final int FORMAT_SECONDS = LocationConvert.FORMAT_SECONDS;
 	public static final int UTM_FORMAT = LocationConvert.UTM_FORMAT;
 	public static final int OLC_FORMAT = LocationConvert.OLC_FORMAT;
-	
+	public static final int MGRS_FORMAT = LocationConvert.MGRS_FORMAT;
+
 	public static String formatToHumanString(Context ctx, int format) {
 		switch (format) {
 			case LocationConvert.FORMAT_DEGREES:
@@ -369,6 +414,8 @@ public class PointDescription {
 				return "UTM";
 			case LocationConvert.OLC_FORMAT:
 				return "OLC";
+			case LocationConvert.MGRS_FORMAT:
+				return "MGRS";
 			default:
 				return "Unknown format";
 		}

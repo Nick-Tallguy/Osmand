@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-                android:id="@+id/MainLayout"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:orientation="vertical">
 
     <ExpandableListView
         android:id="@android:id/list"
@@ -14,7 +14,9 @@
         android:divider="@null"
         android:dividerHeight="0dp"
         android:drawSelectorOnTop="false"
-        android:groupIndicator="@android:color/transparent"/>
+        android:groupIndicator="@android:color/transparent"
+	    android:layout_marginEnd="0dp"
+	    android:layout_marginStart="0dp" />
 
     <View
         android:id="@+id/overlay_view"
@@ -25,4 +27,4 @@
 
     <include layout="@layout/my_places_fabs"/>
 
-</android.support.design.widget.CoordinatorLayout>
+</RelativeLayout>

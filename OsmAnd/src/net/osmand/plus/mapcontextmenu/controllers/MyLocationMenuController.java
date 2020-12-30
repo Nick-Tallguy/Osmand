@@ -2,17 +2,18 @@ package net.osmand.plus.mapcontextmenu.controllers;
 
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.content.res.AppCompatResources;
+
 import net.osmand.data.PointDescription;
-import net.osmand.plus.ApplicationMode;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.MenuBuilder;
 import net.osmand.plus.mapcontextmenu.MenuController;
-import net.osmand.plus.mapillary.MapillaryPlugin;
 
 public class MyLocationMenuController  extends MenuController {
 
-	public MyLocationMenuController(MapActivity mapActivity, PointDescription pointDescription) {
+	public MyLocationMenuController(@NonNull MapActivity mapActivity, @NonNull PointDescription pointDescription) {
 		super(new MenuBuilder(mapActivity), pointDescription, mapActivity);
 		builder.setShowNearestWiki(true);
 	}
@@ -26,14 +27,21 @@ public class MyLocationMenuController  extends MenuController {
 		return getLatLon();
 	}
 
+	@NonNull
 	@Override
 	public String getTypeStr() {
 		return getPointDescription().getTypeName();
 	}
 
+	@NonNull
 	@Override
 	public String getCommonTypeStr() {
-		return getMapActivity().getString(R.string.shared_string_location);
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return mapActivity.getString(R.string.shared_string_location);
+		} else {
+			return "";
+		}
 	}
 
 	@Override
@@ -43,7 +51,11 @@ public class MyLocationMenuController  extends MenuController {
 
 	@Override
 	public Drawable getRightIcon() {
-		ApplicationMode appMode = getMapActivity().getMyApplication().getSettings().getApplicationMode();
-		return getMapActivity().getResources().getDrawable(appMode.getResourceLocationDay());
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			return AppCompatResources.getDrawable(mapActivity, R.drawable.ic_action_location_color);
+		} else {
+			return null;
+		}
 	}
 }

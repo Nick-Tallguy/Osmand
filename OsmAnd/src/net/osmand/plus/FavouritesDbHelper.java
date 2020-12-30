@@ -1,20 +1,28 @@
 package net.osmand.plus;
 
+import android.app.Activity;
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
+import android.graphics.drawable.Drawable;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
+
+import net.osmand.GPXUtilities;
+import net.osmand.GPXUtilities.GPXFile;
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.PlatformUtil;
 import net.osmand.data.FavouritePoint;
 import net.osmand.data.LatLon;
-import net.osmand.plus.GPXUtilities.GPXFile;
-import net.osmand.plus.GPXUtilities.WptPt;
+import net.osmand.plus.GeocodingLookupService.AddressLookupRequest;
+import net.osmand.plus.mapmarkers.MapMarkersHelper;
+import net.osmand.plus.mapmarkers.MapMarkersGroup;
 import net.osmand.plus.api.SQLiteAPI.SQLiteConnection;
 import net.osmand.plus.api.SQLiteAPI.SQLiteCursor;
 import net.osmand.util.Algorithms;
 
-import org.apache.tools.bzip2.CBZip2OutputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -28,13 +36,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 
 public class FavouritesDbHelper {
 
-	public interface FavoritesUpdatedListener {
-		void updateFavourites();
-	}
+	public interface FavoritesListener {
 
+		void onFavoritesLoaded();
+
+		void onFavoriteDataUpdated(@NonNull FavouritePoint favouritePoint);
+	}
 
 	private static final org.apache.commons.logging.Log log = PlatformUtil.getLog(FavouritesDbHelper.class);
 
@@ -43,23 +55,123 @@ public class FavouritesDbHelper {
 	public static final int BACKUP_CNT = 20; //$NON-NLS-1$
 	public static final String FILE_TO_BACKUP = "favourites_bak.gpx"; //$NON-NLS-1$
 
-	private List<FavouritePoint> cachedFavoritePoints = new ArrayList<FavouritePoint>();
-	private List<FavoriteGroup> favoriteGroups = new ArrayList<FavouritesDbHelper.FavoriteGroup>();
-	private Map<String, FavoriteGroup> flatGroups = new LinkedHashMap<String, FavouritesDbHelper.FavoriteGroup>();
+	private List<FavouritePoint> cachedFavoritePoints = new ArrayList<>();
+	private List<FavoriteGroup> favoriteGroups = new ArrayList<>();
+	private Map<String, FavoriteGroup> flatGroups = new LinkedHashMap<>();
 	private final OsmandApplication context;
-	protected static final String HIDDEN = "HIDDEN";
 	private static final String DELIMETER = "__";
 
+	private Set<FavoritesListener> listeners = new HashSet<>();
+	private boolean favoritesLoaded;
+
+	private Map<FavouritePoint, AddressLookupRequest> addressRequestMap = new ConcurrentHashMap<>();
 
 	public FavouritesDbHelper(OsmandApplication context) {
 		this.context = context;
 	}
 
 	public static class FavoriteGroup {
-		public String name;
-		public boolean visible = true;
-		public int color;
-		public List<FavouritePoint> points = new ArrayList<FavouritePoint>();
+		public static final String PERSONAL_CATEGORY = "personal";
+		private String name;
+		private boolean visible = true;
+		private int color;
+		private List<FavouritePoint> points = new ArrayList<>();
+
+		public FavoriteGroup() {
+		}
+
+		public FavoriteGroup(String name, boolean visible, int color) {
+			this.name = name;
+			this.visible = visible;
+			this.color = color;
+		}
+
+		public FavoriteGroup(String name, List<FavouritePoint> points, int color, boolean visible) {
+			this.name = name;
+			this.color = color;
+			this.points = points;
+			this.visible = visible;
+		}
+
+		public boolean isPersonal() {
+			return isPersonal(name);
+		}
+
+		private static boolean isPersonal(String name) {
+			return PERSONAL_CATEGORY.equals(name);
+		}
+
+		public static boolean isPersonalCategoryDisplayName(Context ctx, String name) {
+			return name.equals(ctx.getString(R.string.personal_category_name));
+		}
+
+		public static String getDisplayName(Context ctx, String name) {
+			if (isPersonal(name)) {
+				return ctx.getString(R.string.personal_category_name);
+			} else if (name.isEmpty()) {
+				return ctx.getString(R.string.shared_string_favorites);
+			} else {
+				return name;
+			}
+		}
+
+		public List<FavouritePoint> getPoints() {
+			return points;
+		}
+
+		public int getColor() {
+			return color;
+		}
+
+		public boolean isVisible() {
+			return visible;
+		}
+
+		public String getName() {
+			return name;
+		}
+
+		public String getDisplayName(Context ctx) {
+			return getDisplayName(ctx, name);
+		}
+
+		public static String convertDisplayNameToGroupIdName(Context context, String name) {
+			if (isPersonalCategoryDisplayName(context, name)) {
+				return PERSONAL_CATEGORY;
+			}
+			if (name.equals(context.getString(R.string.shared_string_favorites))) {
+				return "";
+			}
+			return name;
+		}
+	}
+
+	@Nullable
+	public Drawable getColoredIconForGroup(String groupName) {
+		String groupIdName = FavoriteGroup.convertDisplayNameToGroupIdName(context, groupName);
+		FavoriteGroup favoriteGroup = getGroup(groupIdName);
+		if (favoriteGroup != null) {
+			int color = favoriteGroup.getColor() == 0 ?
+					context.getResources().getColor(R.color.color_favorite) : favoriteGroup.getColor();
+			return context.getUIUtilities().getPaintedIcon(R.drawable.ic_action_group_name_16, color);
+		}
+		return null;
+	}
+
+	public int getColorWithCategory(FavouritePoint point, int defaultColor) {
+		int color = 0;
+		if (point.getColor() != 0) {
+			color = point.getColor();
+		} else {
+			FavoriteGroup favoriteGroup = getGroup(point);
+			if (favoriteGroup != null) {
+				color = favoriteGroup.getColor();
+			}
+			if (color == 0) {
+				color = defaultColor;
+			}
+		}
+		return color;
 	}
 
 	public void loadFavorites() {
@@ -87,23 +199,73 @@ public class FavouritesDbHelper {
 		}
 		sortAll();
 		recalculateCachedFavPoints();
-		if (changed) {
+		if (changed || !getExternalFile().exists()) {
 			saveCurrentPointsIntoFile();
 		}
-		favouritesUpdated();
-
+		favoritesLoaded = true;
+		notifyListeners();
 	}
 
-	private void favouritesUpdated() {
+	void fixBlackBackground() {
+		flatGroups.clear();
+		favoriteGroups.clear();
+		for (FavouritePoint fp : cachedFavoritePoints) {
+			if (fp.getColor() == 0xFF000000 || fp.getColor() == ContextCompat.getColor(context, R.color.color_favorite)) {
+				fp.setColor(0);
+			}
+			if (fp.getBackgroundType() == FavouritePoint.DEFAULT_BACKGROUND_TYPE) {
+				fp.setBackgroundType(null);
+			}
+			if (fp.getIconId() == FavouritePoint.DEFAULT_UI_ICON_ID) {
+				fp.setIconId(0);
+			}
+			FavoriteGroup group = getOrCreateGroup(fp, 0);
+			group.points.add(fp);
+		}
+		sortAll();
+		saveCurrentPointsIntoFile();
+		notifyListeners();
 	}
 
+	private void notifyListeners() {
+		context.runInUIThread(new Runnable() {
+			@Override
+			public void run() {
+				for (FavoritesListener listener : listeners) {
+					listener.onFavoritesLoaded();
+				}
+			}
+		});
+	}
+
+	public FavouritePoint getSpecialPoint(FavouritePoint.SpecialPointType pointType) {
+		for (FavouritePoint fp : cachedFavoritePoints) {
+			if (fp.getSpecialPointType() == pointType) {
+				return fp;
+			}
+		}
+		return null;
+	}
+
+	public boolean isFavoritesLoaded() {
+		return favoritesLoaded;
+	}
+
+	public void addListener(FavoritesListener listener) {
+		listeners.add(listener);
+	}
+
+	public void removeListener(FavoritesListener listener) {
+		listeners.remove(listener);
+	}
 
 	private boolean merge(Map<String, FavouritePoint> source, Map<String, FavouritePoint> destination) {
 		boolean changed = false;
-		for (String ks : source.keySet()) {
+		for (Map.Entry<String, FavouritePoint> entry : source.entrySet()) {
+			String ks = entry.getKey();
 			if (!destination.containsKey(ks)) {
 				changed = true;
-				destination.put(ks, source.get(ks));
+				destination.put(ks, entry.getValue());
 			}
 		}
 		return changed;
@@ -111,17 +273,25 @@ public class FavouritesDbHelper {
 
 	private void runSyncWithMarkers(FavoriteGroup favGroup) {
 		MapMarkersHelper helper = context.getMapMarkersHelper();
-		helper.runSynchronization(helper.getOrCreateGroup(favGroup));
+		MapMarkersGroup group = helper.getMarkersGroup(favGroup);
+		if (group != null) {
+			helper.runSynchronization(group);
+		}
 	}
 
-	private void removeFromMarkers(FavoriteGroup favGroup) {
+	private boolean removeFromMarkers(FavoriteGroup favGroup) {
 		MapMarkersHelper helper = context.getMapMarkersHelper();
-		helper.removeMarkersGroup(helper.getOrCreateGroup(favGroup));
+		MapMarkersGroup group = helper.getMarkersGroup(favGroup);
+		if (group != null) {
+			helper.removeMarkersGroup(group);
+			return true;
+		}
+		return false;
 	}
 
 	private void addToMarkers(FavoriteGroup favGroup) {
 		MapMarkersHelper helper = context.getMapMarkersHelper();
-		helper.addOrEnableGroup(helper.getOrCreateGroup(favGroup));
+		helper.addOrEnableGroup(favGroup);
 	}
 
 	private File getInternalFile() {
@@ -173,19 +343,42 @@ public class FavouritesDbHelper {
 		return true;
 	}
 
+	public void setSpecialPoint(@NonNull LatLon latLon, FavouritePoint.SpecialPointType specialType, @Nullable String address) {
+		FavouritePoint point = getSpecialPoint(specialType);
+		if (point != null) {
+			point.setIconId(specialType.getIconId(context));
+			editFavourite(point, latLon.getLatitude(), latLon.getLongitude(), address);
+		} else {
+			point = new FavouritePoint(latLon.getLatitude(), latLon.getLongitude(), specialType.getName(), specialType.getCategory());
+			point.setAddress(address);
+			point.setIconId(specialType.getIconId(context));
+			addFavourite(point);
+		}
+	}
+
 	public boolean addFavourite(FavouritePoint p) {
 		return addFavourite(p, true);
 	}
 
 	public boolean addFavourite(FavouritePoint p, boolean saveImmediately) {
-		if (p.getName().equals("") && flatGroups.containsKey(p.getCategory())) {
+		if (p.getName().isEmpty() && flatGroups.containsKey(p.getCategory())) {
 			return true;
 		}
+		if (!p.isAddressSpecified()) {
+			lookupAddress(p);
+		}
+		context.getSettings().SHOW_FAVORITES.set(true);
 		FavoriteGroup group = getOrCreateGroup(p, 0);
 
-		if (!p.getName().equals("")) {
+		if (!p.getName().isEmpty()) {
 			p.setVisible(group.visible);
-			p.setColor(group.color);
+			if (FavouritePoint.SpecialPointType.PARKING.equals(p.getSpecialPointType())) {
+				p.setColor(ContextCompat.getColor(context, R.color.parking_icon_background));
+			} else {
+				if (p.getColor() == 0) {
+					p.setColor(group.color);
+				}
+			}
 			group.points.add(p);
 			cachedFavoritePoints.add(p);
 		}
@@ -198,7 +391,43 @@ public class FavouritesDbHelper {
 		return true;
 	}
 
-	public static AlertDialog.Builder checkDuplicates(FavouritePoint p, FavouritesDbHelper fdb, Context uiContext) {
+	public void lookupAddress(@NonNull final FavouritePoint p) {
+		AddressLookupRequest request = addressRequestMap.get(p);
+		double latitude = p.getLatitude();
+		double longitude = p.getLongitude();
+		if (request == null || !request.getLatLon().equals(new LatLon(latitude, longitude))) {
+			cancelAddressRequest(p);
+			request = new AddressLookupRequest(new LatLon(latitude, longitude),
+					new GeocodingLookupService.OnAddressLookupResult() {
+						@Override
+						public void geocodingDone(String address) {
+							addressRequestMap.remove(p);
+							editAddressDescription(p, address);
+							context.runInUIThread(new Runnable() {
+								@Override
+								public void run() {
+									for (FavoritesListener listener : listeners) {
+										listener.onFavoriteDataUpdated(p);
+									}
+								}
+							});
+
+						}
+					}, null);
+			addressRequestMap.put(p, request);
+			context.getGeocodingLookupService().lookupAddress(request);
+		}
+	}
+
+	private void cancelAddressRequest(@NonNull FavouritePoint p) {
+		AddressLookupRequest request = addressRequestMap.get(p);
+		if (request != null) {
+			context.getGeocodingLookupService().cancel(request);
+			addressRequestMap.remove(p);
+		}
+	}
+
+	public static AlertDialog.Builder checkDuplicates(FavouritePoint p, FavouritesDbHelper fdb, Activity activity) {
 		boolean emoticons = false;
 		String index = "";
 		int number = 0;
@@ -217,7 +446,7 @@ public class FavouritesDbHelper {
 		while (fl) {
 			fl = false;
 			for (FavouritePoint fp : fdb.getFavouritePoints()) {
-				if (fp.getName().equals(name) && p.getLatitude() != fp.getLatitude() && p.getLongitude() != fp.getLongitude()) {
+				if (fp.getName().equals(name) && p.getLatitude() != fp.getLatitude() && p.getLongitude() != fp.getLongitude() && fp.getCategory().equals(p.getCategory())) {
 					number++;
 					index = " (" + number + ")";
 					name = p.getName() + index;
@@ -227,12 +456,15 @@ public class FavouritesDbHelper {
 			}
 		}
 		if ((index.length() > 0 || emoticons)) {
-			AlertDialog.Builder builder = new AlertDialog.Builder(uiContext);
+			OsmandApplication app = (OsmandApplication) activity.getApplication();
+			boolean nightMode = app.getDaynightHelper().isNightModeForMapControls();
+			Context themedContext = UiUtilities.getThemedContext(activity, nightMode);
+			AlertDialog.Builder builder = new AlertDialog.Builder(themedContext);
 			builder.setTitle(R.string.fav_point_dublicate);
 			if (emoticons) {
-				builder.setMessage(uiContext.getString(R.string.fav_point_emoticons_message, name));
+				builder.setMessage(activity.getString(R.string.fav_point_emoticons_message, name));
 			} else {
-				builder.setMessage(uiContext.getString(R.string.fav_point_dublicate_message, name));
+				builder.setMessage(activity.getString(R.string.fav_point_dublicate_message, name));
 			}
 			p.setName(name);
 			return builder;
@@ -271,11 +503,12 @@ public class FavouritesDbHelper {
 		return builder.toString();
 	}
 
-	public boolean editFavouriteName(FavouritePoint p, String newName, String category, String descr) {
+	public boolean editFavouriteName(FavouritePoint p, String newName, String category, String descr, String address) {
 		String oldCategory = p.getCategory();
 		p.setName(newName);
 		p.setCategory(category);
 		p.setDescription(descr);
+		p.setAddress(address);
 		if (!oldCategory.equals(category)) {
 			FavoriteGroup old = flatGroups.get(oldCategory);
 			if (old != null) {
@@ -283,7 +516,13 @@ public class FavouritesDbHelper {
 			}
 			FavoriteGroup pg = getOrCreateGroup(p, 0);
 			p.setVisible(pg.visible);
-			p.setColor(pg.color);
+			if (FavouritePoint.SpecialPointType.PARKING.equals(p.getSpecialPointType())) {
+				p.setColor(ContextCompat.getColor(context, R.color.parking_icon_background));
+			} else {
+				if (p.getColor() == 0) {
+					p.setColor(pg.color);
+				}
+			}
 			pg.points.add(p);
 		}
 		sortAll();
@@ -292,9 +531,23 @@ public class FavouritesDbHelper {
 		return true;
 	}
 
-	public boolean editFavourite(FavouritePoint p, double lat, double lon) {
+	private void editAddressDescription(@NonNull FavouritePoint p, @Nullable String address) {
+		p.setAddress(address);
+		saveCurrentPointsIntoFile();
+		runSyncWithMarkers(getOrCreateGroup(p, 0));
+	}
+
+	public boolean editFavourite(@NonNull FavouritePoint p, double lat, double lon) {
+		return editFavourite(p, lat, lon, null);
+	}
+
+	private boolean editFavourite(@NonNull FavouritePoint p, double lat, double lon, @Nullable String description) {
+		cancelAddressRequest(p);
 		p.setLatitude(lat);
 		p.setLongitude(lon);
+		if (description != null) {
+			p.setDescription(description);
+		}
 		saveCurrentPointsIntoFile();
 		runSyncWithMarkers(getOrCreateGroup(p, 0));
 		return true;
@@ -318,26 +571,21 @@ public class FavouritesDbHelper {
 	private void backup(File backupFile, File externalFile) {
 		try {
 			File f = new File(backupFile.getParentFile(), backupFile.getName());
-			FileOutputStream fout = new FileOutputStream(f);
-			fout.write('B');
-			fout.write('Z');
-			CBZip2OutputStream out = new CBZip2OutputStream(fout);
+			BZip2CompressorOutputStream out = new BZip2CompressorOutputStream(new FileOutputStream(f));
 			FileInputStream fis = new FileInputStream(externalFile);
 			Algorithms.streamCopy(fis, out);
 			fis.close();
 			out.close();
-			fout.close();
 		} catch (Exception e) {
 			log.warn("Backup failed", e);
 		}
 	}
 
-	public String exportFavorites() {
+	public Exception exportFavorites() {
 		return saveExternalFile(null);
 	}
 
-
-	private String saveExternalFile(Set<String> deleted) {
+	private Exception saveExternalFile(Set<String> deleted) {
 		Map<String, FavouritePoint> all = new LinkedHashMap<String, FavouritePoint>();
 		loadGPXFile(getExternalFile(), all);
 		List<FavouritePoint> favoritePoints = new ArrayList<FavouritePoint>(cachedFavoritePoints);
@@ -354,7 +602,6 @@ public class FavouritesDbHelper {
 		favoritePoints.addAll(all.values());
 		return saveFile(favoritePoints, getExternalFile());
 	}
-
 
 	private String getKey(FavouritePoint p) {
 		return p.getName() + DELIMETER + p.getCategory();
@@ -401,9 +648,9 @@ public class FavouritesDbHelper {
 		return firstModified;
 	}
 
-	public String saveFile(List<FavouritePoint> favoritePoints, File f) {
+	public Exception saveFile(List<FavouritePoint> favoritePoints, File f) {
 		GPXFile gpx = asGpxFile(favoritePoints);
-		return GPXUtilities.writeGpxFile(f, gpx, context);
+		return GPXUtilities.writeGpxFile(f, gpx);
 	}
 
 
@@ -411,32 +658,15 @@ public class FavouritesDbHelper {
 		return asGpxFile(cachedFavoritePoints);
 	}
 
-	private GPXFile asGpxFile(List<FavouritePoint> favoritePoints) {
-		GPXFile gpx = new GPXFile();
+	public GPXFile asGpxFile(List<FavouritePoint> favoritePoints) {
+		GPXFile gpx = new GPXFile(Version.getFullVersion(context));
 		for (FavouritePoint p : favoritePoints) {
-			WptPt pt = new WptPt();
-			pt.lat = p.getLatitude();
-			pt.lon = p.getLongitude();
-			if (!p.isVisible()) {
-				pt.getExtensionsToWrite().put(HIDDEN, "true");
-			}
-			if (p.getColor() != 0) {
-				pt.setColor(p.getColor());
-			}
-			pt.name = p.getName();
-			pt.desc = p.getDescription();
-			if (p.getCategory().length() > 0)
-				pt.category = p.getCategory();
-			if (p.getOriginObjectName().length() > 0) {
-				pt.comment = p.getOriginObjectName();
-			}
-			context.getSelectedGpxHelper().addPoint(pt, gpx);
+			context.getSelectedGpxHelper().addPoint(p.toWpt(context), gpx);
 		}
 		return gpx;
 	}
 
-
-	public void addEmptyCategory(String name) {
+	private void addEmptyCategory(String name) {
 		addEmptyCategory(name, 0, true);
 	}
 
@@ -446,11 +676,11 @@ public class FavouritesDbHelper {
 
 	public void addEmptyCategory(String name, int color, boolean visible) {
 		FavoriteGroup group = new FavoriteGroup();
-		group.name = name;
+		group.name = FavoriteGroup.convertDisplayNameToGroupIdName(context, name);
 		group.color = color;
 		group.visible = visible;
 		favoriteGroups.add(group);
-		flatGroups.put(name, group);
+		flatGroups.put(group.name, group);
 	}
 
 	public List<FavouritePoint> getFavouritePoints() {
@@ -477,37 +707,50 @@ public class FavouritesDbHelper {
 		return null;
 	}
 
-
 	public List<FavoriteGroup> getFavoriteGroups() {
 		return favoriteGroups;
+	}
+
+	public boolean isGroupVisible(String name) {
+		String nameLowercase = name.toLowerCase();
+		for (Map.Entry<String, FavoriteGroup> entry : flatGroups.entrySet()) {
+			String groupName = entry.getKey();
+			if (groupName.toLowerCase().equals(nameLowercase) || FavoriteGroup.getDisplayName(context, groupName).equals(name)) {
+				return entry.getValue().isVisible();
+			}
+		}
+		return false;
 	}
 
 	public boolean groupExists(String name) {
 		String nameLowercase = name.toLowerCase();
 		for (String groupName : flatGroups.keySet()) {
-			if (groupName.toLowerCase().equals(nameLowercase)) {
+			if (groupName.toLowerCase().equals(nameLowercase) || FavoriteGroup.getDisplayName(context, groupName).equals(name)) {
 				return true;
 			}
 		}
 		return false;
 	}
 
+	@Nullable
 	public FavoriteGroup getGroup(FavouritePoint p) {
-		if (flatGroups.containsKey(p.getCategory())) {
+		if (p != null && flatGroups.containsKey(p.getCategory())) {
 			return flatGroups.get(p.getCategory());
 		} else {
 			return null;
 		}
 	}
 
-	public FavoriteGroup getGroup(String name) {
-		if (flatGroups.containsKey(name)) {
-			return flatGroups.get(name);
+	@Nullable
+	public FavoriteGroup getGroup(String nameId) {
+		if (flatGroups.containsKey(nameId)) {
+			return flatGroups.get(nameId);
 		} else {
 			return null;
 		}
 	}
 
+	@Nullable
 	private FavouritePoint findFavoriteByAllProperties(String category, String name, double lat, double lon) {
 		if (flatGroups.containsKey(category)) {
 			FavoriteGroup fg = flatGroups.get(category);
@@ -520,13 +763,12 @@ public class FavouritesDbHelper {
 		return null;
 	}
 
-
 	public void recalculateCachedFavPoints() {
-		ArrayList<FavouritePoint> temp = new ArrayList<FavouritePoint>();
+		List<FavouritePoint> allPoints = new ArrayList<>();
 		for (FavoriteGroup f : favoriteGroups) {
-			temp.addAll(f.points);
+			allPoints.addAll(f.points);
 		}
-		cachedFavoritePoints = temp;
+		cachedFavoritePoints = allPoints;
 	}
 
 	public void sortAll() {
@@ -536,7 +778,7 @@ public class FavouritesDbHelper {
 
 			@Override
 			public int compare(FavoriteGroup lhs, FavoriteGroup rhs) {
-				return collator.compare(lhs.name, rhs.name);
+				return lhs.isPersonal() ? -1 : rhs.isPersonal() ? 1 : collator.compare(lhs.name, rhs.name);
 			}
 		});
 		Comparator<FavouritePoint> favoritesComparator = getComparator();
@@ -551,7 +793,7 @@ public class FavouritesDbHelper {
 	public static Comparator<FavouritePoint> getComparator() {
 		final Collator collator = Collator.getInstance();
 		collator.setStrength(Collator.SECONDARY);
-		Comparator<FavouritePoint> favoritesComparator = new Comparator<FavouritePoint>() {
+		return new Comparator<FavouritePoint>() {
 
 			@Override
 			public int compare(FavouritePoint o1, FavouritePoint o2) {
@@ -579,38 +821,21 @@ public class FavouritesDbHelper {
 
 			}
 		};
-		return favoritesComparator;
 	}
-
 
 	private boolean loadGPXFile(File file, Map<String, FavouritePoint> points) {
 		if (!file.exists()) {
 			return false;
 		}
-		GPXFile res = GPXUtilities.loadGPXFile(context, file);
-		if (res.warning != null) {
+		GPXFile res = GPXUtilities.loadGPXFile(file);
+		if (res.error != null) {
 			return false;
 		}
 		for (WptPt p : res.getPoints()) {
-			int c;
-			String name = p.name;
-			String categoryName = p.category != null ? p.category : "";
-			if (name == null) {
-				name = "";
+			FavouritePoint fp = FavouritePoint.fromWpt(p, context);
+			if (fp != null) {
+				points.put(getKey(fp), fp);
 			}
-			// old way to store the category, in name.
-			if ("".equals(categoryName.trim()) && (c = name.lastIndexOf('_')) != -1) {
-				categoryName = name.substring(c + 1);
-				name = name.substring(0, c);
-			}
-			FavouritePoint fp = new FavouritePoint(p.lat, p.lon, name, categoryName);
-			fp.setDescription(p.desc);
-			if (p.comment != null) {
-				fp.setOriginObjectName(p.comment);
-			}
-			fp.setColor(p.getColor(0));
-			fp.setVisible(!p.getExtensionsToRead().containsKey(HIDDEN));
-			points.put(getKey(fp), fp);
 		}
 		return true;
 	}
@@ -618,10 +843,12 @@ public class FavouritesDbHelper {
 	public void editFavouriteGroup(FavoriteGroup group, String newName, int color, boolean visible) {
 		if (color != 0 && group.color != color) {
 			FavoriteGroup gr = flatGroups.get(group.name);
-			group.color = color;
 			for (FavouritePoint p : gr.points) {
-				p.setColor(color);
+				if (p.getColor() == group.color) {
+					p.setColor(color);
+				}
 			}
+			group.color = color;
 			runSyncWithMarkers(gr);
 		}
 		if (group.visible != visible) {
@@ -634,7 +861,7 @@ public class FavouritesDbHelper {
 		}
 		if (!group.name.equals(newName)) {
 			FavoriteGroup gr = flatGroups.remove(group.name);
-			removeFromMarkers(gr);
+			boolean isInMarkers = removeFromMarkers(gr);
 			gr.name = newName;
 			FavoriteGroup renamedGroup = flatGroups.get(gr.name);
 			boolean existing = renamedGroup != null;
@@ -650,7 +877,9 @@ public class FavouritesDbHelper {
 					renamedGroup.points.add(p);
 				}
 			}
-			addToMarkers(renamedGroup);
+			if (isInMarkers) {
+				addToMarkers(renamedGroup);
+			}
 		}
 		saveCurrentPointsIntoFile();
 	}
@@ -688,22 +917,23 @@ public class FavouritesDbHelper {
 	private static final String FAVOURITE_COL_LAT = "latitude"; //$NON-NLS-1$
 	private static final String FAVOURITE_COL_LON = "longitude"; //$NON-NLS-1$
 	private static final String FAVOURITE_TABLE_CREATE = "CREATE TABLE " + FAVOURITE_TABLE_NAME + " (" + //$NON-NLS-1$ //$NON-NLS-2$
-			FAVOURITE_COL_NAME + " TEXT, " + FAVOURITE_COL_CATEGORY + " TEXT, " + //$NON-NLS-1$ //$NON-NLS-2$ 
+			FAVOURITE_COL_NAME + " TEXT, " + FAVOURITE_COL_CATEGORY + " TEXT, " + //$NON-NLS-1$ //$NON-NLS-2$
 			FAVOURITE_COL_LAT + " double, " + FAVOURITE_COL_LON + " double);"; //$NON-NLS-1$ //$NON-NLS-2$
 	private SQLiteConnection conn;
 
 
 	private SQLiteConnection openConnection(boolean readonly) {
 		conn = context.getSQLiteAPI().getOrCreateDatabase(FAVOURITE_DB_NAME, readonly);
-		if (conn.getVersion() == 0 || DATABASE_VERSION != conn.getVersion()) {
+		if (conn.getVersion() < DATABASE_VERSION) {
 			if (readonly) {
 				conn.close();
 				conn = context.getSQLiteAPI().getOrCreateDatabase(FAVOURITE_DB_NAME, false);
 			}
-			if (conn.getVersion() == 0) {
+			int version = conn.getVersion();
+			if (version == 0) {
 				onCreate(conn);
 			} else {
-				onUpgrade(conn, conn.getVersion(), DATABASE_VERSION);
+				onUpgrade(conn, version, DATABASE_VERSION);
 			}
 			conn.setVersion(DATABASE_VERSION);
 		}
@@ -728,10 +958,10 @@ public class FavouritesDbHelper {
 				try {
 					SQLiteCursor query = db
 							.rawQuery(
-									"SELECT " + FAVOURITE_COL_NAME + ", " + FAVOURITE_COL_CATEGORY + ", " + FAVOURITE_COL_LAT + "," + FAVOURITE_COL_LON + " FROM " + //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ 
+									"SELECT " + FAVOURITE_COL_NAME + ", " + FAVOURITE_COL_CATEGORY + ", " + FAVOURITE_COL_LAT + "," + FAVOURITE_COL_LON + " FROM " + //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 											FAVOURITE_TABLE_NAME, null);
 					cachedFavoritePoints.clear();
-					if (query.moveToFirst()) {
+					if (query != null && query.moveToFirst()) {
 						do {
 							String name = query.getString(0);
 							String cat = query.getString(1);
@@ -740,14 +970,16 @@ public class FavouritesDbHelper {
 							p.setName(name);
 							p.setCategory(cat);
 							FavoriteGroup group = getOrCreateGroup(p, 0);
-							if (!name.equals("")) {
+							if (!name.isEmpty()) {
 								p.setLatitude(query.getDouble(2));
 								p.setLongitude(query.getDouble(3));
 								group.points.add(p);
 							}
 						} while (query.moveToNext());
 					}
-					query.close();
+					if (query != null) {
+						query.close();
+					}
 				} finally {
 					db.close();
 				}
@@ -782,7 +1014,7 @@ public class FavouritesDbHelper {
 
 
 	public boolean addFavouriteDB(FavouritePoint p) {
-		if (p.getName().equals("") && flatGroups.containsKey(p.getCategory())) {
+		if (p.getName().isEmpty() && flatGroups.containsKey(p.getCategory())) {
 			return true;
 		}
 		SQLiteConnection db = openConnection(false);
@@ -792,7 +1024,7 @@ public class FavouritesDbHelper {
 						"INSERT INTO " + FAVOURITE_TABLE_NAME + " (" + FAVOURITE_COL_NAME + ", " + FAVOURITE_COL_CATEGORY + ", "
 								+ FAVOURITE_COL_LAT + ", " + FAVOURITE_COL_LON + ")" + " VALUES (?, ?, ?, ?)", new Object[]{p.getName(), p.getCategory(), p.getLatitude(), p.getLongitude()}); //$NON-NLS-1$ //$NON-NLS-2$
 				FavoriteGroup group = getOrCreateGroup(p, 0);
-				if (!p.getName().equals("")) {
+				if (!p.getName().isEmpty()) {
 					p.setVisible(group.visible);
 					p.setColor(group.color);
 					group.points.add(p);

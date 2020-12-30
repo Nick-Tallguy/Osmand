@@ -3,13 +3,9 @@ package net.osmand.plus.liveupdates;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.AttrRes;
-import android.support.annotation.ColorInt;
-import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -22,6 +18,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -42,13 +40,13 @@ import java.util.Locale;
 
 public class ReportsFragment extends BaseOsmAndFragment implements CountrySelectionFragment.OnFragmentInteractionListener {
 	public static final int TITLE = R.string.report;
-	public static final String DOMAIN = "http://download.osmand.net/";
+	public static final String DOMAIN = "https://osmand.net/";
 	public static final String TOTAL_CHANGES_BY_MONTH_URL_PATTERN = DOMAIN +
-			"reports/query_report.php?report=total_changes_by_month&month=%s&region=%s";
+			"reports/query_report?report=total_changes_by_month&month=%s&region=%s";
 	public static final String USERS_RANKING_BY_MONTH =  DOMAIN +
-			"reports/query_report.php?report=ranking_users_by_month&month=%s&region=%s";
+			"reports/query_report?report=ranking_users_by_month&month=%s&region=%s";
 	public static final String RECIPIENTS_BY_MONTH =  DOMAIN +
-			"reports/query_report.php?report=recipients_by_month&month=%s&region=%s";
+			"reports/query_report?report=recipients_by_month&month=%s&region=%s";
 
 
 	private static final Log LOG = PlatformUtil.getLog(ReportsFragment.class);
@@ -88,7 +86,7 @@ public class ReportsFragment extends BaseOsmAndFragment implements CountrySelect
 	private int textColorSecondary;
 
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container,
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
 							 Bundle savedInstanceState) {
 		View view = inflater.inflate(R.layout.fragment_reports, container, false);
 		monthReportsSpinner = (Spinner) view.findViewById(R.id.monthReportsSpinner);
@@ -203,9 +201,9 @@ public class ReportsFragment extends BaseOsmAndFragment implements CountrySelect
 		};
 		monthReportsSpinner.setOnItemSelectedListener(onItemSelectedListener);
 
-		inactiveColor = getColorFromAttr(R.attr.plugin_details_install_header_bg);
-		textColorPrimary = getColorFromAttr(android.R.attr.textColorPrimary);
-		textColorSecondary = getColorFromAttr(android.R.attr.textColorSecondary);
+		inactiveColor = AndroidUtils.getColorFromAttr(container.getContext(), R.attr.plugin_details_install_header_bg);
+		textColorPrimary = AndroidUtils.getColorFromAttr(container.getContext(), android.R.attr.textColorPrimary);
+		textColorSecondary = AndroidUtils.getColorFromAttr(container.getContext(), android.R.attr.textColorSecondary);
 
 		return view;
 	}
@@ -424,13 +422,5 @@ public class ReportsFragment extends BaseOsmAndFragment implements CountrySelect
 		donationsTextView.setTextColor(textColorPrimary);
 		donationsTotalTextView.setTextColor(textColorPrimary);
 		recipientsTextView.setTextColor(textColorPrimary);
-	}
-
-	@ColorInt
-	private int getColorFromAttr(@AttrRes int colorAttribute) {
-		TypedValue typedValue = new TypedValue();
-		Resources.Theme theme = getActivity().getTheme();
-		theme.resolveAttribute(colorAttribute, typedValue, true);
-		return typedValue.data;
 	}
 }

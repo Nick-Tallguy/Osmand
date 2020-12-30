@@ -4,18 +4,22 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.net.Uri;
+import android.os.Build;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.TextToSpeech.OnInitListener;
 import android.speech.tts.TextToSpeech.OnUtteranceCompletedListener;
-import android.support.v7.app.AlertDialog;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.PlatformUtil;
-import net.osmand.plus.ApplicationMode;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
-import net.osmand.plus.activities.SettingsActivity;
 import net.osmand.plus.routing.VoiceRouter;
+import net.osmand.plus.settings.backend.ApplicationMode;
+import net.osmand.plus.settings.backend.OsmandPreference;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
@@ -65,8 +69,8 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 	// TODO: We could actually remove v102 support, I am done updating all existing 35 TTS voices to v103. Hardy, July 2016
 	private static final Log log = PlatformUtil.getLog(TTSCommandPlayerImpl.class);
 	private static TextToSpeech mTts;
-	private static String ttsVoiceStatus = "";
-	private static String ttsVoiceUsed = "";
+	private static String ttsVoiceStatus = "-";
+	private static String ttsVoiceUsed = "-";
 	private Context mTtsContext;
 	private HashMap<String, String> params = new HashMap<String, String>();
 	private VoiceRouter vrt;
@@ -84,7 +88,7 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 			cSpeechRate = app.getSettings().SPEECH_RATE.get();
 		}
 		initializeEngine(app, ctx);
-		params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, app.getSettings().AUDIO_STREAM_GUIDANCE
+		params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, app.getSettings().AUDIO_MANAGER_STREAM
 				.getModeValue(getApplicationMode()).toString());
 	}
 	
@@ -103,7 +107,7 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 	
 	// Called from the calculating route thread.
 	@Override
-	public synchronized void playCommands(CommandBuilder builder) {
+	public synchronized List<String> playCommands(CommandBuilder builder) {
 		final List<String> execute = builder.execute(); //list of strings, the speech text, play it
 		StringBuilder bld = new StringBuilder();
 		for (String s : execute) {
@@ -113,14 +117,25 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 		if (mTts != null && !vrt.isMute() && speechAllowed) {
 			if (ttsRequests++ == 0) {
 				requestAudioFocus();
-				// Delay first prompt of each batch to allow BT SCO connection being established
-				if (ctx.getSettings().AUDIO_STREAM_GUIDANCE.getModeValue(getApplicationMode()) == 0) {
-					ttsRequests++;
-					if (android.os.Build.VERSION.SDK_INT < 21) {
-						params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,""+System.currentTimeMillis());
-						mTts.playSilence(ctx.getSettings().BT_SCO_DELAY.get(), TextToSpeech.QUEUE_ADD, params);
-					} else {
-						mTts.playSilentUtterance(ctx.getSettings().BT_SCO_DELAY.get(), TextToSpeech.QUEUE_ADD, ""+System.currentTimeMillis());
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+					mTts.setAudioAttributes(new AudioAttributes.Builder()
+							.setUsage(ctx.getSettings().AUDIO_USAGE.get())
+							.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+							.build());
+				}
+				// Delay first prompt of each batch to allow BT SCO link being established, or when VOICE_PROMPT_DELAY is set >0 for the other stream types
+				if (ctx != null) {
+					Integer streamModeValue = ctx.getSettings().AUDIO_MANAGER_STREAM.getModeValue(getApplicationMode());
+					OsmandPreference<Integer> pref = ctx.getSettings().VOICE_PROMPT_DELAY[streamModeValue];
+					int vpd = pref == null ? 0 : pref.getModeValue(getApplicationMode());
+					if (vpd > 0) {
+						ttsRequests++;
+						if (android.os.Build.VERSION.SDK_INT < 21) {
+							params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "" + System.currentTimeMillis());
+							mTts.playSilence(vpd, TextToSpeech.QUEUE_ADD, params);
+						} else {
+							mTts.playSilentUtterance(vpd, TextToSpeech.QUEUE_ADD, "" + System.currentTimeMillis());
+						}
 					}
 				}
 			}
@@ -131,6 +146,11 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 		} else if (ctx != null && vrt.isMute()) {
 			// sendAlertToAndroidWear(ctx, bld.toString());
 		}
+		// #5966: TTS Utterance for debugging
+		if (ctx != null && ctx.getSettings().DISPLAY_TTS_UTTERANCE.get()) {
+			((OsmandApplication) ctx.getApplicationContext()).showToastMessage(bld.toString());
+		}
+		return execute;
 	}
 
 	@Override
@@ -165,18 +185,32 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 		}
 		if (mTts == null) {
 			mTtsContext = ctx;
-			ttsVoiceStatus = "";
-			ttsVoiceUsed = "";
+			ttsVoiceStatus = "-";
+			ttsVoiceUsed = "-";
 			ttsRequests = 0;
 			final float speechRate = cSpeechRate;
 
 			final String[] lsplit = (language + "____.").split("[\\_\\-]");
-			// constructor supports lang_country_variant
-			Locale newLocale0 = new Locale(lsplit[0], lsplit[1], lsplit[2]);
-			// #3344: Try Locale builder instead of constructor (only available from API 21). Also supports script (for now supported as trailing x_x_x_Scrp)
+			// As per BCP 47: well formed scripts: [a-zA-Z]{4}, variants: [0-9][0-9a-zA-Z]{3} | [0-9a-zA-Z]{5,8}, countries/regions: [a-zA-Z]{2} | [0-9]{3}
+			String lregion = "";
+			String lvariant = "";
+			String lscript = "";
+			for (int i=3; i>0; i--) {
+				if (lsplit[i].length() == 4 && !(lsplit[i] + "A").substring(0, 1).matches("[0-9]")) {
+						lscript = lsplit[i];
+				} else if (lsplit[i].length() >= 4) {
+						lvariant = lsplit[i];
+				} else {
+						lregion = lsplit[i];
+				}
+			}
+			// Locale constructor supports 'language, region, variant'
+			//Locale newLocale0 = new Locale(lsplit[0], lregion, lvariant); (Setting variant here seems to cause errors on some systems)
+			Locale newLocale0 = new Locale(lsplit[0], lregion);
+			// #3344: Try Locale builder instead (only available from API 21), also supports script (we support as 4 letters)
 			if (android.os.Build.VERSION.SDK_INT >= 21) {
 				try {
-					newLocale0 = new Locale.Builder().setLanguage(lsplit[0]).setScript(lsplit[3]).setRegion(lsplit[1]).setVariant(lsplit[2]).build();
+					newLocale0 = new Locale.Builder().setLanguage(lsplit[0]).setScript(lscript).setRegion(lregion).setVariant(lvariant).build();
 				} catch (RuntimeException e) {
 					// Falls back to constructor
 				}
@@ -189,53 +223,58 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 					if (status != TextToSpeech.SUCCESS) {
 						ttsVoiceStatus = "NO INIT SUCCESS";
 						internalClear();
+						((OsmandApplication) ctx.getApplicationContext()).showToastMessage(ctx.getString(R.string.tts_initialization_error));
 					} else if (mTts != null) {
 						speechAllowed = true;
 						switch (mTts.isLanguageAvailable(newLocale)) {
 							case TextToSpeech.LANG_MISSING_DATA:
-								if (isSettingsActivity(act)) {
-									AlertDialog.Builder builder = createAlertDialog(
-										R.string.tts_missing_language_data_title,
-										R.string.tts_missing_language_data,
-										new IntentStarter(
-												act,
-												TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA),
-										act);
-									builder.show();
-								}
+//								if (isSettingsActivity(act)) {
+//									AlertDialog.Builder builder = createAlertDialog(
+//										R.string.tts_missing_language_data_title,
+//										R.string.tts_missing_language_data,
+//										new IntentStarter(
+//												act,
+//												TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA),
+//										act);
+//									builder.show();
+//								}
 								ttsVoiceStatus = newLocale.getDisplayName() + ": LANG_MISSING_DATA";
 								ttsVoiceUsed = getVoiceUsed();
 								break;
 							case TextToSpeech.LANG_AVAILABLE:
 								ttsVoiceStatus = newLocale.getDisplayName() + ": LANG_AVAILABLE";
 							case TextToSpeech.LANG_COUNTRY_AVAILABLE:
-								ttsVoiceStatus = "".equals(ttsVoiceStatus) ? newLocale.getDisplayName() + ": LANG_COUNTRY_AVAILABLE" : ttsVoiceStatus;
+								ttsVoiceStatus = "-".equals(ttsVoiceStatus) ? newLocale.getDisplayName() + ": LANG_COUNTRY_AVAILABLE" : ttsVoiceStatus;
 							case TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE:
 								try {
 									mTts.setLanguage(newLocale);
 								} catch(Exception e) {
 									e.printStackTrace();
-									mTts.setLanguage(Locale.getDefault());
+									if (mTts.isLanguageAvailable(Locale.getDefault()) > 0) {
+										mTts.setLanguage(Locale.getDefault());
+									} else {
+										Toast.makeText(act, "TTS language not available", Toast.LENGTH_LONG).show();
+									}
 								}
 								if(speechRate != 1) {
 									mTts.setSpeechRate(speechRate);
 								}
-								ttsVoiceStatus = "".equals(ttsVoiceStatus) ? newLocale.getDisplayName() + ": LANG_COUNTRY_VAR_AVAILABLE" : ttsVoiceStatus;
+								ttsVoiceStatus = "-".equals(ttsVoiceStatus) ? newLocale.getDisplayName() + ": LANG_COUNTRY_VAR_AVAILABLE" : ttsVoiceStatus;
 								ttsVoiceUsed = getVoiceUsed();
 								break;
 							case TextToSpeech.LANG_NOT_SUPPORTED:
 								//maybe weird, but I didn't want to introduce parameter in around 5 methods just to do this if condition
-								if (isSettingsActivity(act)) {
-									AlertDialog.Builder builder = createAlertDialog(
-											R.string.tts_language_not_supported_title,
-											R.string.tts_language_not_supported,
-											new IntentStarter(
-													act,
-													Intent.ACTION_VIEW, Uri.parse("market://search?q=text to speech engine"
-														)),
-											act);
-									builder.show();
-								}
+//								if (isSettingsActivity(act)) {
+//									AlertDialog.Builder builder = createAlertDialog(
+//											R.string.tts_language_not_supported_title,
+//											R.string.tts_language_not_supported,
+//											new IntentStarter(
+//													act,
+//													Intent.ACTION_VIEW, Uri.parse("market://search?q=text to speech engine"
+//														)),
+//											act);
+//									builder.show();
+//								}
 								ttsVoiceStatus = newLocale.getDisplayName() + ": LANG_NOT_SUPPORTED";
 								ttsVoiceUsed = getVoiceUsed();
 								break;
@@ -243,10 +282,6 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 					}
 				}
 
-				private boolean isSettingsActivity(final Context ctx) {
-					return ctx instanceof SettingsActivity;
-				}
-				
 				private String getVoiceUsed() {
 					try {
 						if (android.os.Build.VERSION.SDK_INT >= 21) {
@@ -305,8 +340,8 @@ public class TTSCommandPlayerImpl extends AbstractPrologCommandPlayer {
 		}
 		abandonAudioFocus();
 		mTtsContext = null;
-		ttsVoiceStatus = "";
-		ttsVoiceUsed = "";
+		ttsVoiceStatus = "-";
+		ttsVoiceUsed = "-";
 	}
 	
 	@Override

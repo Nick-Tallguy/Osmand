@@ -6,8 +6,6 @@ import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.util.Pair;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -19,6 +17,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+
+import androidx.annotation.NonNull;
+import androidx.core.util.Pair;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.Point;
@@ -32,8 +33,8 @@ import net.osmand.data.QuadRect;
 import net.osmand.data.RotatedTileBox;
 import net.osmand.map.ITileSource;
 import net.osmand.map.TileSourceManager;
-import net.osmand.plus.IconsCache;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.MenuBuilder;
 import net.osmand.plus.mapcontextmenu.builders.cards.dialogs.ContextMenuCardDialog;
@@ -64,9 +65,9 @@ public class MapillaryImageDialog extends ContextMenuCardDialog {
 	private static final String KEY_MAPILLARY_DIALOG_CA = "key_mapillary_dialog_ca";
 
 	private static final String MAPILLARY_VIEWER_URL_TEMPLATE =
-			"https://osmand.net/api/mapillary/photo-viewer.php?photo_id=";
+			"https://osmand.net/api/mapillary/photo-viewer?photo_id=";
 	private static final String MAPILLARY_HIRES_IMAGE_URL_TEMPLATE =
-			"https://osmand.net/api/mapillary/get_photo.php?hires=true&photo_id=";
+			"https://osmand.net/api/mapillary/get_photo?hires=true&photo_id=";
 
 	private static final String WEBGL_ERROR_MESSAGE = "Error creating WebGL context";
 
@@ -85,12 +86,12 @@ public class MapillaryImageDialog extends ContextMenuCardDialog {
 	private double fetchedTileLon = Double.NaN;
 	private List<MapillaryImage> sequenceImages = new ArrayList<>();
 	private AtomicInteger downloadRequestNumber = new AtomicInteger();
-	private IconsCache ic;
+	private UiUtilities ic;
 
 	public MapillaryImageDialog(@NonNull MapActivity mapActivity, @NonNull Bundle bundle) {
 		super(mapActivity, CardDialogType.MAPILLARY);
 		restoreFields(bundle);
-		this.ic = mapActivity.getMyApplication().getIconsCache();
+		this.ic = mapActivity.getMyApplication().getUIUtilities();
 	}
 
 	public MapillaryImageDialog(MapActivity mapActivity, String key, String sKey, String imageUrl,
@@ -104,7 +105,7 @@ public class MapillaryImageDialog extends ContextMenuCardDialog {
 		this.viewerUrl = viewerUrl;
 		this.latLon = latLon;
 		this.ca = ca;
-		this.ic = mapActivity.getMyApplication().getIconsCache();
+		this.ic = mapActivity.getMyApplication().getUIUtilities();
 		this.sync = sync;
 	}
 
@@ -204,7 +205,7 @@ public class MapillaryImageDialog extends ContextMenuCardDialog {
 	@Override
 	protected void createMenuItems(Menu menu) {
 		MenuItem item = menu.add(R.string.open_mapillary)
-				.setIcon(getMapActivity().getMyApplication().getIconsCache().getThemedIcon(
+				.setIcon(getMapActivity().getMyApplication().getUIUtilities().getThemedIcon(
 						R.drawable.ic_action_mapillary));
 		item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
 			@Override

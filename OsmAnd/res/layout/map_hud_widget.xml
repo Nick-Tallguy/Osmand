@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
+    xmlns:osmand="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_bg"
@@ -25,32 +26,35 @@
             android:textSize="@dimen/map_widget_text_size"
             android:visibility="gone"/>
 
-        <ImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/widget_top_icon"
             android:layout_width="@dimen/map_widget_image"
             android:layout_height="@dimen/map_widget_image"
             android:layout_gravity="center"
             android:layout_marginTop="2dp"
             android:gravity="center"
-            android:src="@drawable/ic_action_test_light"
+            osmand:srcCompat="@drawable/ic_action_remove_dark"
             android:visibility="gone"/>
     </FrameLayout>
 
     <LinearLayout
         android:id="@+id/widget_bottom_layout"
         android:layout_width="wrap_content"
-        android:layout_height="@dimen/map_widget_height"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/map_widget_height"
         android:orientation="horizontal">
 
-        <ImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/widget_icon"
             android:layout_width="@dimen/map_widget_icon"
             android:layout_height="@dimen/map_widget_icon"
-            android:layout_gravity="left|center_vertical"
+            android:layout_gravity="start|center_vertical"
             android:layout_marginLeft="@dimen/map_widget_icon_margin"
             android:layout_marginRight="@dimen/map_widget_icon_margin"
             android:gravity="center"
-            android:src="@drawable/ic_action_test_light"/>
+            osmand:srcCompat="@drawable/ic_action_remove_dark"
+	        android:layout_marginEnd="@dimen/map_widget_icon_margin"
+	        android:layout_marginStart="@dimen/map_widget_icon_margin" />
 
         <FrameLayout
             android:layout_width="wrap_content"

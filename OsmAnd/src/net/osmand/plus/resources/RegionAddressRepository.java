@@ -1,8 +1,6 @@
 package net.osmand.plus.resources;
 
-import java.text.Collator;
-import java.util.Comparator;
-import java.util.List;
+import androidx.annotation.Nullable;
 
 import net.osmand.ResultMatcher;
 import net.osmand.data.Building;
@@ -11,6 +9,10 @@ import net.osmand.data.LatLon;
 import net.osmand.data.MapObject;
 import net.osmand.data.Street;
 import net.osmand.util.MapUtils;
+
+import java.text.Collator;
+import java.util.Comparator;
+import java.util.List;
 
 
 public interface RegionAddressRepository {
@@ -25,7 +27,7 @@ public interface RegionAddressRepository {
 	
 	public boolean isTransliterateNames();
 
-	
+	@Nullable
 	public LatLon getEstimatedRegionCenter();
 	
 	// is called on low memory
@@ -33,14 +35,12 @@ public interface RegionAddressRepository {
 	
 	// called to close resources
 	public void close();
-	
-	
+
 	public void preloadCities(ResultMatcher<City> resultMatcher);
 	
 	public void preloadBuildings(Street street, ResultMatcher<Building> resultMatcher);
 	
 	public void preloadStreets(City o, ResultMatcher<Street> resultMatcher);
-	
 	
 	public List<City> getLoadedCities();
 	

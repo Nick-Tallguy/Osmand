@@ -4,12 +4,13 @@ import android.util.Pair;
 
 import net.osmand.Location;
 import net.osmand.data.LatLon;
-import net.osmand.plus.ApplicationMode;
-import net.osmand.plus.GPXUtilities.TrkSegment;
-import net.osmand.plus.GPXUtilities.WptPt;
-import net.osmand.plus.MapMarkersHelper;
+import net.osmand.plus.routing.RouteCalculationProgressCallback;
+import net.osmand.plus.settings.backend.ApplicationMode;
+import net.osmand.GPXUtilities.TrkSegment;
+import net.osmand.GPXUtilities.WptPt;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.routing.RouteCalculationParams;
+import net.osmand.plus.routing.RouteCalculationResult;
 import net.osmand.plus.routing.RoutingHelper;
 import net.osmand.router.RouteCalculationProgress;
 import net.osmand.util.MapUtils;
@@ -127,7 +128,7 @@ public class MarkersPlanRouteContext {
 		findPairsToCalculate(points);
 		RoutingHelper routingHelper = app.getRoutingHelper();
 		if (!snapToRoadPairsToCalculate.isEmpty() && !routingHelper.isRouteBeingCalculated()) {
-			routingHelper.startRouteCalculationThread(getParams(), true, true);
+			routingHelper.startRouteCalculationThread(getParams());
 			app.runInUIThread(new Runnable() {
 				@Override
 				public void run() {
@@ -217,7 +218,13 @@ public class MarkersPlanRouteContext {
 		params.mode = snappedMode;
 		params.ctx = app;
 		params.calculationProgress = calculationProgress = new RouteCalculationProgress();
-		params.calculationProgressCallback = new RoutingHelper.RouteCalculationProgressCallback() {
+		params.calculationProgressCallback = new RouteCalculationProgressCallback() {
+
+			@Override
+			public void start() {
+
+			}
+
 			@Override
 			public void updateProgress(int progress) {
 				int pairs = calculatedPairs + snapToRoadPairsToCalculate.size();
@@ -240,7 +247,8 @@ public class MarkersPlanRouteContext {
 		};
 		params.resultListener = new RouteCalculationParams.RouteCalculationResultListener() {
 			@Override
-			public void onRouteCalculated(List<Location> locations) {
+			public void onRouteCalculated(RouteCalculationResult route) {
+				List<Location> locations = route.getRouteLocations();
 				ArrayList<WptPt> pts = new ArrayList<>(locations.size());
 				for (Location loc : locations) {
 					WptPt pt = new WptPt();
@@ -258,7 +266,7 @@ public class MarkersPlanRouteContext {
 					}
 				});
 				if (!snapToRoadPairsToCalculate.isEmpty()) {
-					app.getRoutingHelper().startRouteCalculationThread(getParams(), true, true);
+					app.getRoutingHelper().startRouteCalculationThread(getParams());
 				} else {
 					app.runInUIThread(new Runnable() {
 						@Override

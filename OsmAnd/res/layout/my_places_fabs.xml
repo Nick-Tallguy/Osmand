@@ -6,7 +6,7 @@
                 xmlns:app="http://schemas.android.com/apk/res-auto"
                 xmlns:osmand="http://schemas.android.com/apk/res-auto">
 
-    <android.support.design.widget.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/menu_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -14,12 +14,13 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentRight="true"
         android:contentDescription="@string/quick_action_new_action"
-        android:src="@drawable/ic_action_plus"
-        app:backgroundTint="@color/dashboard_blue"
+        app:srcCompat="@drawable/ic_action_plus"
+        app:backgroundTint="?attr/active_color_basic"
+        app:tint="?attr/app_bar_primary_item_color"
         app:fabSize="normal"
         app:useCompatPadding="true"/>
 
-    <android.support.design.widget.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/waypoint_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -30,9 +31,10 @@
         android:layout_marginEnd="8dp"
         android:layout_marginRight="8dp"
         android:contentDescription="@string/quick_action_new_action"
-        android:src="@drawable/ic_action_marker_dark"
+        app:srcCompat="@drawable/ic_action_marker_dark"
         android:visibility="gone"
         app:backgroundTint="@color/fab_green"
+        app:tint="?attr/app_bar_primary_item_color"
         app:fabSize="mini"
         app:useCompatPadding="true"
         tools:visibility="visible"/>
@@ -64,7 +66,7 @@
 
     </FrameLayout>
 
-    <android.support.design.widget.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/route_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -75,9 +77,10 @@
         android:layout_marginEnd="8dp"
         android:layout_marginRight="8dp"
         android:contentDescription="@string/quick_action_new_action"
-        android:src="@drawable/ic_action_markers_dark"
+        app:srcCompat="@drawable/ic_action_markers_dark"
         android:visibility="gone"
         app:backgroundTint="@color/fab_green"
+        app:tint="?attr/app_bar_primary_item_color"
         app:fabSize="mini"
         app:useCompatPadding="true"
         tools:visibility="visible"/>
@@ -109,7 +112,7 @@
 
     </FrameLayout>
 
-    <android.support.design.widget.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/line_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -120,9 +123,10 @@
         android:layout_marginEnd="8dp"
         android:layout_marginRight="8dp"
         android:contentDescription="@string/quick_action_new_action"
-        android:src="@drawable/ic_action_polygom_dark"
+        app:srcCompat="@drawable/ic_action_polygom_dark"
         android:visibility="gone"
         app:backgroundTint="@color/fab_green"
+        app:tint="?attr/app_bar_primary_item_color"
         app:fabSize="mini"
         app:useCompatPadding="true"
         tools:visibility="visible"/>

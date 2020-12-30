@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
+    xmlns:osmand="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -13,7 +14,7 @@
         android:background="?attr/selectableItemBackground"
         android:minHeight="@dimen/bottom_sheet_selected_item_title_height">
 
-        <CheckBox
+        <androidx.appcompat.widget.AppCompatCheckBox
             android:id="@+id/check_box"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -22,16 +23,20 @@
             android:layout_marginRight="@dimen/content_padding"
             android:focusable="false"
             android:visibility="gone"
-            tools:visibility="visible"/>
+            tools:visibility="visible"
+	        android:layout_marginEnd="@dimen/content_padding"
+	        android:layout_marginStart="@dimen/content_padding" />
 
-        <ImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/icon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
             android:layout_marginLeft="@dimen/content_padding"
             android:layout_marginRight="@dimen/content_padding"
-            android:src="@drawable/ic_type_audio"/>
+            osmand:srcCompat="@drawable/ic_type_audio"
+	        android:layout_marginStart="@dimen/content_padding"
+	        android:layout_marginEnd="@dimen/content_padding" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -75,7 +80,7 @@
             android:contentDescription="@string/shared_string_more"
             android:focusable="false"
             android:padding="@dimen/content_padding"
-            android:src="@drawable/ic_overflow_menu_white"/>
+            osmand:srcCompat="@drawable/ic_overflow_menu_white"/>
 
     </LinearLayout>
 

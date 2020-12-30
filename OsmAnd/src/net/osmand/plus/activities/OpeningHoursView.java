@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnMultiChoiceClickListener;
 import android.graphics.Typeface;
-import android.support.v7.app.AlertDialog;
 import android.text.format.DateFormat;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,6 +14,8 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.TimePicker.OnTimeChangedListener;
+
+import androidx.appcompat.app.AlertDialog;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
@@ -122,7 +123,7 @@ public class OpeningHoursView {
 			}
 			TextView label = (TextView)row.findViewById(R.id.label);
 			ImageView icon = (ImageView)row.findViewById(R.id.remove);
-			icon.setBackgroundDrawable(app.getIconsCache().getThemedIcon(R.drawable.ic_action_remove_dark));
+			icon.setBackgroundDrawable(app.getUIUtilities().getThemedIcon(R.drawable.ic_action_remove_dark));
 			if(selectedRule == position){
 				label.setTypeface(null, Typeface.BOLD);
 				label.setTextSize(22);

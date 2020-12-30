@@ -6,8 +6,6 @@ package net.osmand.plus.activities.search;
 import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.v4.app.FragmentActivity;
-import android.support.v7.widget.PopupMenu;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
@@ -25,15 +23,18 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.widget.PopupMenu;
+import androidx.fragment.app.FragmentActivity;
+
 import net.osmand.CollatorStringMatcher;
 import net.osmand.CollatorStringMatcher.StringMatcherMode;
 import net.osmand.data.LatLon;
 import net.osmand.osm.AbstractPoiType;
 import net.osmand.osm.PoiType;
-import net.osmand.plus.IconsCache;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.OsmandPlugin;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.search.SearchActivity.SearchActivityChild;
 import net.osmand.plus.base.OsmAndListFragment;
 import net.osmand.plus.poi.NominatimPoiFilter;
@@ -67,7 +68,7 @@ public class SearchPoiFilterFragment extends OsmAndListFragment implements Searc
 		v.findViewById(R.id.SearchFilterLayout).setVisibility(View.VISIBLE);
 		((EditText) v.findViewById(R.id.searchEditText)).setHint(R.string.search_poi_category_hint);
 		((ImageView) v.findViewById(R.id.search_icon)).setImageDrawable(
-				getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_action_search_dark));
+				getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_action_search_dark));
 
 		setupSearchEditText((EditText) v.findViewById(R.id.searchEditText));
 		setupOptions((ImageView) v.findViewById(R.id.options));
@@ -76,7 +77,7 @@ public class SearchPoiFilterFragment extends OsmAndListFragment implements Searc
 	}
 
 	private void setupOptions(ImageView options) {
-		options.setImageDrawable(getMyApplication().getIconsCache().getThemedIcon(R.drawable.ic_overflow_menu_white));
+		options.setImageDrawable(getMyApplication().getUIUtilities().getThemedIcon(R.drawable.ic_overflow_menu_white));
 		options.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -165,9 +166,7 @@ public class SearchPoiFilterFragment extends OsmAndListFragment implements Searc
 				}
 
 			});
-			for (AbstractPoiType p : res) {
-				filters.add(p);
-			}
+			filters.addAll(res);
 			filters.add(poiFilters.getSearchByNamePOIFilter());
 			if (OsmandPlugin.getEnabledPlugin(OsmandRasterMapsPlugin.class) != null) {
 				filters.add(poiFilters.getNominatimPOIFilter());
@@ -326,7 +325,7 @@ public class SearchPoiFilterFragment extends OsmAndListFragment implements Searc
 
 	private void showOptionsMenu(View v) {
 		// Show menu with search all, name finder, name finder poi
-		IconsCache iconsCache = getMyApplication().getIconsCache();
+		UiUtilities iconsCache = getMyApplication().getUIUtilities();
 		final PopupMenu optionsMenu = new PopupMenu(getActivity(), v);
 
 		MenuItem item = optionsMenu.getMenu().add(R.string.poi_filter_custom_filter)

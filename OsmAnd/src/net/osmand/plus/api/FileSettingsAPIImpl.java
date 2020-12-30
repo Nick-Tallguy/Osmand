@@ -25,9 +25,9 @@ public class FileSettingsAPIImpl implements SettingsAPI {
 			Properties props = new Properties();
 			FileInputStream fis = new FileInputStream(file);
 			props.load(fis);
-			for (Object key : props.keySet()) {
-				String k = key.toString();
-				map.put(k, props.get(key));
+			for (Entry<Object, Object> entry : props.entrySet()) {
+				String k = entry.getKey().toString();
+				map.put(k, entry.getValue());
 			}
 		}
 	}
@@ -50,7 +50,13 @@ public class FileSettingsAPIImpl implements SettingsAPI {
 				modified.put(wrap(pref,key), null);
 				return this;
 			}
-			
+
+			@Override
+			public SettingsEditor clear() {
+				modified.clear();
+				return this;
+			}
+
 			@Override
 			public SettingsEditor putString(String key, String value) {
 				modified.put(wrap(pref,key), value);

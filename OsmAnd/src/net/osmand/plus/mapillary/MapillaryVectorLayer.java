@@ -5,7 +5,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.PointF;
-import android.support.v4.content.ContextCompat;
+
+import androidx.core.content.ContextCompat;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -25,7 +26,7 @@ import net.osmand.plus.OsmandPlugin;
 import net.osmand.plus.R;
 import net.osmand.plus.rastermaps.OsmandRasterMapsPlugin;
 import net.osmand.plus.resources.ResourceManager;
-import net.osmand.plus.views.ContextMenuLayer.IContextMenuProvider;
+import net.osmand.plus.views.layers.ContextMenuLayer.IContextMenuProvider;
 import net.osmand.plus.views.MapTileLayer;
 import net.osmand.plus.views.OsmandMapTileView;
 import net.osmand.util.MapUtils;
@@ -127,8 +128,8 @@ class MapillaryVectorLayer extends MapTileLayer implements MapillaryLayer, ICont
 		int dzoom = nzoom - TILE_ZOOM;
 		int div = (int) Math.pow(2.0, dzoom);
 
-		boolean useInternet = (OsmandPlugin.getEnabledPlugin(OsmandRasterMapsPlugin.class) != null || OsmandPlugin.getEnabledPlugin(MapillaryPlugin.class) != null) &&
-				settings.USE_INTERNET_TO_DOWNLOAD_TILES.get() && settings.isInternetConnectionAvailable() && map.couldBeDownloadedFromInternet();
+		boolean useInternet = (OsmandPlugin.getEnabledPlugin(OsmandRasterMapsPlugin.class) != null || OsmandPlugin.getEnabledPlugin(MapillaryPlugin.class) != null)
+				&& settings.isInternetConnectionAvailable() && map.couldBeDownloadedFromInternet();
 
 		Map<String, GeometryTile> tiles = new HashMap<>();
 		Map<QuadPointDouble, Map> visiblePoints = new HashMap<>();
@@ -202,8 +203,9 @@ class MapillaryVectorLayer extends MapTileLayer implements MapillaryLayer, ICont
 		long capturedAt = ((Number) userData.get("captured_at")).longValue();
 		long from = settings.MAPILLARY_FILTER_FROM_DATE.get();
 		long to = settings.MAPILLARY_FILTER_TO_DATE.get();
+		boolean pano = settings.MAPILLARY_FILTER_PANO.get();
 
-		if (!userKey.equals("")) {
+		if (!userKey.isEmpty()) {
 			String key = (String) userData.get("userkey");
 			if (!userKey.equals(key)) {
 				return true;
@@ -215,6 +217,10 @@ class MapillaryVectorLayer extends MapTileLayer implements MapillaryLayer, ICont
 			}
 		} else if ((from != 0 && capturedAt < from) || (to != 0 && capturedAt > to)) {
 			return true;
+		}
+
+		if (pano) {
+			return (long) userData.get("pano") == 0;
 		}
 		return false;
 	}
@@ -281,7 +287,9 @@ class MapillaryVectorLayer extends MapTileLayer implements MapillaryLayer, ICont
 					x = tileBox.getPixXFromTile(tileX + px, tileY + py, TILE_ZOOM);
 					y = tileBox.getPixYFromTile(tileX + px, tileY + py, TILE_ZOOM);
 
-					canvas.drawLine(lastx, lasty, x, y, paintLine);
+					if (lastx != x || lasty != y) {
+						canvas.drawLine(lastx, lasty, x, y, paintLine);
+					}
 
 					lastx = x;
 					lasty = y;

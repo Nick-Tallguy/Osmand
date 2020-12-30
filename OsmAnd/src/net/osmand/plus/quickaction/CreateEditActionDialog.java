@@ -4,15 +4,13 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.DialogFragment;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.view.ContextThemeWrapper;
-import android.support.v7.widget.Toolbar;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -20,16 +18,31 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 
-import net.osmand.plus.IconsCache;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentActivity;
+
+import net.osmand.AndroidUtils;
+import net.osmand.CallbackWithObject;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.osmedit.AddPOIAction;
+
+import java.util.List;
+
+import static net.osmand.plus.quickaction.QuickActionListFragment.showConfirmDeleteAnActionBottomSheet;
 
 /**
  * Created by rosty on 12/27/16.
  */
 
-public class CreateEditActionDialog extends DialogFragment {
+public class CreateEditActionDialog extends DialogFragment
+        implements CallbackWithObject<Object>, ConfirmationBottomSheet.OnConfirmButtonClickListener {
 
     public static final String TAG = CreateEditActionDialog.class.getSimpleName();
 
@@ -63,16 +76,15 @@ public class CreateEditActionDialog extends DialogFragment {
     private QuickAction action;
 
     private boolean isNew;
+    private boolean isLightContent;
 
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
 
         OsmandApplication application = (OsmandApplication) getActivity().getApplication();
-        boolean light = application.getSettings().isLightContent() && !application.getDaynightHelper().isNightMode();
+        isLightContent = application.getSettings().isLightContent() && !application.getDaynightHelper().isNightMode();
 
-        Dialog dialog = new Dialog(new ContextThemeWrapper(getActivity(), light
-                ? R.style.Dialog90Light
-                : R.style.Dialog90Dark), getTheme());
+        Dialog dialog = new Dialog(UiUtilities.getThemedContext(getActivity(), !isLightContent, R.style.Dialog90Light, R.style.Dialog90Dark), getTheme());
 
         dialog.getWindow().requestFeature(Window.FEATURE_NO_TITLE);
 
@@ -107,7 +119,7 @@ public class CreateEditActionDialog extends DialogFragment {
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        quickActionRegistry = ((MapActivity) getActivity()).getMapLayers().getQuickActionRegistry();
+        quickActionRegistry = getApplication().getQuickActionRegistry();
 
         long actionId =  savedInstanceState == null
                 ? getArguments().getLong(KEY_ACTION_ID)
@@ -121,8 +133,8 @@ public class CreateEditActionDialog extends DialogFragment {
                 ? isNew = actionId == 0
                 : savedInstanceState.getBoolean(KEY_ACTION_IS_NEW);
 
-        action = QuickActionFactory.produceAction(isNew
-                ? QuickActionFactory.newActionByType(type)
+        action = QuickActionRegistry.produceAction(isNew
+                ? quickActionRegistry.newActionByType(type)
                 : quickActionRegistry.getQuickAction(actionId));
 
         setupToolbar(view);
@@ -137,7 +149,7 @@ public class CreateEditActionDialog extends DialogFragment {
         super.onSaveInstanceState(outState);
 
         outState.putLong(KEY_ACTION_ID, action.getId());
-        outState.putInt(KEY_ACTION_TYPE, action.type);
+        outState.putInt(KEY_ACTION_TYPE, action.getType());
         outState.putBoolean(KEY_ACTION_IS_NEW, isNew);
     }
 
@@ -149,11 +161,11 @@ public class CreateEditActionDialog extends DialogFragment {
                 ? R.string.quick_action_new_action
                 : R.string.quick_action_edit_action);
 
-        toolbar.setTitleTextColor(Color.WHITE);
+        int buttonsAndLinksTextColorResId = isLightContent ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark;
+        toolbar.setTitleTextColor(ContextCompat.getColor(getContext(), buttonsAndLinksTextColorResId));
 
-        toolbar.setNavigationIcon(getIconsCache().getIcon(
-                R.drawable.ic_arrow_back,
-                R.color.color_white));
+        Drawable icBack = getIconsCache().getIcon(AndroidUtils.getNavigationIconResId(getContext()), buttonsAndLinksTextColorResId);
+        toolbar.setNavigationIcon(icBack);
 
         toolbar.setNavigationContentDescription(R.string.access_shared_string_navigate_up);
 
@@ -163,12 +175,33 @@ public class CreateEditActionDialog extends DialogFragment {
                 dismiss();
             }
         });
+        if (!isNew) {
+            Menu menu = toolbar.getMenu();
+            menu.clear();
+
+            MenuItem item = menu.add(R.string.shared_string_delete).setIcon(R.drawable.ic_action_delete_dark);
+            item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem item) {
+                    FragmentActivity activity = getActivity();
+                    if (activity != null) {
+                        showConfirmDeleteAnActionBottomSheet(
+                                activity, CreateEditActionDialog.this,
+                                action, false);
+                    }
+                    return true;
+                }
+            });
+            item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        }
     }
 
     private void setupHeader(View root, Bundle savedInstanceState){
 
         ImageView image = (ImageView) root.findViewById(R.id.image);
         EditText name = (EditText) root.findViewById(R.id.name);
+        int buttonsAndLinksTextColorResId = isLightContent ? R.color.active_buttons_and_links_text_light : R.color.active_buttons_and_links_text_dark;
+        name.setTextColor(ContextCompat.getColor(getContext(), buttonsAndLinksTextColorResId));
 
         name.addTextChangedListener(new TextWatcher() {
             @Override
@@ -199,6 +232,10 @@ public class CreateEditActionDialog extends DialogFragment {
         root.findViewById(R.id.btnApply).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+
+                if (action instanceof AddPOIAction) {
+                    saveFirstTagWithEmptyValue();
+                }
 
                 if (action.fillParams(((ViewGroup) root.findViewById(R.id.container)).getChildAt(0), (MapActivity) getActivity())) {
 
@@ -240,6 +277,10 @@ public class CreateEditActionDialog extends DialogFragment {
                     Toast.makeText(getContext(), R.string.quick_action_empty_param_error, Toast.LENGTH_SHORT).show();
                 }
             }
+
+            private void saveFirstTagWithEmptyValue() {
+                ((ViewGroup) root.findViewById(R.id.container)).getChildAt(0).requestFocus();
+            }
         });
     }
 
@@ -247,7 +288,22 @@ public class CreateEditActionDialog extends DialogFragment {
         return (OsmandApplication)(getContext().getApplicationContext());
     }
 
-    private IconsCache getIconsCache(){
-        return getApplication().getIconsCache();
+    private UiUtilities getIconsCache(){
+        return getApplication().getUIUtilities();
+    }
+
+    @Override
+    public boolean processResult(Object result) {
+        if (action instanceof SwitchableAction) {
+            ((SwitchableAction) action).onItemsSelected(getContext(), (List) result);
+        }
+        return false;
+    }
+
+    @Override
+    public void onConfirmButtonClick() {
+        quickActionRegistry.deleteQuickAction(action);
+        quickActionRegistry.notifyUpdates();
+        dismiss();
     }
 }

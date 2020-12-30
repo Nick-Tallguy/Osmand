@@ -20,16 +20,6 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.IntDef;
-import android.support.annotation.NonNull;
-import android.support.annotation.RestrictTo;
-import android.support.annotation.VisibleForTesting;
-import android.support.design.R;
-import android.support.design.widget.CoordinatorLayout;
-import android.support.v4.math.MathUtils;
-import android.support.v4.view.AbsSavedState;
-import android.support.v4.view.ViewCompat;
-import android.support.v4.widget.ViewDragHelper;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.MotionEvent;
@@ -39,11 +29,23 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.RestrictTo;
+import androidx.annotation.VisibleForTesting;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.core.math.MathUtils;
+import androidx.core.view.ViewCompat;
+import androidx.customview.view.AbsSavedState;
+import androidx.customview.widget.ViewDragHelper;
+
+import com.google.android.material.R;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 
-import static android.support.annotation.RestrictTo.Scope.LIBRARY_GROUP;
+import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
 
 
 /**
@@ -226,7 +228,7 @@ public class ExtendedBottomSheetBehavior<V extends View> extends CoordinatorLayo
 	@Override
 	public boolean onLayoutChild(CoordinatorLayout parent, V child, int layoutDirection) {
 		if (ViewCompat.getFitsSystemWindows(parent) && !ViewCompat.getFitsSystemWindows(child)) {
-			ViewCompat.setFitsSystemWindows(child, true);
+			child.setFitsSystemWindows(true);
 		}
 		int savedTop = child.getTop();
 		// First let the parent lay it out
@@ -346,7 +348,7 @@ public class ExtendedBottomSheetBehavior<V extends View> extends CoordinatorLayo
 
 	@Override
 	public boolean onStartNestedScroll(CoordinatorLayout coordinatorLayout, V child,
-									   View directTargetChild, View target, int nestedScrollAxes) {
+									   View directTargetChild, View target, int nestedScrollAxes, int type) {
 		mLastNestedScrollDy = 0;
 		mNestedScrolled = false;
 		return (nestedScrollAxes & ViewCompat.SCROLL_AXIS_VERTICAL) != 0;
@@ -354,7 +356,7 @@ public class ExtendedBottomSheetBehavior<V extends View> extends CoordinatorLayo
 
 	@Override
 	public void onNestedPreScroll(CoordinatorLayout coordinatorLayout, V child, View target, int dx,
-								  int dy, int[] consumed) {
+								  int dy, int[] consumed, int type) {
 		View scrollingChild = mNestedScrollingChildRef.get();
 		if (target != scrollingChild) {
 			return;
@@ -390,7 +392,7 @@ public class ExtendedBottomSheetBehavior<V extends View> extends CoordinatorLayo
 	}
 
 	@Override
-	public void onStopNestedScroll(CoordinatorLayout coordinatorLayout, V child, View target) {
+	public void onStopNestedScroll(CoordinatorLayout coordinatorLayout, V child, View target, int type) {
 		if (child.getTop() == mMinOffset) {
 			setStateInternal(STATE_EXPANDED);
 			return;

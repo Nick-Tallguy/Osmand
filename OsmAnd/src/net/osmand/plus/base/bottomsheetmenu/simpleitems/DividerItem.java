@@ -1,14 +1,14 @@
 package net.osmand.plus.base.bottomsheetmenu.simpleitems;
 
 import android.content.Context;
-import android.support.annotation.ColorRes;
-import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
+import androidx.annotation.ColorRes;
+import androidx.core.content.ContextCompat;
+
 import net.osmand.AndroidUtils;
-import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.base.bottomsheetmenu.BaseBottomSheetItem;
 
@@ -16,6 +16,11 @@ public class DividerItem extends BaseBottomSheetItem {
 
 	@ColorRes
 	private int colorId;
+
+	private int topMargin = INVALID_VALUE;
+	private int bottomMargin = INVALID_VALUE;
+	private int startMargin = INVALID_VALUE;
+	private int endMargin = INVALID_VALUE;
 
 	public DividerItem(Context context) {
 		setupView(context, INVALID_ID, INVALID_POSITION);
@@ -36,36 +41,54 @@ public class DividerItem extends BaseBottomSheetItem {
 	}
 
 	@Override
-	public void inflate(OsmandApplication app, ViewGroup container, boolean nightMode) {
-		super.inflate(app, container, nightMode);
+	public void inflate(Context context, ViewGroup container, boolean nightMode) {
+		super.inflate(context, container, nightMode);
 
-		int height = AndroidUtils.dpToPx(app, 1);
+		int height = getHeight(context);
 
 		LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) view.getLayoutParams();
-		params.setMargins(getLeftMargin(app), getTopMargin(app), 0, getBottomMargin(app));
+		AndroidUtils.setMargins(params, getStartMargin(context),
+				getTopMargin(context), getEndMargin(context), getBottomMargin(context));
 		params.height = height;
 
 		view.setMinimumHeight(height);
-		view.setBackgroundColor(ContextCompat.getColor(app, getBgColorId(nightMode)));
+		view.setBackgroundColor(ContextCompat.getColor(context, getBgColorId(nightMode)));
 	}
 
 	protected int getTopMargin(Context context) {
-		return context.getResources().getDimensionPixelSize(R.dimen.bottom_sheet_content_padding_small);
+		return topMargin != INVALID_VALUE ? topMargin :
+				context.getResources().getDimensionPixelSize(R.dimen.bottom_sheet_content_padding_small);
 	}
 
-	protected int getLeftMargin(Context context) {
-		return 0;
+	protected int getStartMargin(Context context) {
+		return startMargin != INVALID_VALUE ? startMargin : 0;
 	}
 
 	protected int getBottomMargin(Context context) {
-		return context.getResources().getDimensionPixelSize(R.dimen.bottom_sheet_content_padding_small);
+		return bottomMargin != INVALID_VALUE ? bottomMargin :
+				context.getResources().getDimensionPixelSize(R.dimen.bottom_sheet_content_padding_small);
+	}
+
+	protected int getEndMargin(Context context) {
+		return endMargin != INVALID_VALUE ? endMargin : 0;
+	}
+
+	public void setMargins(int start, int top, int end, int bottom) {
+		this.startMargin = start;
+		this.topMargin = top;
+		this.endMargin = end;
+		this.bottomMargin = bottom;
+	}
+
+	protected int getHeight(Context ctx) {
+		return AndroidUtils.dpToPx(ctx, 1);
 	}
 
 	@ColorRes
-	private int getBgColorId(boolean nightMode) {
+	protected int getBgColorId(boolean nightMode) {
 		if (colorId != INVALID_ID) {
 			return colorId;
 		}
-		return nightMode ? R.color.dashboard_divider_dark : R.color.dashboard_divider_light;
+		return nightMode ? R.color.divider_color_dark : R.color.divider_color_light;
 	}
 }

@@ -1,8 +1,8 @@
 package net.osmand.plus.mapmarkers;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,36 +11,34 @@ import android.widget.ArrayAdapter;
 import android.widget.ImageButton;
 import android.widget.ListView;
 
+import androidx.annotation.Nullable;
+
 import net.osmand.AndroidUtils;
-import net.osmand.Location;
 import net.osmand.data.LatLon;
-import net.osmand.plus.MapMarkersHelper.MapMarker;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.base.BaseOsmAndDialogFragment;
 import net.osmand.plus.base.MapViewTrackingUtilities;
-import net.osmand.plus.dashboard.DashLocationFragment;
 import net.osmand.plus.helpers.MapMarkerDialogHelper;
-import net.osmand.plus.mapcontextmenu.other.MapRouteInfoMenu;
-import net.osmand.plus.mapcontextmenu.other.MapRouteInfoMenu.OnMarkerSelectListener;
+import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu;
+import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu.OnMarkerSelectListener;
+import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu.PointType;
 
 import java.util.List;
 
 public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 	public static final String TAG = "MapMarkerSelectionFragment";
-	private static final String TARGET_KEY = "target_key";
-	private static final String INTERMEDIATE_KEY = "intermediate_key";
+	private static final String POINT_TYPE_KEY = "point_type";
 
 	private LatLon loc;
 	private Float heading;
 	private boolean useCenter;
 	private boolean nightMode;
-	private int screenOrientation;
-	private boolean target;
-	private boolean intermediate;
+	private PointType pointType;
 
 	private OnMarkerSelectListener onClickListener;
+	private int screenOrientation;
 
 	@Nullable
 	@Override
@@ -53,28 +51,25 @@ public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 			bundle = savedInstanceState;
 		}
 		if (bundle != null) {
-			target = bundle.getBoolean(TARGET_KEY);
-			intermediate = bundle.getBoolean(INTERMEDIATE_KEY);
+			pointType = PointType.valueOf(bundle.getString(POINT_TYPE_KEY));
 		}
 
 		MapActivity mapActivity = getMapActivity();
 		OsmandApplication app = getMyApplication();
 		if (mapActivity != null) {
-			MapRouteInfoMenu routeInfoMenu = mapActivity.getMapLayers().getMapControlsLayer().getMapRouteInfoMenu();
+			MapRouteInfoMenu routeInfoMenu = mapActivity.getMapRouteInfoMenu();
 			onClickListener = routeInfoMenu.getOnMarkerSelectListener();
 
-			screenOrientation = DashLocationFragment.getScreenOrientation(mapActivity);
+			screenOrientation = app.getUIUtilities().getScreenOrientation();
 
 			MapViewTrackingUtilities trackingUtils = mapActivity.getMapViewTrackingUtilities();
 			if (trackingUtils != null) {
 				Float head = trackingUtils.getHeading();
 				float mapRotation = mapActivity.getMapRotate();
 				LatLon mw = mapActivity.getMapLocation();
-				Location l = trackingUtils.getMyLocation();
-				boolean mapLinked = trackingUtils.isMapLinkedToLocation() && l != null;
-				LatLon myLoc = l == null ? null : new LatLon(l.getLatitude(), l.getLongitude());
+				boolean mapLinked = trackingUtils.isMapLinkedToLocation();
 				useCenter = !mapLinked;
-				loc = (useCenter ? mw : myLoc);
+				loc = mw;
 				if (useCenter) {
 					heading = -mapRotation;
 				} else {
@@ -86,7 +81,8 @@ public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 
 		View view = inflater.inflate(R.layout.map_marker_selection_fragment, container, false);
 		ImageButton closeButton = (ImageButton) view.findViewById(R.id.closeButton);
-		closeButton.setImageDrawable(getMyApplication().getIconsCache().getIcon(R.drawable.ic_action_mode_back));
+		Drawable icBack = app.getUIUtilities().getIcon(AndroidUtils.getNavigationIconResId(app));
+		closeButton.setImageDrawable(icBack);
 		closeButton.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -107,7 +103,7 @@ public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 			@Override
 			public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
 				if (onClickListener != null) {
-					onClickListener.onSelect(position, target, intermediate);
+					onClickListener.onSelect(position, pointType);
 				}
 				dismiss();
 			}
@@ -118,8 +114,7 @@ public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 	@Override
 	public void onSaveInstanceState(Bundle outState) {
 		super.onSaveInstanceState(outState);
-		outState.putBoolean(TARGET_KEY, target);
-		outState.putBoolean(INTERMEDIATE_KEY, intermediate);
+		outState.putString(POINT_TYPE_KEY, pointType.name());
 	}
 
 	private class MapMarkersListAdapter extends ArrayAdapter<MapMarker> {
@@ -144,11 +139,10 @@ public class MapMarkerSelectionFragment extends BaseOsmAndDialogFragment {
 		}
 	}
 
-	public static MapMarkerSelectionFragment newInstance(boolean target, boolean intermediate) {
+	public static MapMarkerSelectionFragment newInstance(PointType pointType) {
 		MapMarkerSelectionFragment fragment = new MapMarkerSelectionFragment();
 		Bundle args = new Bundle();
-		args.putBoolean(TARGET_KEY, target);
-		args.putBoolean(INTERMEDIATE_KEY, intermediate);
+		args.putString(POINT_TYPE_KEY, pointType.name());
 		fragment.setArguments(args);
 		return fragment;
 	}

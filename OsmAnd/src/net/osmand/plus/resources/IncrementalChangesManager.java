@@ -1,5 +1,7 @@
 package net.osmand.plus.resources;
 
+import android.view.LayoutInflater;
+
 import net.osmand.IndexConstants;
 import net.osmand.PlatformUtil;
 import net.osmand.binary.BinaryMapIndexReader;
@@ -7,11 +9,13 @@ import net.osmand.osm.io.NetworkUtils;
 import net.osmand.plus.R;
 import net.osmand.util.Algorithms;
 
+import org.apache.commons.logging.Log;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -24,8 +28,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IncrementalChangesManager {
-
-	private static final String URL = "http://download.osmand.net/check_live.php";
+	private static final Log LOG = PlatformUtil.getLog(IncrementalChangesManager.class);
+	private static final String URL = "https://osmand.net/check_live";
 	private static final org.apache.commons.logging.Log log = PlatformUtil.getLog(IncrementalChangesManager.class);
 	private ResourceManager resourceManager;
 	private final Map<String, RegionUpdateFiles> regions = new ConcurrentHashMap<String, IncrementalChangesManager.RegionUpdateFiles>();
@@ -64,19 +68,20 @@ public class IncrementalChangesManager {
 		return files;
 	}
 
-	public void indexMainMap(File f, long dateCreated) {
+	public synchronized void indexMainMap(File f, long dateCreated) {
 		String nm = Algorithms.getFileNameWithoutExtension(f).toLowerCase();
-		if(!regions.containsKey(nm)) {
-			regions.put(nm, new RegionUpdateFiles(nm));
-		}
 		RegionUpdateFiles regionUpdateFiles = regions.get(nm);
+		if(regionUpdateFiles == null) {
+			regionUpdateFiles = new RegionUpdateFiles(nm);
+			regions.put(nm, regionUpdateFiles);
+		}
 		regionUpdateFiles.mainFile = f;
 		regionUpdateFiles.mainFileInit = dateCreated;
 		if (!regionUpdateFiles.monthUpdates.isEmpty()) {
 			List<String> list = new ArrayList<String>(regionUpdateFiles.monthUpdates.keySet());
 			for (String month : list) {
 				RegionUpdate ru = regionUpdateFiles.monthUpdates.get(month);
-				if (ru.obfCreated < dateCreated) {
+				if (ru.obfCreated <= dateCreated) {
 					log.info("Delete overlapping month update " + ru.file.getName());
 					resourceManager.closeFile(ru.file.getName());
 					regionUpdateFiles.monthUpdates.remove(month);
@@ -93,7 +98,11 @@ public class IncrementalChangesManager {
 				RegionUpdate monthRu = regionUpdateFiles.monthUpdates.get(month);
 				while (it.hasNext()) {
 					RegionUpdate ru = it.next();
-					if (ru.obfCreated < dateCreated || (monthRu != null && ru.obfCreated < monthRu.obfCreated)) {
+					if(ru == null) {
+						continue;
+					}
+					if (ru.obfCreated <= dateCreated ||
+							(monthRu != null && ru.obfCreated < monthRu.obfCreated)) {
 						log.info("Delete overlapping day update " + ru.file.getName());
 						resourceManager.closeFile(ru.file.getName());
 						it.remove();
@@ -106,17 +115,18 @@ public class IncrementalChangesManager {
 		}
 	}
 	
-	public boolean index(File f, long dateCreated, BinaryMapIndexReader mapReader) {
+	public synchronized boolean index(File f, long dateCreated, BinaryMapIndexReader mapReader) {
 		String index = Algorithms.getFileNameWithoutExtension(f).toLowerCase();
 		if(index.length() <= 9 || index.charAt(index.length() - 9) != '_'){
 			return false;
 		}
 		String nm = index.substring(0, index.length() - 9);
 		String date = index.substring(index.length() - 9 + 1);
-		if(!regions.containsKey(nm)) {
-			regions.put(nm, new RegionUpdateFiles(nm));
-		}
 		RegionUpdateFiles regionUpdateFiles = regions.get(nm);
+		if(regionUpdateFiles == null) {
+			regionUpdateFiles = new RegionUpdateFiles(nm);
+			regions.put(nm, regionUpdateFiles);
+		}
 		return regionUpdateFiles.addUpdate(date, f, dateCreated);
 	}
 	
@@ -158,10 +168,12 @@ public class IncrementalChangesManager {
 			if(date.endsWith("00")) {
 				monthUpdates.put(monthYear, ru);
 			} else {
-				if (!dayUpdates.containsKey(monthYear)) {
-					dayUpdates.put(monthYear, new ArrayList<IncrementalChangesManager.RegionUpdate>());
+				List<RegionUpdate> list = dayUpdates.get(monthYear);
+				if (list == null) {
+					list = new ArrayList<IncrementalChangesManager.RegionUpdate>();
 				}
-				dayUpdates.get(monthYear).add(ru);
+				list.add(ru);
+				dayUpdates.put(monthYear, list);
 			}
 			return true;
 		}
@@ -186,17 +198,19 @@ public class IncrementalChangesManager {
 		public List<IncrementalUpdate> getItemsForUpdate() {
 			Iterator<IncrementalUpdateGroupByMonth> it = updateByMonth.values().iterator();
 			List<IncrementalUpdate> ll = new ArrayList<IncrementalUpdate>();
-			while(it.hasNext()) {
+			while (it.hasNext()) {
 				IncrementalUpdateGroupByMonth n = it.next();
-				if(it.hasNext()) {
-					if(!n.isMonthUpdateApplicable()) {
-						return null;			
+				if (it.hasNext()) {
+					if (!n.isMonthUpdateApplicable()) {
+						return null;
 					}
 					ll.addAll(n.getMonthUpdate());
 				} else {
-					if(n.isDayUpdateApplicable() && isPreferrableLimitForDayUpdates(n.monthYearPart, n.getDayUpdates())) {
+					// it causes problem when person doesn't restart application for 10 days so updates stop working
+					// && isPreferrableLimitForDayUpdates(n.monthYearPart, n.getDayUpdates())
+					if (n.isDayUpdateApplicable() ) {
 						ll.addAll(n.getDayUpdates());
-					} else if(n.isMonthUpdateApplicable()) {
+					} else if (n.isMonthUpdateApplicable()) {
 						ll.addAll(n.getMonthUpdate());
 					} else {
 						return null;
@@ -208,16 +222,16 @@ public class IncrementalChangesManager {
 
 		public void addUpdate(IncrementalUpdate iu) {
 			String dtMonth = iu.date.substring(0, 5);
-			if(!updateByMonth.containsKey(dtMonth)) {
+			if (!updateByMonth.containsKey(dtMonth)) {
 				IncrementalUpdateGroupByMonth iubm = new IncrementalUpdateGroupByMonth(dtMonth);
 				updateByMonth.put(dtMonth, iubm);
 			}
 			IncrementalUpdateGroupByMonth mm = updateByMonth.get(dtMonth);
-			if(iu.isMonth()) {
+			if (iu.isMonth()) {
 				mm.monthUpdate = iu;
 			} else {
 				mm.dayUpdates.add(iu);
-			}			
+			}
 		}
 	}
 	
@@ -283,19 +297,24 @@ public class IncrementalChangesManager {
 
 		@Override
 		public String toString() {
-			return "Update " + fileName + " " + sizeText + " MB " + date;
+			return "Update " + fileName + " " + sizeText + " MB " + date + ", timestamp: " + timestamp;
 		}
 	}
 	
 	private List<IncrementalUpdate> getIncrementalUpdates(String file, long timestamp) throws IOException,
 			XmlPullParserException {
 		String url = URL + "?aosmc=true&timestamp=" + timestamp + "&file=" + URLEncoder.encode(file);
+
 		HttpURLConnection conn = NetworkUtils.getHttpURLConnection(url);
+		conn.setUseCaches(false);
 		XmlPullParser parser = PlatformUtil.newXMLPullParser();
-		parser.setInput(conn.getInputStream(), "UTF-8");
+		InputStream is = conn.getInputStream();
+		parser.setInput(is, "UTF-8");
 		List<IncrementalUpdate> lst = new ArrayList<IncrementalUpdate>();
+		int elements = 0;
 		while (parser.next() != XmlPullParser.END_DOCUMENT) {
 			if (parser.getEventType() == XmlPullParser.START_TAG) {
+				elements ++;
 				if (parser.getName().equals("update")) {
 					IncrementalUpdate dt = new IncrementalUpdate();
 					dt.date = parser.getAttributeValue("", "updateDate");
@@ -308,6 +327,9 @@ public class IncrementalChangesManager {
 				}
 			}
 		}
+		LOG.debug(String.format("Incremental updates: %s, updates %d (total %d)", url, lst.size(), elements));
+		is.close();
+		conn.disconnect();
 		return lst;
 	}
 	

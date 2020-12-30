@@ -1,17 +1,16 @@
 package net.osmand.plus.mapmarkers.adapters;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.helper.ItemTouchHelper;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.RecyclerView;
+
+import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 
@@ -22,12 +21,9 @@ public class MapMarkersItemTouchHelperCallback extends ItemTouchHelper.Callback 
 	private boolean swipeEnabled = true;
 
 	private Paint backgroundPaint = new Paint();
-	private Paint iconPaint = new Paint();
 	private Paint textPaint = new Paint();
 
 	private float marginSides;
-	private Bitmap deleteBitmap;
-	private Bitmap historyBitmap;
 	private boolean iconHidden;
 	private boolean night;
 
@@ -46,16 +42,11 @@ public class MapMarkersItemTouchHelperCallback extends ItemTouchHelper.Callback 
 		this.mapActivity = mapActivity;
 		this.adapter = adapter;
 		marginSides = mapActivity.getResources().getDimension(R.dimen.list_content_padding);
-		deleteBitmap = BitmapFactory.decodeResource(mapActivity.getResources(), R.drawable.ic_action_delete_dark);
-		historyBitmap = BitmapFactory.decodeResource(mapActivity.getResources(), R.drawable.ic_action_history);
 		night = !mapActivity.getMyApplication().getSettings().isLightContent();
 
-		backgroundPaint.setColor(ContextCompat.getColor(mapActivity, night ? R.color.dashboard_divider_dark : R.color.dashboard_divider_light));
+		backgroundPaint.setColor(ContextCompat.getColor(mapActivity, night ? R.color.divider_color_dark : R.color.divider_color_light));
 		backgroundPaint.setStyle(Paint.Style.FILL_AND_STROKE);
 		backgroundPaint.setAntiAlias(true);
-		iconPaint.setAntiAlias(true);
-		iconPaint.setFilterBitmap(true);
-		iconPaint.setDither(true);
 		textPaint.setTextSize(mapActivity.getResources().getDimension(R.dimen.default_desc_text_size));
 		textPaint.setFakeBoldText(true);
 		textPaint.setAntiAlias(true);
@@ -99,6 +90,7 @@ public class MapMarkersItemTouchHelperCallback extends ItemTouchHelper.Callback 
 	@Override
 	public void onChildDraw(Canvas c, RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, float dX, float dY, int actionState, boolean isCurrentlyActive) {
 		if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE && viewHolder instanceof MapMarkerItemViewHolder) {
+			OsmandApplication app = mapActivity.getMyApplication();
 			if (!iconHidden && isCurrentlyActive) {
 				((MapMarkerItemViewHolder) viewHolder).optionsBtn.setVisibility(View.GONE);
 				iconHidden = true;
@@ -111,20 +103,22 @@ public class MapMarkersItemTouchHelperCallback extends ItemTouchHelper.Callback 
 				colorIcon = R.color.map_widget_blue;
 				colorText = R.color.map_widget_blue;
 			} else {
-				colorIcon = night ? 0 : R.color.icon_color;
-				colorText = R.color.dashboard_subheader_text_light;
-			}
-			if (colorIcon != 0) {
-				iconPaint.setColorFilter(new PorterDuffColorFilter(ContextCompat.getColor(mapActivity, colorIcon), PorterDuff.Mode.SRC_IN));
+				colorIcon = night ? R.color.icon_color_default_dark : R.color.icon_color_default_light;
+				colorText = night ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light;
 			}
 			textPaint.setColor(ContextCompat.getColor(mapActivity, colorText));
+			Drawable icon = app.getUIUtilities().getIcon(R.drawable.ic_action_history, colorIcon);
+			int iconWidth = icon.getIntrinsicWidth();
+			int iconHeight = icon.getIntrinsicHeight();
 			float textMarginTop = ((float) itemView.getHeight() - (float) textHeight) / 2;
+			float iconMarginTop = ((float) itemView.getHeight() - (float) iconHeight) / 2;
+			int iconTopY = itemView.getTop() + (int) iconMarginTop;
+			int iconLeftX = itemView.getLeft() + (int) marginSides;
 			c.drawRect(itemView.getLeft(), itemView.getTop(), dX, itemView.getBottom(), backgroundPaint);
-			float iconMarginTop = ((float) itemView.getHeight() - (float) historyBitmap.getHeight()) / 2;
-			c.drawBitmap(historyBitmap, itemView.getLeft() + marginSides, itemView.getTop() + iconMarginTop, iconPaint);
-			c.drawText(moveToHistoryStr, itemView.getLeft() + 2 * marginSides + historyBitmap.getWidth(),
+			c.drawText(moveToHistoryStr, itemView.getLeft() + 2 * marginSides + iconWidth,
 					itemView.getTop() + textMarginTop + textHeight, textPaint);
-
+			icon.setBounds(iconLeftX, iconTopY, iconLeftX + iconWidth, iconTopY + iconHeight);
+			icon.draw(c);
 		}
 		super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
 	}

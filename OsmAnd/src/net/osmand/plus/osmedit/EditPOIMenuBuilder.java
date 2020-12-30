@@ -2,8 +2,10 @@ package net.osmand.plus.osmedit;
 
 import android.view.View;
 
-import net.osmand.data.PointDescription;
+import androidx.annotation.NonNull;
+
 import net.osmand.osm.PoiType;
+import net.osmand.osm.edit.Entity;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.mapcontextmenu.MenuBuilder;
@@ -11,11 +13,13 @@ import net.osmand.plus.render.RenderingIcons;
 
 import java.util.Map;
 
+import static net.osmand.osm.edit.Entity.POI_TYPE_TAG;
+
 public class EditPOIMenuBuilder extends MenuBuilder {
 
 	private final OsmPoint osmPoint;
 
-	public EditPOIMenuBuilder(MapActivity mapActivity, final OsmPoint osmPoint) {
+	public EditPOIMenuBuilder(@NonNull MapActivity mapActivity, final @NonNull OsmPoint osmPoint) {
 		super(mapActivity);
 		this.osmPoint = osmPoint;
 	}
@@ -37,7 +41,7 @@ public class EditPOIMenuBuilder extends MenuBuilder {
 			OpenstreetmapPoint point = (OpenstreetmapPoint) osmPoint;
 
 			for (Map.Entry<String, String> e : point.getEntity().getTags().entrySet()) {
-				if (EditPoiData.POI_TYPE_TAG.equals(e.getKey())) {
+				if (POI_TYPE_TAG.equals(e.getKey())) {
 					String poiTranslation = e.getValue();
 					Map<String, PoiType> poiTypeMap = app.getPoiTypes().getAllTranslatedNames(false);
 					PoiType poiType = poiTypeMap.get(poiTranslation.toLowerCase());
@@ -62,17 +66,13 @@ public class EditPOIMenuBuilder extends MenuBuilder {
 			}
 
 			for (Map.Entry<String, String> e : point.getEntity().getTags().entrySet()) {
-				if (EditPoiData.POI_TYPE_TAG.equals(e.getKey()) || 
-						e.getKey().startsWith(EditPoiData.REMOVE_TAG_PREFIX)) {
+				if (POI_TYPE_TAG.equals(e.getKey()) ||
+						e.getKey().startsWith(Entity.REMOVE_TAG_PREFIX)) {
 					continue;
 				}
 				String text = e.getKey() + "=" + e.getValue();
 				buildRow(view, R.drawable.ic_action_info_dark, null, text, 0, false, null, false, 0, false, null, false);
 			}
 		}
-
-		buildRow(view, R.drawable.ic_action_get_my_location, null, PointDescription.getLocationName(app,
-				osmPoint.getLatitude(), osmPoint.getLongitude(), true)
-				.replaceAll("\n", " "), 0, false, null, false, 0, false, null, false);
 	}
 }

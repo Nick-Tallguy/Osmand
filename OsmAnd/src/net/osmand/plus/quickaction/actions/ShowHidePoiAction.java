@@ -3,8 +3,6 @@ package net.osmand.plus.quickaction.actions;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.drawable.Drawable;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,15 +13,19 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.recyclerview.widget.RecyclerView;
+
 import net.osmand.plus.ContextMenuAdapter;
 import net.osmand.plus.ContextMenuItem;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.UiUtilities;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.poi.PoiFiltersHelper;
 import net.osmand.plus.poi.PoiUIFilter;
 import net.osmand.plus.quickaction.QuickAction;
-import net.osmand.plus.quickaction.QuickActionFactory;
+import net.osmand.plus.quickaction.QuickActionType;
 import net.osmand.plus.render.RenderingIcons;
 
 import java.util.ArrayList;
@@ -33,7 +35,12 @@ import java.util.Set;
 
 public class ShowHidePoiAction extends QuickAction {
 
-	public static final int TYPE = 5;
+
+	public static final QuickActionType TYPE = new QuickActionType(5,
+			"poi.showhide", ShowHidePoiAction.class).
+			nameRes(R.string.quick_action_showhide_poi_title).iconRes(R.drawable.ic_action_info_dark).
+			category(QuickActionType.CONFIGURE_MAP);
+
 
 	public static final String KEY_FILTERS = "filters";
 
@@ -100,6 +107,8 @@ public class ShowHidePoiAction extends QuickAction {
 	@Override
 	public void execute(MapActivity activity) {
 
+		activity.closeQuickSearch();
+
 		PoiFiltersHelper pf = activity.getMyApplication().getPoiFilters();
 		List<PoiUIFilter> poiFilters = loadPoiFilters(activity.getMyApplication().getPoiFilters());
 
@@ -108,6 +117,9 @@ public class ShowHidePoiAction extends QuickAction {
 			pf.clearSelectedPoiFilters();
 
 			for (PoiUIFilter filter : poiFilters) {
+				if (filter.isStandardFilter()) {
+					filter.removeUnsavedFilterByName();
+				}
 				pf.addSelectedPoiFilter(filter);
 			}
 
@@ -133,9 +145,8 @@ public class ShowHidePoiAction extends QuickAction {
 
 	@Override
 	public void drawUI(ViewGroup parent, final MapActivity activity) {
-
-		View view = LayoutInflater.from(parent.getContext())
-				.inflate(R.layout.quick_action_show_hide_poi, parent, false);
+		boolean nightMode = activity.getMyApplication().getDaynightHelper().isNightModeForMapControls();
+		View view = UiUtilities.getInflater(activity, nightMode).inflate(R.layout.quick_action_show_hide_poi, parent, false);
 
 		RecyclerView list = (RecyclerView) view.findViewById(R.id.list);
 		Button addFilter = (Button) view.findViewById(R.id.btnAddCategory);
@@ -275,20 +286,17 @@ public class ShowHidePoiAction extends QuickAction {
 	private void showSingleChoicePoiFilterDialog(final OsmandApplication app, final MapActivity activity, final Adapter filtersAdapter) {
 
 		final PoiFiltersHelper poiFilters = app.getPoiFilters();
-		final ContextMenuAdapter adapter = new ContextMenuAdapter();
+		final ContextMenuAdapter adapter = new ContextMenuAdapter(app);
 
 		final List<PoiUIFilter> list = new ArrayList<>();
 
-		for (PoiUIFilter f : poiFilters.getTopDefinedPoiFilters()) {
-			addFilterToList(adapter, list, f);
-		}
-		for (PoiUIFilter f : poiFilters.getSearchPoiFilters()) {
+		for (PoiUIFilter f : poiFilters.getSortedPoiFilters(true)) {
 			addFilterToList(adapter, list, f);
 		}
 
-		final ArrayAdapter<ContextMenuItem> listAdapter =
-				adapter.createListAdapter(activity, app.getSettings().isLightContent());
-		AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+		boolean nightMode = activity.getMyApplication().getDaynightHelper().isNightModeForMapControls();
+		final ArrayAdapter<ContextMenuItem> listAdapter = adapter.createListAdapter(activity, !nightMode);
+		AlertDialog.Builder builder = new AlertDialog.Builder(UiUtilities.getThemedContext(activity, nightMode));
 		builder.setAdapter(listAdapter, new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
@@ -314,7 +322,7 @@ public class ShowHidePoiAction extends QuickAction {
 			@Override
 			public void onShow(DialogInterface dialog) {
 				Button neutralButton = alertDialog.getButton(DialogInterface.BUTTON_NEUTRAL);
-				Drawable drawable = app.getIconsCache().getThemedIcon(R.drawable.ic_action_multiselect);
+				Drawable drawable = app.getUIUtilities().getThemedIcon(R.drawable.ic_action_multiselect);
 				neutralButton.setCompoundDrawablesWithIntrinsicBounds(drawable, null, null, null);
 			}
 		});

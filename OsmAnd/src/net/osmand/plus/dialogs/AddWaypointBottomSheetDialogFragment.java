@@ -6,9 +6,10 @@ import android.content.DialogInterface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Bundle;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.Nullable;
 import android.view.View;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
 
 import net.osmand.data.LatLon;
 import net.osmand.data.PointDescription;
@@ -40,7 +41,7 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 
 		BaseBottomSheetItem replaceDestItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(getCurrentPointName(targetPointsHelper.getPointToNavigate(), false))
-				.setDescriptionColorId(R.color.searchbar_text_hint_light)
+				.setDescriptionColorId(nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light)
 				.setIcon(getIcon(R.drawable.list_destination, 0))
 				.setTitle(getString(R.string.replace_destination_point))
 				.setLayoutId(R.layout.bottom_sheet_item_with_descr_56dp)
@@ -56,18 +57,13 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 
 		BaseBottomSheetItem replaceStartItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(getCurrentPointName(targetPointsHelper.getPointToStart(), true))
-				.setDescriptionColorId(R.color.searchbar_text_hint_light)
+				.setDescriptionColorId(nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light)
 				.setIcon(getIcon(R.drawable.list_startpoint, 0))
 				.setTitle(getString(R.string.make_as_start_point))
 				.setLayoutId(R.layout.bottom_sheet_item_with_descr_56dp)
 				.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						TargetPoint start = targetPointsHelper.getPointToStart();
-						if (start != null) {
-							targetPointsHelper.navigateToPoint(new LatLon(start.getLatitude(), start.getLongitude()),
-									false, 0, start.getOriginalPointDescription());
-						}
 						targetPointsHelper.setStartPoint(latLon, true, name);
 						dismiss();
 					}
@@ -75,11 +71,11 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 				.create();
 		items.add(replaceStartItem);
 
-		items.add(new DividerHalfItem(getContext(), getBottomDividerColorId()));
+		items.add(new DividerHalfItem(getContext(), getDividerColorId()));
 
 		BaseBottomSheetItem subsequentDestItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(getString(R.string.subsequent_dest_description))
-				.setDescriptionColorId(R.color.searchbar_text_hint_light)
+				.setDescriptionColorId(nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light)
 				.setIcon(getSubsequentDestIcon())
 				.setTitle(getString(R.string.keep_and_add_destination_point))
 				.setLayoutId(R.layout.bottom_sheet_item_with_descr_56dp)
@@ -96,7 +92,7 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 
 		BaseBottomSheetItem firstIntermItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(getString(R.string.first_intermediate_dest_description))
-				.setDescriptionColorId(R.color.searchbar_text_hint_light)
+				.setDescriptionColorId(nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light)
 				.setIcon(getFirstIntermDestIcon())
 				.setTitle(getString(R.string.add_as_first_destination_point))
 				.setLayoutId(R.layout.bottom_sheet_item_with_descr_56dp)
@@ -112,7 +108,7 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 
 		BaseBottomSheetItem lastIntermItem = new BottomSheetItemWithDescription.Builder()
 				.setDescription(getString(R.string.last_intermediate_dest_description))
-				.setDescriptionColorId(R.color.searchbar_text_hint_light)
+				.setDescriptionColorId(nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light)
 				.setIcon(getLastIntermDistIcon())
 				.setTitle(getString(R.string.add_as_last_destination_point))
 				.setLayoutId(R.layout.bottom_sheet_item_with_descr_56dp)
@@ -135,7 +131,7 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 	}
 
 	@Override
-	protected int getBottomDividerColorId() {
+	protected int getDividerColorId() {
 		return nightMode ? R.color.route_info_bottom_view_bg_dark : -1;
 	}
 
@@ -144,28 +140,8 @@ public class AddWaypointBottomSheetDialogFragment extends MenuBottomSheetDialogF
 		return getIcon(id, nightMode ? R.color.ctx_menu_direction_color_dark : R.color.map_widget_blue);
 	}
 
-	@Override
-	protected int getBgColorId() {
-		return nightMode ? R.color.ctx_menu_bg_dark : R.color.bg_color_light;
-	}
-
-	@Override
-	protected int getPortraitBgResId() {
-		return nightMode ? R.drawable.bg_additional_menu_dark : R.drawable.bg_bottom_menu_light;
-	}
-
-	@Override
-	protected int getLandscapeTopsidesBgResId() {
-		return nightMode ? R.drawable.bg_additional_menu_topsides_dark : R.drawable.bg_bottom_sheet_topsides_landscape_light;
-	}
-
-	@Override
-	protected int getLandscapeSidesBgResId() {
-		return nightMode ? R.drawable.bg_additional_menu_sides_dark : R.drawable.bg_bottom_sheet_sides_landscape_light;
-	}
-
 	private Drawable getBackgroundIcon(@DrawableRes int resId) {
-		return getIcon(resId, R.color.searchbar_text_hint_light);
+		return getIcon(resId, nightMode ? R.color.text_color_secondary_dark : R.color.text_color_secondary_light);
 	}
 
 	private LayerDrawable getLayerDrawable(@DrawableRes int bgIdRes, @DrawableRes int icIdRes) {

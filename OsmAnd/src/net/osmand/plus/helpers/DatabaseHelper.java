@@ -47,18 +47,21 @@ public class DatabaseHelper {
 
     private SQLiteAPI.SQLiteConnection openConnection(boolean readonly) {
         SQLiteAPI.SQLiteConnection conn = app.getSQLiteAPI().getOrCreateDatabase(DB_NAME, readonly);
-        if (conn.getVersion() == 0 || DB_VERSION != conn.getVersion()) {
+        if (conn == null) {
+            return null;
+        }
+        if (conn.getVersion() < DB_VERSION) {
             if (readonly) {
                 conn.close();
                 conn = app.getSQLiteAPI().getOrCreateDatabase(DB_NAME, false);
             }
-            if (conn.getVersion() == 0) {
-                conn.setVersion(DB_VERSION);
+            int version = conn.getVersion();
+            conn.setVersion(DB_VERSION);
+            if (version == 0) {
                 onCreate(conn);
             } else {
-                onUpgrade(conn, conn.getVersion(), DB_VERSION);
+                onUpgrade(conn, version, DB_VERSION);
             }
-
         }
         return conn;
     }

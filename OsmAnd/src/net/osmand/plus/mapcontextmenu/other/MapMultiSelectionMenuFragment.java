@@ -4,9 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
-import android.support.v4.content.ContextCompat;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -17,6 +14,12 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 
 import com.github.ksoichiro.android.observablescrollview.ObservableListView;
 import com.github.ksoichiro.android.observablescrollview.ObservableScrollViewCallbacks;
@@ -52,7 +55,7 @@ public class MapMultiSelectionMenuFragment extends Fragment implements MultiSele
 					R.drawable.multi_selection_menu_bg_light_land, R.drawable.multi_selection_menu_bg_dark_land);
 		} else {
 			AndroidUtils.setBackground(view.getContext(), view.findViewById(R.id.cancel_row), !menu.isLight(),
-					R.color.ctx_menu_bg_light, R.color.ctx_menu_bg_dark);
+					R.color.list_background_color_light, R.color.list_background_color_dark);
 		}
 
 		final ListView listView = (ListView) view.findViewById(R.id.list);
@@ -83,7 +86,7 @@ public class MapMultiSelectionMenuFragment extends Fragment implements MultiSele
 			));
 
 			ImageView shadow = new ImageView(context);
-			shadow.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.bg_shadow_onmap));
+			shadow.setImageDrawable(AppCompatResources.getDrawable(context, R.drawable.bg_shadow_onmap));
 			shadow.setLayoutParams(new FrameLayout.LayoutParams(
 					FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
 			));
@@ -140,13 +143,13 @@ public class MapMultiSelectionMenuFragment extends Fragment implements MultiSele
 				}
 			});
 		}
-		listView.setAdapter(listAdapter);
 		View headerView = inflater.inflate(R.layout.menu_obj_selection_header, listView, false);
 		if (!menu.isLandscapeLayout()) {
-			AndroidUtils.setBackground(getContext(), headerView, !menu.isLight(), R.color.ctx_menu_bg_light, R.color.ctx_menu_bg_dark);
+			AndroidUtils.setBackground(getContext(), headerView, !menu.isLight(), R.color.list_background_color_light, R.color.list_background_color_dark);
 		}
 		headerView.setOnClickListener(null);
 		listView.addHeaderView(headerView);
+		listView.setAdapter(listAdapter);
 
 		view.findViewById(R.id.divider).setBackgroundColor(ContextCompat.getColor(getContext(), menu.isLight()
 				? R.color.multi_selection_menu_divider_light : R.color.multi_selection_menu_divider_dark));
@@ -173,7 +176,7 @@ public class MapMultiSelectionMenuFragment extends Fragment implements MultiSele
 	@Override
 	public void onResume() {
 		super.onResume();
-		if (MapRouteInfoMenu.isVisible()) {
+		if (menu.getMapActivity().getMapRouteInfoMenu().isVisible()) {
 			dismissMenu();
 			return;
 		}
@@ -251,7 +254,10 @@ public class MapMultiSelectionMenuFragment extends Fragment implements MultiSele
 		if (menu.getMapActivity().getContextMenu().isVisible()) {
 			menu.getMapActivity().getContextMenu().hide();
 		} else {
-			menu.getMapActivity().getSupportFragmentManager().popBackStack();
+			FragmentManager fragmentManager = menu.getMapActivity().getSupportFragmentManager();
+			if (!fragmentManager.isStateSaved()) {
+				fragmentManager.popBackStack();
+			}
 		}
 	}
 }

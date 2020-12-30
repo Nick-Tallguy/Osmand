@@ -2,14 +2,12 @@ package net.osmand.plus;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
-import android.support.annotation.ColorRes;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.IdRes;
-import android.support.annotation.LayoutRes;
-import android.support.v4.app.FragmentActivity;
-import android.support.v7.widget.AppCompatImageView;
+import android.os.Build;
+import android.text.TextUtils;
 import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,17 +16,35 @@ import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.annotation.ColorRes;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.IdRes;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.NonNull;
+import androidx.appcompat.widget.AppCompatImageView;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
+
+import com.google.android.material.slider.Slider;
+
+import net.osmand.AndroidUtils;
 import net.osmand.PlatformUtil;
 import net.osmand.plus.activities.HelpActivity;
 import net.osmand.plus.activities.actions.AppModeDialog;
 import net.osmand.plus.dialogs.ConfigureMapMenu;
 import net.osmand.plus.dialogs.HelpArticleDialogFragment;
+import net.osmand.plus.helpers.AndroidUiHelper;
+import net.osmand.plus.settings.backend.ApplicationMode;
+import net.osmand.plus.settings.backend.OsmAndAppCustomization;
+import net.osmand.plus.settings.backend.ContextMenuItemsPreference;
+import net.osmand.plus.settings.backend.OsmandPreference;
+import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,13 +52,29 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import static net.osmand.aidlapi.OsmAndCustomizationConstants.DRAWER_CONFIGURE_PROFILE_ID;
+import static net.osmand.aidlapi.OsmAndCustomizationConstants.DRAWER_SWITCH_PROFILE_ID;
+
 public class ContextMenuAdapter {
 	private static final Log LOG = PlatformUtil.getLog(ContextMenuAdapter.class);
+
+	// Constants to determine profiles list item type (drawer menu items in 'Switch profile' mode)
+	public static final int PROFILES_NORMAL_PROFILE_TAG = 0;
+	public static final int PROFILES_CHOSEN_PROFILE_TAG = 1;
+	public static final int PROFILES_CONTROL_BUTTON_TAG = 2;
+	private static final int ITEMS_ORDER_STEP = 10;
 
 	@LayoutRes
 	private int DEFAULT_LAYOUT_ID = R.layout.list_menu_item_native;
 	List<ContextMenuItem> items = new ArrayList<>();
+	private boolean profileDependent = false;
+	private boolean nightMode;
 	private ConfigureMapMenu.OnClickListener changeAppModeListener = null;
+	private OsmandApplication app;
+
+	public ContextMenuAdapter(OsmandApplication app) {
+		this.app = app;
+	}
 
 	public int length() {
 		return items.size();
@@ -57,34 +89,66 @@ public class ContextMenuAdapter {
 	}
 
 	public void addItem(ContextMenuItem item) {
-		try {
-			items.add(item.getPos(), item);
-		} catch (IndexOutOfBoundsException ex) {
-			items.add(item);
+		String id = item.getId();
+		if (id != null) {
+			item.setHidden(isItemHidden(id));
+			item.setOrder(getItemOrder(id, item.getOrder()));
 		}
+		items.add(item);
+		sortItemsByOrder();
 	}
 
 	public ContextMenuItem getItem(int position) {
 		return items.get(position);
 	}
 
+	public List<ContextMenuItem> getItems() {
+		return items;
+	}
+
 	public void removeItem(int position) {
 		items.remove(position);
+	}
+
+	public void clearAdapter() { items.clear(); }
+
+	public boolean isProfileDependent() {
+		return profileDependent;
+	}
+
+	public void setProfileDependent(boolean profileDependent) {
+		this.profileDependent = profileDependent;
+	}
+
+	public void setNightMode(boolean nightMode) {
+		this.nightMode = nightMode;
 	}
 
 	public void setDefaultLayoutId(int defaultLayoutId) {
 		this.DEFAULT_LAYOUT_ID = defaultLayoutId;
 	}
 
-
 	public void setChangeAppModeListener(ConfigureMapMenu.OnClickListener changeAppModeListener) {
 		this.changeAppModeListener = changeAppModeListener;
 	}
 
-	public void sortItemsByOrder() {
+	private void sortItemsByOrder() {
 		Collections.sort(items, new Comparator<ContextMenuItem>() {
 			@Override
 			public int compare(ContextMenuItem item1, ContextMenuItem item2) {
+				if (DRAWER_CONFIGURE_PROFILE_ID.equals(item1.getId())
+						&& DRAWER_SWITCH_PROFILE_ID.equals(item2.getId())) {
+					return 1;
+				} else if (DRAWER_SWITCH_PROFILE_ID.equals(item1.getId())
+						&& DRAWER_CONFIGURE_PROFILE_ID.equals(item2.getId())) {
+					return -1;
+				} else if (DRAWER_SWITCH_PROFILE_ID.equals(item1.getId())
+						|| DRAWER_CONFIGURE_PROFILE_ID.equals(item1.getId())) {
+					return -1;
+				} else if (DRAWER_SWITCH_PROFILE_ID.equals(item2.getId())
+						|| DRAWER_CONFIGURE_PROFILE_ID.equals(item2.getId())) {
+					return 1;
+				}
 				int order1 = item1.getOrder();
 				int order2 = item2.getOrder();
 				if (order1 < order2) {
@@ -97,11 +161,54 @@ public class ContextMenuAdapter {
 		});
 	}
 
+    private boolean isItemHidden(@NonNull String id) {
+        ContextMenuItemsPreference contextMenuItemsPreference = app.getSettings().getContextMenuItemsPreference(id);
+        if (contextMenuItemsPreference == null) {
+            return false;
+        }
+        List<String> hiddenIds = contextMenuItemsPreference.get().getHiddenIds();
+        if (!Algorithms.isEmpty(hiddenIds)) {
+            return hiddenIds.contains(id);
+        }
+        return false;
+    }
+
+    private int getItemOrder(@NonNull String id, int defaultOrder) {
+        ContextMenuItemsPreference contextMenuItemsPreference = app.getSettings().getContextMenuItemsPreference(id);
+		if (contextMenuItemsPreference != null) {
+			List<String> orderIds = contextMenuItemsPreference.get().getOrderIds();
+			if (!Algorithms.isEmpty(orderIds)) {
+				int index = orderIds.indexOf(id);
+				if (index != -1) {
+					return index;
+				}
+			}
+		}
+		return getDefaultOrder(defaultOrder);
+	}
+
+	private int getDefaultOrder(int defaultOrder) {
+		if (defaultOrder == 0 && !items.isEmpty()) {
+			return items.get(items.size() - 1).getOrder() + ITEMS_ORDER_STEP;
+		} else {
+			return defaultOrder;
+		}
+	}
+
 	public ArrayAdapter<ContextMenuItem> createListAdapter(final Activity activity, final boolean lightTheme) {
 		final int layoutId = DEFAULT_LAYOUT_ID;
 		final OsmandApplication app = ((OsmandApplication) activity.getApplication());
+		final OsmAndAppCustomization customization = app.getAppCustomization();
+		List<ContextMenuItem> itemsToRemove = new ArrayList<>();
+		for (ContextMenuItem item : items) {
+			String id = item.getId();
+			if (item.isHidden() || !TextUtils.isEmpty(id) && !customization.isFeatureEnabled(id)) {
+				itemsToRemove.add(item);
+			}
+		}
+		items.removeAll(itemsToRemove);
 		return new ContextMenuArrayAdapter(activity, layoutId, R.id.title,
-				items.toArray(new ContextMenuItem[items.size()]), app, lightTheme, changeAppModeListener);
+				items.toArray(new ContextMenuItem[0]), app, lightTheme, changeAppModeListener);
 	}
 
 	public class ContextMenuArrayAdapter extends ArrayAdapter<ContextMenuItem> {
@@ -110,7 +217,7 @@ public class ContextMenuAdapter {
 		@LayoutRes
 		private int layoutId;
 		private final ConfigureMapMenu.OnClickListener changeAppModeListener;
-		private final IconsCache mIconsCache;
+		private final UiUtilities mIconsCache;
 
 		public ContextMenuArrayAdapter(Activity context,
 									   @LayoutRes int layoutRes,
@@ -124,7 +231,7 @@ public class ContextMenuAdapter {
 			this.lightTheme = lightTheme;
 			this.layoutId = layoutRes;
 			this.changeAppModeListener = changeAppModeListener;
-			mIconsCache = app.getIconsCache();
+			mIconsCache = app.getUIUtilities();
 		}
 
 		@Override
@@ -142,6 +249,8 @@ public class ContextMenuAdapter {
 			final ContextMenuItem item = getItem(position);
 			int layoutId = item.getLayout();
 			layoutId = layoutId != ContextMenuItem.INVALID_ID ? layoutId : DEFAULT_LAYOUT_ID;
+			int currentModeColorRes = app.getSettings().getApplicationMode().getIconColorInfo().getColor(nightMode);
+			int currentModeColor = ContextCompat.getColor(app, currentModeColorRes);
 			if (layoutId == R.layout.mode_toggles) {
 				final Set<ApplicationMode> selected = new LinkedHashSet<>();
 				return AppModeDialog.prepareAppModeDrawerView((Activity) getContext(),
@@ -149,7 +258,7 @@ public class ContextMenuAdapter {
 							@Override
 							public void onClick(View view) {
 								if (selected.size() > 0) {
-									app.getSettings().APPLICATION_MODE.set(selected.iterator().next());
+									app.getSettings().setApplicationMode(selected.iterator().next());
 									notifyDataSetChanged();
 								}
 								if (changeAppModeListener != null) {
@@ -167,9 +276,77 @@ public class ContextMenuAdapter {
 			if (item.getMinHeight() > 0) {
 				convertView.setMinimumHeight(item.getMinHeight());
 			}
+			if (layoutId == R.layout.main_menu_drawer_btn_switch_profile || 
+					layoutId == R.layout.main_menu_drawer_btn_configure_profile) {
+				int colorResId = item.getColorRes();
+				int colorNoAlpha = ContextCompat.getColor(app, colorResId);
+				
+				TextView title = convertView.findViewById(R.id.title);
+				title.setText(item.getTitle());
+
+				if (layoutId == R.layout.main_menu_drawer_btn_switch_profile) {
+					ImageView icon = convertView.findViewById(R.id.icon);
+					icon.setImageDrawable(mIconsCache.getIcon(item.getIcon(), colorResId));
+					ImageView icArrow = convertView.findViewById(R.id.ic_expand_list);
+					icArrow.setImageDrawable(mIconsCache.getIcon(item.getSecondaryIcon()));
+					TextView desc = convertView.findViewById(R.id.description);
+					desc.setText(item.getDescription());
+				}
+				if (layoutId == R.layout.main_menu_drawer_btn_configure_profile) {
+					View fatDivider = convertView.findViewById(R.id.fatDivider);
+					fatDivider.setBackgroundColor(colorNoAlpha);
+				}
+
+				Drawable selectableBg = UiUtilities.getColoredSelectableDrawable(app, colorNoAlpha, 0.3f);
+				Drawable[] layers = {new ColorDrawable(UiUtilities.getColorWithAlpha(colorNoAlpha, 0.15f)), selectableBg};
+				LayerDrawable layerDrawable = new LayerDrawable(layers);
+
+				AndroidUtils.setBackground(convertView, layerDrawable);
+
+				return convertView;
+			}
+			if (layoutId == R.layout.profile_list_item) {
+				
+				int tag = item.getTag();
+
+				int colorResId = item.getColorRes();
+				int colorNoAlpha = ContextCompat.getColor(app, colorResId);
+				TextView title = convertView.findViewById(R.id.title);
+				TextView desc = convertView.findViewById(R.id.description);
+				ImageView icon = convertView.findViewById(R.id.icon);
+				title.setText(item.getTitle());
+				
+				convertView.findViewById(R.id.divider_up).setVisibility(View.INVISIBLE);
+				convertView.findViewById(R.id.divider_bottom).setVisibility(View.INVISIBLE);
+				convertView.findViewById(R.id.menu_image).setVisibility(View.GONE);
+				convertView.findViewById(R.id.compound_button).setVisibility(View.GONE);
+
+				Drawable drawable = UiUtilities.getColoredSelectableDrawable(app, colorNoAlpha, 0.3f);
+				
+				if (tag == PROFILES_CONTROL_BUTTON_TAG) {
+					title.setTextColor(colorNoAlpha);
+					icon.setVisibility(View.INVISIBLE);
+					desc.setVisibility(View.GONE);
+				} else {
+					AndroidUiHelper.updateVisibility(icon, true);
+					AndroidUiHelper.updateVisibility(desc, true);
+					AndroidUtils.setTextPrimaryColor(app, title, nightMode);
+					icon.setImageDrawable(mIconsCache.getIcon(item.getIcon(), colorResId));
+					desc.setText(item.getDescription());
+					boolean selectedMode = tag == PROFILES_CHOSEN_PROFILE_TAG;
+					if (selectedMode) {
+						Drawable[] layers = {new ColorDrawable(UiUtilities.getColorWithAlpha(colorNoAlpha, 0.15f)), drawable};
+						drawable = new LayerDrawable(layers);
+					}
+				}
+				
+				AndroidUtils.setBackground(convertView, drawable);
+				
+				return convertView;
+			}
 			if (layoutId == R.layout.help_to_improve_item) {
 				TextView feedbackButton = (TextView) convertView.findViewById(R.id.feedbackButton);
-				Drawable pollIcon = app.getIconsCache().getThemedIcon(R.drawable.ic_action_big_poll);
+				Drawable pollIcon = app.getUIUtilities().getThemedIcon(R.drawable.ic_action_big_poll);
 				feedbackButton.setCompoundDrawablesWithIntrinsicBounds(null, pollIcon, null, null);
 				feedbackButton.setOnClickListener(new View.OnClickListener() {
 					@Override
@@ -181,7 +358,7 @@ public class ContextMenuAdapter {
 				});
 				TextView contactUsButton = (TextView) convertView.findViewById(R.id.contactUsButton);
 				Drawable contactUsIcon =
-						app.getIconsCache().getThemedIcon(R.drawable.ic_action_big_feedback);
+						app.getUIUtilities().getThemedIcon(R.drawable.ic_action_big_feedback);
 				contactUsButton.setCompoundDrawablesWithIntrinsicBounds(null, contactUsIcon, null,
 						null);
 				final String email = app.getString(R.string.support_email);
@@ -196,6 +373,26 @@ public class ContextMenuAdapter {
 						}
 					}
 				});
+				File logFile = app.getAppPath(OsmandApplication.EXCEPTION_PATH);
+				View sendLogButtonDiv = convertView.findViewById(R.id.sendLogButtonDiv);
+				TextView sendLogButton = (TextView) convertView.findViewById(R.id.sendLogButton);
+				if (logFile.exists()) {
+					Drawable sendLogIcon =
+							app.getUIUtilities().getThemedIcon(R.drawable.ic_crashlog);
+					sendLogButton.setCompoundDrawablesWithIntrinsicBounds(null, sendLogIcon, null, null);
+					sendLogButton.setCompoundDrawablePadding(AndroidUtils.dpToPx(app, 8f));
+					sendLogButton.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							app.sendCrashLog();
+						}
+					});
+					sendLogButtonDiv.setVisibility(View.VISIBLE);
+					sendLogButton.setVisibility(View.VISIBLE);
+				} else {
+					sendLogButtonDiv.setVisibility(View.GONE);
+					sendLogButton.setVisibility(View.GONE);
+				}
 				return convertView;
 			}
 
@@ -206,15 +403,18 @@ public class ContextMenuAdapter {
 
 			if (this.layoutId == R.layout.simple_list_menu_item) {
 				@ColorRes
-				int color = lightTheme ? R.color.icon_color : R.color.dashboard_subheader_text_dark;
+				int color = lightTheme ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
 				Drawable drawable = item.getIcon() != ContextMenuItem.INVALID_ID
 						? mIconsCache.getIcon(item.getIcon(), color) : null;
 				if (drawable != null && tv != null) {
-					float density = getContext().getResources().getDisplayMetrics().density;
-					int paddingInPixels = (int) (24 * density);
-					int drawableSizeInPixels = (int) (24 * density); // 32
+					int paddingInPixels = (int) getContext().getResources().getDimension(R.dimen.bottom_sheet_icon_margin);
+					int drawableSizeInPixels = (int) getContext().getResources().getDimension(R.dimen.standard_icon_size);
 					drawable.setBounds(0, 0, drawableSizeInPixels, drawableSizeInPixels);
-					tv.setCompoundDrawables(drawable, null, null, null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+						tv.setCompoundDrawablesRelative(drawable, null, null, null);
+					} else {
+						tv.setCompoundDrawables(drawable, null, null, null);
+					}
 					tv.setCompoundDrawablePadding(paddingInPixels);
 				}
 			} else {
@@ -222,10 +422,12 @@ public class ContextMenuAdapter {
 					int colorRes = item.getColorRes();
 					if (colorRes == ContextMenuItem.INVALID_ID) {
 						if (!item.shouldSkipPainting()) {
-							colorRes = lightTheme ? R.color.icon_color : R.color.color_white;
+							colorRes = lightTheme ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
 						} else {
 							colorRes = 0;
 						}
+					} else if (profileDependent) {
+						colorRes = currentModeColorRes;
 					}
 					final Drawable drawable = mIconsCache.getIcon(item.getIcon(), colorRes);
 					((AppCompatImageView) convertView.findViewById(R.id.icon)).setImageDrawable(drawable);
@@ -240,9 +442,9 @@ public class ContextMenuAdapter {
 				@ColorRes
 				int colorRes;
 				if (secondaryDrawable == R.drawable.ic_action_additional_option) {
-					colorRes = lightTheme ? R.color.icon_color_light : R.color.dialog_inactive_text_color_dark;
+					colorRes = lightTheme ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
 				} else {
-					colorRes = lightTheme ? R.color.icon_color : R.color.color_white;
+					colorRes = lightTheme ? R.color.icon_color_default_light : R.color.icon_color_default_dark;
 				}
 				Drawable drawable = mIconsCache.getIcon(item.getSecondaryIcon(), colorRes);
 				ImageView imageView = (ImageView) convertView.findViewById(R.id.secondary_icon);
@@ -274,38 +476,35 @@ public class ContextMenuAdapter {
 						}
 					};
 					ch.setOnCheckedChangeListener(listener);
-					ch.setVisibility(View.VISIBLE);
+					ch.setVisibility(item.shouldHideCompoundButton() ? View.GONE : View.VISIBLE);
 				} else if (ch != null) {
 					ch.setVisibility(View.GONE);
 				}
+				if (profileDependent) {
+					UiUtilities.setupCompoundButton(nightMode, currentModeColor, ch);
+				}
 			}
 
-			if (convertView.findViewById(R.id.seekbar) != null) {
-				SeekBar seekBar = (SeekBar) convertView.findViewById(R.id.seekbar);
+			Slider slider = (Slider) convertView.findViewById(R.id.slider);
+			if (slider != null) {
 				if (item.getProgress() != ContextMenuItem.INVALID_ID) {
-					seekBar.setProgress(item.getProgress());
-					seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+					slider.setValue(item.getProgress());
+					slider.addOnChangeListener(new Slider.OnChangeListener() {
 						@Override
-						public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+						public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
 							OnIntegerValueChangedListener listener = item.getIntegerListener();
+							int progress = (int) value;
 							item.setProgress(progress);
 							if (listener != null && fromUser) {
 								listener.onIntegerValueChangedListener(progress);
 							}
 						}
-
-						@Override
-						public void onStartTrackingTouch(SeekBar seekBar) {
-						}
-
-						@Override
-						public void onStopTrackingTouch(SeekBar seekBar) {
-						}
 					});
-					seekBar.setVisibility(View.VISIBLE);
-				} else if (seekBar != null) {
-					seekBar.setVisibility(View.GONE);
+					slider.setVisibility(View.VISIBLE);
+				} else {
+					slider.setVisibility(View.GONE);
 				}
+				UiUtilities.setupSlider(slider, nightMode, currentModeColor);
 			}
 
 			View progressBar = convertView.findViewById(R.id.ProgressBar);
@@ -381,6 +580,7 @@ public class ContextMenuAdapter {
 		boolean onIntegerValueChangedListener(int newValue);
 	}
 
+
 	public static abstract class OnRowItemClick implements ItemClickListener {
 
 		//boolean return type needed to describe if drawer needed to be close or not
@@ -393,5 +593,71 @@ public class ContextMenuAdapter {
 				return onContextMenuClick(adapter, itemId, position, false, null);
 			}
 		}
+	}
+
+	public List<ContextMenuItem> getDefaultItems() {
+		String idScheme = getIdScheme();
+		List<ContextMenuItem> items = new ArrayList<>();
+		for (ContextMenuItem item : this.items) {
+			String id = item.getId();
+			if (id != null && (id.startsWith(idScheme))) {
+				items.add(item);
+			}
+		}
+		return items;
+	}
+
+	private String getIdScheme() {
+		String idScheme = "";
+		for (ContextMenuItem item : items) {
+			String id = item.getId();
+			if (id != null) {
+				ContextMenuItemsPreference pref = app.getSettings().getContextMenuItemsPreference(id);
+				if (pref != null) {
+					return pref.getIdScheme();
+				}
+			}
+		}
+		return idScheme;
+	}
+
+	public List<ContextMenuItem> getVisibleItems() {
+		List<ContextMenuItem> visible = new ArrayList<>();
+		for (ContextMenuItem item : items) {
+			if (!item.isHidden()) {
+				visible.add(item);
+			}
+		}
+		return visible;
+	}
+
+	public static OnItemDeleteAction makeDeleteAction(final OsmandPreference... prefs) {
+		return new OnItemDeleteAction() {
+			@Override
+			public void itemWasDeleted(ApplicationMode appMode, boolean profileOnly) {
+				for (OsmandPreference pref : prefs) {
+					resetSetting(appMode, pref, profileOnly);
+				}
+			}
+		};
+	}
+
+	public static OnItemDeleteAction makeDeleteAction(final List<? extends OsmandPreference> prefs) {
+		return makeDeleteAction(prefs.toArray(new OsmandPreference[0]));
+	}
+
+	private static void resetSetting(ApplicationMode appMode, OsmandPreference preference, boolean profileOnly) {
+		if (profileOnly) {
+			preference.resetModeToDefault(appMode);
+		} else {
+			for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+				preference.resetModeToDefault(mode);
+			}
+		}
+	}
+
+	// when action is deleted or reset
+	public interface OnItemDeleteAction {
+		void itemWasDeleted(ApplicationMode appMode, boolean profileOnly);
 	}
 }
